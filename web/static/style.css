@@ -42,3 +42,7 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8
 .mb-4 { margin-bottom: 2rem; }
 .mt-2 { margin-top: 1rem; }
 .text-muted { color: #666; font-size: 0.875rem; }
+.typing-indicator { animation: blink 1s infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }

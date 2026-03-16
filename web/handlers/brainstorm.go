@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -28,9 +29,11 @@ func (h *BrainstormHandler) Handle(w http.ResponseWriter, r *http.Request, proje
 	case rest == "brainstorm" && r.Method == "POST":
 		h.createChat(w, r, projectID)
 	case strings.HasSuffix(rest, "/message") && r.Method == "POST":
-		h.sendMessage(w, r, projectID, rest)
+		h.saveMessage(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/stream"):
+		h.streamResponse(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/push") && r.Method == "POST":
-		h.pushToPipeline(w, r, projectID, rest)
+		h.pushToPipeline(w, r, projectID)
 	default:
 		h.showChat(w, r, projectID, rest)
 	}
@@ -95,7 +98,8 @@ func (h *BrainstormHandler) showChat(w http.ResponseWriter, r *http.Request, pro
 	}).Render(r.Context(), w)
 }
 
-func (h *BrainstormHandler) sendMessage(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+// saveMessage saves the user message and returns immediately (no AI call).
+func (h *BrainstormHandler) saveMessage(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	chatID := h.parseChatID(rest)
 	r.ParseForm()
 	content := r.FormValue("content")
@@ -104,10 +108,19 @@ func (h *BrainstormHandler) sendMessage(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Save user message
-	h.queries.AddBrainstormMessage(chatID, "user", content)
+	_, err := h.queries.AddBrainstormMessage(chatID, "user", content)
+	if err != nil {
+		http.Error(w, "Failed to save message", http.StatusInternalServerError)
+		return
+	}
 
-	// Build context and get AI response
+	w.WriteHeader(http.StatusOK)
+}
+
+// streamResponse streams the AI response via SSE, then saves it to the DB.
+func (h *BrainstormHandler) streamResponse(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	chatID := h.parseChatID(rest)
+
 	project, _ := h.queries.GetProject(projectID)
 	msgs, _ := h.queries.ListBrainstormMessages(chatID)
 
@@ -115,27 +128,59 @@ func (h *BrainstormHandler) sendMessage(w http.ResponseWriter, r *http.Request, 
 	if project.VoiceProfile != nil {
 		voiceProfile = *project.VoiceProfile
 	}
+	toneProfile := ""
+	if project.ToneProfile != nil {
+		toneProfile = *project.ToneProfile
+	}
 
-	systemPrompt := fmt.Sprintf(`You are a content brainstorming assistant for the project "%s". %s
+	systemPrompt := fmt.Sprintf(`You are a content brainstorming assistant for the project "%s".
 
-Help the user brainstorm content ideas, angles, and strategies. Be creative and specific.`, project.Name, voiceProfile)
+Voice profile: %s
+Tone profile: %s
+
+Help the user brainstorm content ideas, angles, and strategies. Be creative, specific, and actionable. Reference the brand's voice and tone when making suggestions.`, project.Name, voiceProfile, toneProfile)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
 		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
 	}
 
-	response, err := h.ai.Complete(r.Context(), h.model(), aiMsgs)
-	if err != nil {
-		response = "Error: " + err.Error()
+	// SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
 	}
 
-	h.queries.AddBrainstormMessage(chatID, "assistant", response)
+	sendChunk := func(chunk string) error {
+		data, _ := json.Marshal(map[string]string{"chunk": chunk})
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+		return nil
+	}
 
-	http.Redirect(w, r, fmt.Sprintf("/projects/%d/brainstorm/%d", projectID, chatID), http.StatusSeeOther)
+	fullResponse, err := h.ai.Stream(r.Context(), h.model(), aiMsgs, sendChunk)
+	if err != nil {
+		errData, _ := json.Marshal(map[string]string{"error": err.Error()})
+		fmt.Fprintf(w, "data: %s\n\n", errData)
+		flusher.Flush()
+		return
+	}
+
+	// Save assistant message to DB
+	h.queries.AddBrainstormMessage(chatID, "assistant", fullResponse)
+
+	// Signal done
+	doneData, _ := json.Marshal(map[string]bool{"done": true})
+	fmt.Fprintf(w, "data: %s\n\n", doneData)
+	flusher.Flush()
 }
 
-func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64, _ string) {
+func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
 	topic := r.FormValue("topic")
 	if topic == "" {
@@ -143,7 +188,6 @@ func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Create a pipeline run with the topic pre-set, skip ideation
 	run, err := h.queries.CreatePipelineRun(projectID)
 	if err != nil {
 		http.Error(w, "Failed to create run", http.StatusInternalServerError)
@@ -156,7 +200,6 @@ func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *BrainstormHandler) parseChatID(rest string) int64 {
-	// rest = "brainstorm/123" or "brainstorm/123/message" etc
 	parts := strings.Split(strings.TrimPrefix(rest, "brainstorm/"), "/")
 	id, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {

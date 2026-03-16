@@ -224,7 +224,15 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</button></form></div></div> <div class=\"chat-messages\">")
+			_, err = templBuffer.WriteString("</button></form></div></div> <div x-data=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf(`brainstormChat('%d', '%d')`, data.ProjectID, data.ChatID)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" x-init=\"scrollToBottom()\"><div class=\"chat-messages\" x-ref=\"messages\">")
 			if err != nil {
 				return err
 			}
@@ -265,24 +273,88 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 					return err
 				}
 			}
-			_, err = templBuffer.WriteString("</div> <form method=\"POST\" action=\"")
+			_, err = templBuffer.WriteString("<!--")
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/message", data.ProjectID, data.ChatID))))
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("\"><div class=\"form-group\"><textarea name=\"content\" placeholder=\"Type your message...\" style=\"min-height:80px\"></textarea></div><button type=\"submit\" class=\"btn\">")
-			if err != nil {
-				return err
-			}
-			var_19 := `Send`
+			var_19 := ` Optimistic user message `
 			_, err = templBuffer.WriteString(var_19)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</button></form>")
+			_, err = templBuffer.WriteString("--><template x-if=\"pendingMessage\"><div class=\"chat-msg chat-msg-user\"><div class=\"chat-msg-role\">")
+			if err != nil {
+				return err
+			}
+			var_20 := `user`
+			_, err = templBuffer.WriteString(var_20)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</div><div style=\"white-space:pre-wrap\" x-text=\"pendingMessage\"></div></div></template><!--")
+			if err != nil {
+				return err
+			}
+			var_21 := ` Streaming assistant response `
+			_, err = templBuffer.WriteString(var_21)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("--><template x-if=\"streaming || streamContent\"><div class=\"chat-msg chat-msg-assistant\"><div class=\"chat-msg-role\">")
+			if err != nil {
+				return err
+			}
+			var_22 := `assistant`
+			_, err = templBuffer.WriteString(var_22)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</div><div style=\"white-space:pre-wrap\"><span x-text=\"streamContent\"></span><span x-show=\"streaming\" class=\"typing-indicator\">")
+			if err != nil {
+				return err
+			}
+			var_23 := `...`
+			_, err = templBuffer.WriteString(var_23)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</span></div></div></template><!--")
+			if err != nil {
+				return err
+			}
+			var_24 := ` Error `
+			_, err = templBuffer.WriteString(var_24)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("--><template x-if=\"error\"><div class=\"card\" style=\"background:#fee2e2;border-color:#dc2626\"><p style=\"color:#991b1b\" x-text=\"error\"></p><button class=\"btn btn-secondary mt-2\" @click=\"error = &#39;&#39;\" style=\"font-size:0.75rem\">")
+			if err != nil {
+				return err
+			}
+			var_25 := `Dismiss`
+			_, err = templBuffer.WriteString(var_25)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</button></div></template></div><form @submit.prevent=\"sendMessage\" class=\"mt-2\"><div class=\"form-group\"><textarea x-model=\"input\" @keydown.meta.enter=\"sendMessage\" @keydown.ctrl.enter=\"sendMessage\" placeholder=\"Type your message... (Cmd+Enter to send)\" style=\"min-height:80px\" :disabled=\"streaming\"></textarea></div><button type=\"submit\" class=\"btn\" :disabled=\"streaming || !input.trim()\"><span x-show=\"!streaming\">")
+			if err != nil {
+				return err
+			}
+			var_26 := `Send`
+			_, err = templBuffer.WriteString(var_26)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</span><span x-show=\"streaming\">")
+			if err != nil {
+				return err
+			}
+			var_27 := `Thinking...`
+			_, err = templBuffer.WriteString(var_27)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</span></button></form></div>")
 			if err != nil {
 				return err
 			}

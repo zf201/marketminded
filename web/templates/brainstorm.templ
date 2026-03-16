@@ -62,20 +62,62 @@ templ BrainstormChatPage(data BrainstormChatData) {
 			</div>
 		</div>
 
-		<div class="chat-messages">
-			for _, msg := range data.Messages {
-				<div class={ "chat-msg chat-msg-" + msg.Role }>
-					<div class="chat-msg-role">{ msg.Role }</div>
-					<div style="white-space:pre-wrap">{ msg.Content }</div>
-				</div>
-			}
-		</div>
+		<div
+			x-data={ fmt.Sprintf(`brainstormChat('%d', '%d')`, data.ProjectID, data.ChatID) }
+			x-init="scrollToBottom()"
+		>
+			<div class="chat-messages" x-ref="messages">
+				for _, msg := range data.Messages {
+					<div class={ "chat-msg chat-msg-" + msg.Role }>
+						<div class="chat-msg-role">{ msg.Role }</div>
+						<div style="white-space:pre-wrap">{ msg.Content }</div>
+					</div>
+				}
 
-		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/message", data.ProjectID, data.ChatID)) }>
-			<div class="form-group">
-				<textarea name="content" placeholder="Type your message..." style="min-height:80px"></textarea>
+				<!-- Optimistic user message -->
+				<template x-if="pendingMessage">
+					<div class="chat-msg chat-msg-user">
+						<div class="chat-msg-role">user</div>
+						<div style="white-space:pre-wrap" x-text="pendingMessage"></div>
+					</div>
+				</template>
+
+				<!-- Streaming assistant response -->
+				<template x-if="streaming || streamContent">
+					<div class="chat-msg chat-msg-assistant">
+						<div class="chat-msg-role">assistant</div>
+						<div style="white-space:pre-wrap">
+							<span x-text="streamContent"></span>
+							<span x-show="streaming" class="typing-indicator">...</span>
+						</div>
+					</div>
+				</template>
+
+				<!-- Error -->
+				<template x-if="error">
+					<div class="card" style="background:#fee2e2;border-color:#dc2626">
+						<p style="color:#991b1b" x-text="error"></p>
+						<button class="btn btn-secondary mt-2" @click="error = ''" style="font-size:0.75rem">Dismiss</button>
+					</div>
+				</template>
 			</div>
-			<button type="submit" class="btn">Send</button>
-		</form>
+
+			<form @submit.prevent="sendMessage" class="mt-2">
+				<div class="form-group">
+					<textarea
+						x-model="input"
+						@keydown.meta.enter="sendMessage"
+						@keydown.ctrl.enter="sendMessage"
+						placeholder="Type your message... (Cmd+Enter to send)"
+						style="min-height:80px"
+						:disabled="streaming"
+					></textarea>
+				</div>
+				<button type="submit" class="btn" :disabled="streaming || !input.trim()">
+					<span x-show="!streaming">Send</span>
+					<span x-show="streaming">Thinking...</span>
+				</button>
+			</form>
+		</div>
 	}
 }
