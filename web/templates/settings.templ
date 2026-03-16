@@ -3,6 +3,7 @@ package templates
 type SettingsData struct {
 	ModelContent  string
 	ModelIdeation string
+	Temperature   string
 	Saved         bool
 }
 
@@ -34,8 +35,13 @@ templ SettingsPage(data SettingsData) {
 					<input type="text" id="model_ideation" name="model_ideation" value={ data.ModelIdeation } placeholder="e.g. anthropic/claude-sonnet-4-20250514"/>
 				</div>
 
+				<div class="form-group">
+					<label for="temperature">Temperature (0.0 = precise, 1.0 = creative, default: 0.3 for profile, 0.7 for brainstorm)</label>
+					<input type="text" id="temperature" name="temperature" value={ data.Temperature } placeholder="0.3"/>
+				</div>
+
 				<p class="text-muted mb-2" style="font-size:0.75rem">
-					Popular models: anthropic/claude-sonnet-4-20250514, openai/gpt-4o, google/gemini-2.0-flash-001, meta-llama/llama-3.1-70b-instruct
+					Popular models: x-ai/grok-4.1-fast, anthropic/claude-sonnet-4-20250514, openai/gpt-4o, google/gemini-2.0-flash-001
 				</p>
 
 				<button type="submit" class="btn">Save Settings</button>

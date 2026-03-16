@@ -30,6 +30,7 @@ func TestStreamWithTools_NoToolCalls(t *testing.T) {
 		func(ctx context.Context, name, args string) (string, error) { return "", nil },
 		func(event ToolEvent) {},
 		func(chunk string) error { chunks = append(chunks, chunk); return nil },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -72,6 +73,7 @@ func TestStreamWithTools_WithToolCall(t *testing.T) {
 		},
 		func(event ToolEvent) { events = append(events, event) },
 		func(chunk string) error { return nil },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

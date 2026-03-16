@@ -210,7 +210,7 @@ You have access to web search and URL fetching tools. Use them when the user ask
 		return nil
 	}
 
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, nil)
 	if err != nil {
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return

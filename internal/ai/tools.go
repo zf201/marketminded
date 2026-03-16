@@ -47,9 +47,10 @@ type ChatMessage struct {
 
 // Streaming response types
 type toolChatRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
-	Stream   bool          `json:"stream,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	Stream      bool          `json:"stream,omitempty"`
+	Temperature *float64      `json:"temperature,omitempty"`
 	Tools    []Tool        `json:"tools,omitempty"`
 }
 
@@ -98,6 +99,7 @@ func (c *Client) StreamWithTools(
 	executor ToolExecutor,
 	onToolEvent ToolEventFn,
 	onChunk types.StreamFunc,
+	temperature *float64,
 ) (string, error) {
 	// Convert types.Message to ChatMessage
 	chatMsgs := make([]ChatMessage, len(messages))
@@ -108,7 +110,7 @@ func (c *Client) StreamWithTools(
 	var fullText strings.Builder
 
 	for iteration := 0; iteration < 10; iteration++ {
-		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk)
+		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, temperature)
 		if err != nil {
 			return fullText.String(), err
 		}
@@ -172,12 +174,14 @@ func (c *Client) streamOneTurn(
 	messages []ChatMessage,
 	tools []Tool,
 	onChunk types.StreamFunc,
+	temperature *float64,
 ) (string, []ToolCall, error) {
 	body, _ := json.Marshal(toolChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
-		Tools:    tools,
+		Model:       model,
+		Messages:    messages,
+		Stream:      true,
+		Tools:       tools,
+		Temperature: temperature,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
