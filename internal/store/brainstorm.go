@@ -6,6 +6,7 @@ type BrainstormChat struct {
 	ID        int64
 	ProjectID int64
 	Title     string
+	Section   string
 	CreatedAt time.Time
 }
 
@@ -17,27 +18,31 @@ type BrainstormMessage struct {
 	CreatedAt time.Time
 }
 
-func (q *Queries) CreateBrainstormChat(projectID int64, title string) (*BrainstormChat, error) {
-	res, err := q.db.Exec("INSERT INTO brainstorm_chats (project_id, title) VALUES (?, ?)", projectID, title)
+func (q *Queries) CreateBrainstormChat(projectID int64, title string, section string) (*BrainstormChat, error) {
+	var sectionVal any
+	if section != "" {
+		sectionVal = section
+	}
+	res, err := q.db.Exec("INSERT INTO brainstorm_chats (project_id, title, section) VALUES (?, ?, ?)", projectID, title, sectionVal)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	c := &BrainstormChat{}
-	err = q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), created_at FROM brainstorm_chats WHERE id = ?", id).
-		Scan(&c.ID, &c.ProjectID, &c.Title, &c.CreatedAt)
+	err = q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE id = ?", id).
+		Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt)
 	return c, err
 }
 
 func (q *Queries) GetBrainstormChat(id int64) (*BrainstormChat, error) {
 	c := &BrainstormChat{}
-	err := q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), created_at FROM brainstorm_chats WHERE id = ?", id).
-		Scan(&c.ID, &c.ProjectID, &c.Title, &c.CreatedAt)
+	err := q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE id = ?", id).
+		Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt)
 	return c, err
 }
 
 func (q *Queries) ListBrainstormChats(projectID int64) ([]BrainstormChat, error) {
-	rows, err := q.db.Query("SELECT id, project_id, COALESCE(title,''), created_at FROM brainstorm_chats WHERE project_id = ? ORDER BY created_at DESC", projectID)
+	rows, err := q.db.Query("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE project_id = ? ORDER BY created_at DESC", projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +51,7 @@ func (q *Queries) ListBrainstormChats(projectID int64) ([]BrainstormChat, error)
 	var chats []BrainstormChat
 	for rows.Next() {
 		var c BrainstormChat
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Title, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		chats = append(chats, c)

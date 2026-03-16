@@ -3,19 +3,53 @@ CREATE TABLE projects (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT,
-    voice_profile TEXT,
-    tone_profile TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE knowledge_items (
+CREATE TABLE profile_sections (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK(type IN ('voice_sample','tone_guide','brand_doc','reference')),
+    section TEXT NOT NULL CHECK(section IN (
+        'business','audience','voice','tone','strategy',
+        'pillars','guidelines','competitors','inspiration','offers'
+    )),
+    content TEXT NOT NULL DEFAULT '{}',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, section)
+);
+
+CREATE TABLE section_inputs (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    section TEXT,
     title TEXT,
     content TEXT NOT NULL,
     source_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_section_inputs_project ON section_inputs(project_id, section);
+
+CREATE TABLE section_proposals (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    section TEXT NOT NULL,
+    proposed_content TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    rejection_reason TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_section_proposals_project ON section_proposals(project_id, section);
+
+CREATE TABLE project_references (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT,
+    content TEXT NOT NULL,
+    source_url TEXT,
+    saved_by TEXT NOT NULL DEFAULT 'user' CHECK(saved_by IN ('user','agent')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -54,7 +88,7 @@ CREATE TABLE agent_runs (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     pipeline_run_id INTEGER REFERENCES pipeline_runs(id),
-    agent_type TEXT NOT NULL CHECK(agent_type IN ('voice','tone','idea','content')),
+    agent_type TEXT NOT NULL CHECK(agent_type IN ('profile','idea','content')),
     prompt_summary TEXT,
     response TEXT NOT NULL,
     content_piece_id INTEGER REFERENCES content_pieces(id),
@@ -65,6 +99,7 @@ CREATE TABLE brainstorm_chats (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     title TEXT,
+    section TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -76,12 +111,24 @@ CREATE TABLE brainstorm_messages (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT INTO settings (key, value) VALUES ('model_content', '');
+INSERT INTO settings (key, value) VALUES ('model_ideation', '');
+
 -- +goose Down
+DROP TABLE settings;
 DROP TABLE brainstorm_messages;
 DROP TABLE brainstorm_chats;
 DROP TABLE agent_runs;
 DROP TABLE content_pieces;
 DROP TABLE pipeline_runs;
 DROP TABLE templates;
-DROP TABLE knowledge_items;
+DROP TABLE project_references;
+DROP TABLE section_proposals;
+DROP TABLE section_inputs;
+DROP TABLE profile_sections;
 DROP TABLE projects;
