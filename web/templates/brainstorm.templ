@@ -1,0 +1,81 @@
+package templates
+
+import "fmt"
+
+type BrainstormListData struct {
+	ProjectID   int64
+	ProjectName string
+	Chats       []BrainstormChatView
+}
+
+type BrainstormChatView struct {
+	ID    int64
+	Title string
+}
+
+templ BrainstormListPage(data BrainstormListData) {
+	@Layout(data.ProjectName + " - Brainstorm") {
+		<div class="flex-between mb-4">
+			<h1>Brainstorm</h1>
+			<div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)) } style="display:inline">
+					<input type="text" name="title" placeholder="Chat title..." style="width:200px;display:inline" required/>
+					<button type="submit" class="btn">New Chat</button>
+				</form>
+			</div>
+		</div>
+		if len(data.Chats) == 0 {
+			<p class="text-muted">No brainstorm chats yet.</p>
+		}
+		for _, chat := range data.Chats {
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d", data.ProjectID, chat.ID)) } class="card" style="text-decoration:none;color:inherit;display:block">
+				<strong>{ chat.Title }</strong>
+			</a>
+		}
+	}
+}
+
+type BrainstormChatData struct {
+	ProjectID   int64
+	ProjectName string
+	ChatID      int64
+	ChatTitle   string
+	Messages    []BrainstormMsgView
+}
+
+type BrainstormMsgView struct {
+	Role    string
+	Content string
+}
+
+templ BrainstormChatPage(data BrainstormChatData) {
+	@Layout(data.ChatTitle) {
+		<div class="flex-between mb-4">
+			<h1>{ data.ChatTitle }</h1>
+			<div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)) } class="btn btn-secondary">Back</a>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID)) } style="display:inline">
+					<input type="text" name="topic" placeholder="Topic to push..." style="width:200px;display:inline"/>
+					<button type="submit" class="btn">Push to Pipeline</button>
+				</form>
+			</div>
+		</div>
+
+		<div class="chat-messages">
+			for _, msg := range data.Messages {
+				<div class={ "chat-msg chat-msg-" + msg.Role }>
+					<div class="chat-msg-role">{ msg.Role }</div>
+					<div style="white-space:pre-wrap">{ msg.Content }</div>
+				</div>
+			}
+		</div>
+
+		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/message", data.ProjectID, data.ChatID)) }>
+			<div class="form-group">
+				<textarea name="content" placeholder="Type your message..." style="min-height:80px"></textarea>
+			</div>
+			<button type="submit" class="btn">Send</button>
+		</form>
+	}
+}

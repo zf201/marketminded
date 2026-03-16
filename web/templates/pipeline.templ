@@ -1,0 +1,157 @@
+package templates
+
+import "fmt"
+
+type PipelineListData struct {
+	ProjectID   int64
+	ProjectName string
+	Runs        []PipelineRunView
+}
+
+type PipelineRunView struct {
+	ID     int64
+	Status string
+	Topic  string
+}
+
+templ PipelineListPage(data PipelineListData) {
+	@Layout(data.ProjectName + " - Pipeline") {
+		<div class="flex-between mb-4">
+			<h1>Pipeline Runs</h1>
+			<div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } style="display:inline">
+					<button type="submit" class="btn">New Run</button>
+				</form>
+			</div>
+		</div>
+		if len(data.Runs) == 0 {
+			<p class="text-muted">No pipeline runs yet. Start one to generate content.</p>
+		}
+		for _, run := range data.Runs {
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, run.ID)) } class="card" style="text-decoration:none;color:inherit;display:block">
+				<div class="flex-between">
+					<div>
+						<strong>Run #{ fmt.Sprintf("%d", run.ID) }</strong>
+						if run.Topic != "" {
+							<span class="text-muted"> — { run.Topic }</span>
+						}
+					</div>
+					<span class={ "badge badge-" + run.Status }>{ run.Status }</span>
+				</div>
+			</a>
+		}
+	}
+}
+
+type PipelineRunData struct {
+	ProjectID   int64
+	ProjectName string
+	RunID       int64
+	Status      string
+	Topic       string
+	Content     []ContentPieceView
+}
+
+type ContentPieceView struct {
+	ID     int64
+	Type   string
+	Title  string
+	Body   string
+	Status string
+}
+
+templ PipelineRunPage(data PipelineRunData) {
+	@Layout(fmt.Sprintf("Run #%d", data.RunID)) {
+		<div class="flex-between mb-4">
+			<h1>Pipeline Run #{ fmt.Sprintf("%d", data.RunID) }</h1>
+			<div>
+				<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary" style="margin-left:0.5rem">Back</a>
+			</div>
+		</div>
+
+		if data.Status == "ideating" {
+			<div class="card" x-data="streamOutput">
+				<h3 class="mb-2">Stage 1: Ideation</h3>
+				<p class="text-muted mb-2">AI will research trends and suggest pillar topics.</p>
+				<button class="btn mb-2" @click={ fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/ideate')", data.ProjectID, data.RunID) } x-show="!loading">Generate Ideas</button>
+				<p x-show="loading" class="text-muted">Generating...</p>
+				<div class="stream-output" x-show="content" x-text="content"></div>
+				<p x-show="error" style="color:red" x-text="error"></p>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID)) } x-show="content && !loading" class="mt-2">
+					<input type="hidden" name="next_status" value="creating_pillar"/>
+					<div class="form-group">
+						<label>Selected Topic</label>
+						<input type="text" name="topic" required placeholder="Type or paste the topic you chose"/>
+					</div>
+					<button type="submit" class="btn">Select Topic &amp; Continue</button>
+				</form>
+			</div>
+		}
+
+		if data.Status == "creating_pillar" {
+			<div class="card" x-data="streamOutput">
+				<h3 class="mb-2">Stage 2: Create Pillar</h3>
+				<p class="text-muted mb-2">Topic: <strong>{ data.Topic }</strong></p>
+				<button class="btn mb-2" @click={ fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/pillar')", data.ProjectID, data.RunID) } x-show="!loading">Generate Blog Post</button>
+				<p x-show="loading" class="text-muted">Writing...</p>
+				<div class="stream-output" x-show="content" x-text="content"></div>
+				<p x-show="error" style="color:red" x-text="error"></p>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID)) } x-show="content && !loading" class="mt-2">
+					<input type="hidden" name="next_status" value="waterfalling"/>
+					<button type="submit" class="btn">Approve &amp; Continue to Waterfall</button>
+				</form>
+			</div>
+		}
+
+		if data.Status == "waterfalling" {
+			<div class="card" x-data="streamOutput">
+				<h3 class="mb-2">Stage 3: Content Waterfall</h3>
+				<p class="text-muted mb-2">Generating social posts from pillar content.</p>
+				<button class="btn mb-2" @click={ fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/waterfall')", data.ProjectID, data.RunID) } x-show="!loading">Generate Social Posts</button>
+				<p x-show="loading" class="text-muted">Creating...</p>
+				<div class="stream-output" x-show="content" x-text="content"></div>
+				<p x-show="error" style="color:red" x-text="error"></p>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID)) } x-show="content && !loading" class="mt-2">
+					<input type="hidden" name="next_status" value="complete"/>
+					<button type="submit" class="btn">Mark Complete</button>
+				</form>
+			</div>
+		}
+
+		if data.Status == "complete" || data.Status == "abandoned" {
+			<div class="card">
+				<h3 class="mb-2">Pipeline { data.Status }</h3>
+				if data.Topic != "" {
+					<p class="text-muted mb-2">Topic: { data.Topic }</p>
+				}
+			</div>
+		}
+
+		if len(data.Content) > 0 {
+			<h2 class="mt-2 mb-2">Generated Content</h2>
+			for _, piece := range data.Content {
+				<div class="card">
+					<div class="flex-between mb-1">
+						<div>
+							<span class="badge badge-ideating">{ piece.Type }</span>
+							<strong> { piece.Title }</strong>
+						</div>
+						<span class={ "badge badge-" + piece.Status }>{ piece.Status }</span>
+					</div>
+					<p style="white-space:pre-wrap;max-height:200px;overflow:auto" class="text-muted">{ piece.Body }</p>
+					<div class="mt-2">
+						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, piece.ID)) } class="btn btn-secondary" style="font-size:0.75rem">Edit</a>
+					</div>
+				</div>
+			}
+		}
+
+		if data.Status != "complete" && data.Status != "abandoned" {
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } class="mt-2">
+				<button type="submit" class="btn btn-danger">Abandon Run</button>
+			</form>
+		}
+	}
+}

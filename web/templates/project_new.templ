@@ -1,0 +1,18 @@
+package templates
+
+templ ProjectNew() {
+	@Layout("New Project") {
+		<h1>New Project</h1>
+		<form method="POST" action="/projects">
+			<div class="form-group">
+				<label for="name">Project Name</label>
+				<input type="text" id="name" name="name" required placeholder="e.g. Acme Corp"/>
+			</div>
+			<div class="form-group">
+				<label for="description">Description</label>
+				<textarea id="description" name="description" placeholder="Brief description of the client/project"></textarea>
+			</div>
+			<button type="submit" class="btn">Create Project</button>
+		</form>
+	}
+}

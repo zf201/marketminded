@@ -3,6 +3,7 @@ module github.com/zanfridau/marketminded
 go 1.25.6
 
 require (
+	github.com/a-h/templ v0.3.1001
 	github.com/pressly/goose/v3 v3.27.0
 	modernc.org/sqlite v1.46.1
 )

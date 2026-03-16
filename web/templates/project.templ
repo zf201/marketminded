@@ -1,0 +1,65 @@
+package templates
+
+import "fmt"
+
+type ProjectDetail struct {
+	ID           int64
+	Name         string
+	Description  string
+	HasVoice     bool
+	HasTone      bool
+	ContentCount int
+	RunCount     int
+}
+
+templ ProjectOverview(p ProjectDetail) {
+	@Layout(p.Name) {
+		<div class="flex-between mb-4">
+			<h1>{ p.Name }</h1>
+			<a href="/" class="btn btn-secondary">Back</a>
+		</div>
+		<p class="text-muted mb-4">{ p.Description }</p>
+
+		<div class="grid">
+			<div class="card">
+				<h3>Setup</h3>
+				<p class="mb-1">
+					Voice:
+					if p.HasVoice {
+						<span class="badge badge-approved">Ready</span>
+					} else {
+						<span class="badge badge-draft">Not set</span>
+					}
+				</p>
+				<p class="mb-2">
+					Tone:
+					if p.HasTone {
+						<span class="badge badge-approved">Ready</span>
+					} else {
+						<span class="badge badge-draft">Not set</span>
+					}
+				</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/knowledge", p.ID)) } class="btn btn-secondary">Manage Knowledge</a>
+			</div>
+
+			<div class="card">
+				<h3>Content Pipeline</h3>
+				<p class="mb-1 text-muted">{ fmt.Sprintf("%d pieces created", p.ContentCount) }</p>
+				<p class="mb-2 text-muted">{ fmt.Sprintf("%d pipeline runs", p.RunCount) }</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn">Pipeline Runs</a>
+			</div>
+
+			<div class="card">
+				<h3>Brainstorm</h3>
+				<p class="mb-2 text-muted">Chat with AI using project context</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-secondary">Open Chat</a>
+			</div>
+
+			<div class="card">
+				<h3>Templates</h3>
+				<p class="mb-2 text-muted">HTML templates for social posts</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-secondary">Manage Templates</a>
+			</div>
+		</div>
+	}
+}

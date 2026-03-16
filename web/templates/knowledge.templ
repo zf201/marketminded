@@ -1,0 +1,96 @@
+package templates
+
+import "fmt"
+
+type KnowledgePageData struct {
+	ProjectID   int64
+	ProjectName string
+	Items       []KnowledgeItemView
+	HasVoice    bool
+	HasTone     bool
+}
+
+type KnowledgeItemView struct {
+	ID        int64
+	Type      string
+	Title     string
+	Content   string
+	SourceURL string
+}
+
+templ KnowledgePage(data KnowledgePageData) {
+	@Layout(data.ProjectName + " - Knowledge") {
+		<div class="flex-between mb-4">
+			<h1>Knowledge Base</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back to Project</a>
+		</div>
+
+		<div class="card mb-4">
+			<h3>Profiles</h3>
+			<p class="mb-1">
+				Voice Profile:
+				if data.HasVoice {
+					<span class="badge badge-approved">Built</span>
+				} else {
+					<span class="badge badge-draft">Not built</span>
+				}
+				Tone Profile:
+				if data.HasTone {
+					<span class="badge badge-approved">Built</span>
+				} else {
+					<span class="badge badge-draft">Not built</span>
+				}
+			</p>
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/knowledge/build-profiles", data.ProjectID)) } class="mt-2">
+				<button type="submit" class="btn">Build / Rebuild Profiles</button>
+			</form>
+		</div>
+
+		<div class="card mb-4">
+			<h3>Add Knowledge Item</h3>
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/knowledge", data.ProjectID)) }>
+				<div class="form-group">
+					<label for="type">Type</label>
+					<select id="type" name="type">
+						<option value="voice_sample">Voice Sample</option>
+						<option value="tone_guide">Tone Guide</option>
+						<option value="brand_doc">Brand Document</option>
+						<option value="reference">Reference</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<label for="title">Title</label>
+					<input type="text" id="title" name="title" placeholder="Brief title"/>
+				</div>
+				<div class="form-group">
+					<label for="content">Content</label>
+					<textarea id="content" name="content" required placeholder="Paste content here..."></textarea>
+				</div>
+				<div class="form-group">
+					<label for="source_url">Source URL (optional)</label>
+					<input type="url" id="source_url" name="source_url" placeholder="https://..."/>
+				</div>
+				<button type="submit" class="btn">Add Item</button>
+			</form>
+		</div>
+
+		<h2>Items ({ fmt.Sprintf("%d", len(data.Items)) })</h2>
+		if len(data.Items) == 0 {
+			<p class="text-muted">No knowledge items yet.</p>
+		}
+		for _, item := range data.Items {
+			<div class="card">
+				<div class="flex-between mb-1">
+					<div>
+						<span class="badge badge-ideating">{ item.Type }</span>
+						<strong> { item.Title }</strong>
+					</div>
+					<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/knowledge/%d/delete", data.ProjectID, item.ID)) }>
+						<button type="submit" class="btn btn-danger" style="font-size:0.75rem;padding:0.25rem 0.5rem">Delete</button>
+					</form>
+				</div>
+				<p class="text-muted" style="white-space:pre-wrap;max-height:100px;overflow:hidden">{ item.Content }</p>
+			</div>
+		}
+	}
+}

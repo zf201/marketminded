@@ -1,0 +1,29 @@
+package templates
+
+import "fmt"
+
+templ Dashboard(projects []DashboardProject) {
+	@Layout("Dashboard") {
+		<div class="flex-between mb-4">
+			<h1>Projects</h1>
+			<a href="/projects/new" class="btn">New Project</a>
+		</div>
+		if len(projects) == 0 {
+			<p class="text-muted">No projects yet. Create one to get started.</p>
+		}
+		<div class="grid">
+			for _, p := range projects {
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", p.ID)) } class="card" style="text-decoration:none;color:inherit">
+					<h3>{ p.Name }</h3>
+					<p class="text-muted">{ p.Description }</p>
+				</a>
+			}
+		</div>
+	}
+}
+
+type DashboardProject struct {
+	ID          int64
+	Name        string
+	Description string
+}

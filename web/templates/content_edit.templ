@@ -1,0 +1,39 @@
+package templates
+
+import "fmt"
+
+type ContentEditData struct {
+	ProjectID int64
+	Piece     ContentPieceView
+}
+
+templ ContentEditPage(data ContentEditData) {
+	@Layout("Edit Content") {
+		<div class="flex-between mb-4">
+			<h1>Edit Content</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary">Back</a>
+		</div>
+
+		<div class="card">
+			<div class="flex-between mb-2">
+				<span class="badge badge-ideating">{ data.Piece.Type }</span>
+				<span class={ "badge badge-" + data.Piece.Status }>{ data.Piece.Status }</span>
+			</div>
+
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, data.Piece.ID)) }>
+				<div class="form-group">
+					<label>Title</label>
+					<input type="text" name="title" value={ data.Piece.Title }/>
+				</div>
+				<div class="form-group">
+					<label>Body</label>
+					<textarea name="body" style="min-height:400px">{ data.Piece.Body }</textarea>
+				</div>
+				<button type="submit" class="btn">Save</button>
+				if data.Piece.Status == "draft" {
+					<button type="submit" name="action" value="approve" class="btn" style="margin-left:0.5rem;background:#059669">Approve</button>
+				}
+			</form>
+		</div>
+	}
+}

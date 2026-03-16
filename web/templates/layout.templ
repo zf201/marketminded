@@ -1,0 +1,23 @@
+package templates
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>{ title } - MarketMinded</title>
+		<link rel="stylesheet" href="/static/style.css"/>
+		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+		<script src="/static/app.js" defer></script>
+	</head>
+	<body>
+		<nav class="flex-between">
+			<a href="/">MarketMinded</a>
+		</nav>
+		<main>
+			{ children... }
+		</main>
+	</body>
+	</html>
+}

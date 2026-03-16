@@ -1,0 +1,65 @@
+package templates
+
+import "fmt"
+
+type TemplatesMgrData struct {
+	ProjectID   int64
+	ProjectName string
+	Templates   []TemplateMgrView
+}
+
+type TemplateMgrView struct {
+	ID          int64
+	Name        string
+	Platform    string
+	HTMLContent string
+}
+
+templ TemplatesMgrPage(data TemplatesMgrData) {
+	@Layout(data.ProjectName + " - Templates") {
+		<div class="flex-between mb-4">
+			<h1>Social Post Templates</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+		</div>
+
+		<div class="card mb-4">
+			<h3>Add Template</h3>
+			<p class="text-muted mb-2">HTML templates must include {"{{.Title}}"} and {"{{.Body}}"} slots. Optional: {"{{.ImageURL}}"}</p>
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", data.ProjectID)) }>
+				<div class="form-group">
+					<label>Name</label>
+					<input type="text" name="name" required placeholder="e.g. Instagram Square"/>
+				</div>
+				<div class="form-group">
+					<label>Platform</label>
+					<select name="platform">
+						<option value="instagram">Instagram</option>
+						<option value="facebook">Facebook</option>
+						<option value="linkedin">LinkedIn</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<label>HTML Content</label>
+					<textarea name="html_content" required style="font-family:monospace" placeholder="<div>{{.Title}}</div>"></textarea>
+				</div>
+				<button type="submit" class="btn">Add Template</button>
+			</form>
+		</div>
+
+		<h2 class="mb-2">Templates ({ fmt.Sprintf("%d", len(data.Templates)) })</h2>
+		for _, tmpl := range data.Templates {
+			<div class="card">
+				<div class="flex-between mb-1">
+					<div>
+						<span class="badge badge-ideating">{ tmpl.Platform }</span>
+						<strong> { tmpl.Name }</strong>
+					</div>
+					<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates/%d/delete", data.ProjectID, tmpl.ID)) }>
+						<button type="submit" class="btn btn-danger" style="font-size:0.75rem;padding:0.25rem 0.5rem">Delete</button>
+					</form>
+				</div>
+				<pre style="background:#f9f9f9;padding:0.5rem;border-radius:4px;font-size:0.75rem;overflow:auto;max-height:100px">{ tmpl.HTMLContent }</pre>
+			</div>
+		}
+	}
+}
