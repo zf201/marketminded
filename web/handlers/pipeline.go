@@ -207,14 +207,7 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 	}
 
 	// Build context
-	voiceProfile := ""
-	if project.VoiceProfile != nil {
-		voiceProfile = *project.VoiceProfile
-	}
-	toneProfile := ""
-	if project.ToneProfile != nil {
-		toneProfile = *project.ToneProfile
-	}
+	profile, _ := h.queries.BuildProfileString(projectID)
 
 	summaries, _ := h.queries.ContentLogSummaries(projectID, 20)
 	var contentLog []string
@@ -227,9 +220,9 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 	switch stage {
 	case "ideate":
 		result, err := h.ideaAgent.GenerateStream(ctx, agents.IdeaInput{
-			Niche:        project.Description,
-			ContentLog:   contentLog,
-			VoiceProfile: voiceProfile,
+			Niche:      project.Description,
+			ContentLog: contentLog,
+			Profile:    profile,
 		}, sendChunk)
 		if err != nil {
 			sendError(err.Error())
@@ -245,10 +238,9 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 			topic = *run.SelectedTopic
 		}
 		result, err := h.contentAgent.WritePillarStream(ctx, agents.PillarInput{
-			Topic:        topic,
-			VoiceProfile: voiceProfile,
-			ToneProfile:  toneProfile,
-			ContentLog:   contentLog,
+			Topic:      topic,
+			Profile:    profile,
+			ContentLog: contentLog,
 		}, sendChunk)
 		if err != nil {
 			sendError(err.Error())
@@ -276,8 +268,7 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 		result, err := h.contentAgent.WriteSocialPostStream(ctx, agents.SocialInput{
 			PillarContent: pillarBody,
 			Platform:      "linkedin",
-			VoiceProfile:  voiceProfile,
-			ToneProfile:   toneProfile,
+			Profile:       profile,
 		}, sendChunk)
 		if err != nil {
 			sendError(err.Error())
@@ -293,8 +284,7 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 		result2, err := h.contentAgent.WriteSocialPostStream(ctx, agents.SocialInput{
 			PillarContent: pillarBody,
 			Platform:      "instagram",
-			VoiceProfile:  voiceProfile,
-			ToneProfile:   toneProfile,
+			Profile:       profile,
 		}, sendChunk)
 		if err != nil {
 			sendError(err.Error())

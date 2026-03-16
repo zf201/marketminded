@@ -88,8 +88,8 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 		ID:           project.ID,
 		Name:         project.Name,
 		Description:  project.Description,
-		HasVoice:     project.VoiceProfile != nil,
-		HasTone:      project.ToneProfile != nil,
+		HasVoice:     false,
+		HasTone:      false,
 		ContentCount: len(pieces),
 		RunCount:     len(runs),
 	}

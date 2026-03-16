@@ -61,7 +61,7 @@ func (h *BrainstormHandler) createChat(w http.ResponseWriter, r *http.Request, p
 	if title == "" {
 		title = "Untitled Chat"
 	}
-	chat, err := h.queries.CreateBrainstormChat(projectID, title)
+	chat, err := h.queries.CreateBrainstormChat(projectID, title, "")
 	if err != nil {
 		http.Error(w, "Failed to create chat", http.StatusInternalServerError)
 		return
@@ -124,21 +124,14 @@ func (h *BrainstormHandler) streamResponse(w http.ResponseWriter, r *http.Reques
 	project, _ := h.queries.GetProject(projectID)
 	msgs, _ := h.queries.ListBrainstormMessages(chatID)
 
-	voiceProfile := ""
-	if project.VoiceProfile != nil {
-		voiceProfile = *project.VoiceProfile
-	}
-	toneProfile := ""
-	if project.ToneProfile != nil {
-		toneProfile = *project.ToneProfile
-	}
+	profile, _ := h.queries.BuildProfileString(projectID)
 
 	systemPrompt := fmt.Sprintf(`You are a content brainstorming assistant for the project "%s".
 
-Voice profile: %s
-Tone profile: %s
+Client Profile:
+%s
 
-Help the user brainstorm content ideas, angles, and strategies. Be creative, specific, and actionable. Reference the brand's voice and tone when making suggestions.`, project.Name, voiceProfile, toneProfile)
+Help the user brainstorm content ideas, angles, and strategies. Be creative, specific, and actionable. Reference the brand's voice and tone when making suggestions.`, project.Name, profile)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {

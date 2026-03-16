@@ -48,8 +48,6 @@ func main() {
 	}
 
 	// Agents
-	voiceAgent := agents.NewVoiceAgent(aiClient, contentModel)
-	toneAgent := agents.NewToneAgent(aiClient, contentModel)
 	ideaAgent := agents.NewIdeaAgent(aiClient, braveClient, ideationModel)
 	contentAgent := agents.NewContentAgent(aiClient, contentModel)
 
@@ -60,7 +58,6 @@ func main() {
 	// Handlers
 	dashboardHandler := handlers.NewDashboardHandler(queries)
 	projectHandler := handlers.NewProjectHandler(queries)
-	knowledgeHandler := handlers.NewKnowledgeHandler(queries, voiceAgent, toneAgent)
 	pipelineHandler := handlers.NewPipelineHandler(queries, pip, ideaAgent, contentAgent)
 	contentHandler := handlers.NewContentHandler(queries)
 	templateHandler := handlers.NewTemplateHandler(queries)
@@ -95,8 +92,6 @@ func main() {
 		}
 
 		switch {
-		case strings.HasPrefix(rest, "knowledge"):
-			knowledgeHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "pipeline"):
 			pipelineHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "content"):

@@ -10,10 +10,9 @@ func TestContentAgent_WritePillar(t *testing.T) {
 	agent := NewContentAgent(ai, testModel)
 
 	result, err := agent.WritePillar(context.Background(), PillarInput{
-		Topic:        "How to scale your web development agency",
-		VoiceProfile: `{"tone":"professional"}`,
-		ToneProfile:  `{"formality":"high"}`,
-		ContentLog:   []string{},
+		Topic:      "How to scale your web development agency",
+		Profile:    "test profile",
+		ContentLog: []string{},
 	})
 	if err != nil {
 		t.Fatalf("write pillar: %v", err)
@@ -30,8 +29,7 @@ func TestContentAgent_WriteSocialPost(t *testing.T) {
 	result, err := agent.WriteSocialPost(context.Background(), SocialInput{
 		PillarContent: "# How to Scale\n\nFull blog post...",
 		Platform:      "linkedin",
-		VoiceProfile:  `{"tone":"professional"}`,
-		ToneProfile:   `{"formality":"high"}`,
+		Profile:       "test profile",
 	})
 	if err != nil {
 		t.Fatalf("write social: %v", err)

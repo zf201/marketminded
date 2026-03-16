@@ -9,9 +9,9 @@ import (
 )
 
 type IdeaInput struct {
-	Niche        string
-	ContentLog   []string
-	VoiceProfile string
+	Niche      string
+	ContentLog []string
+	Profile    string
 }
 
 type IdeaAgent struct {
@@ -59,8 +59,8 @@ Return as a numbered list with title and angle on each line.`,
 		},
 		{
 			Role: "user",
-			Content: fmt.Sprintf("Niche: %s\n\nVoice: %s\n\nRecent web research:\n%s\nPrevious content (avoid repeating):\n%s\n\nGenerate 10 pillar blog post ideas.",
-				input.Niche, input.VoiceProfile, searchContext.String(), contentLog),
+			Content: fmt.Sprintf("Niche: %s\n\nClient Profile:\n%s\n\nRecent web research:\n%s\nPrevious content (avoid repeating):\n%s\n\nGenerate 10 pillar blog post ideas.",
+				input.Niche, input.Profile, searchContext.String(), contentLog),
 		},
 	}
 }

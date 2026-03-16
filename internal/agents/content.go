@@ -18,10 +18,9 @@ func NewContentAgent(ai types.AIClient, model func() string) *ContentAgent {
 }
 
 type PillarInput struct {
-	Topic        string
-	VoiceProfile string
-	ToneProfile  string
-	ContentLog   []string
+	Topic      string
+	Profile    string   // serialized profile sections
+	ContentLog []string
 }
 
 func (a *ContentAgent) WritePillar(ctx context.Context, input PillarInput) (string, error) {
@@ -43,19 +42,18 @@ func (a *ContentAgent) pillarMessages(input PillarInput) []types.Message {
 			Role: "system",
 			Content: fmt.Sprintf(`You are an expert blog writer. Write a comprehensive, engaging blog post on the given topic.
 
-Voice profile: %s
-
-Tone profile: %s
+Client Profile:
+%s
 
 Guidelines:
-- Write in the brand's voice and tone
+- Write in the brand's voice and tone as described in the profile
 - Use markdown formatting
 - Include a compelling introduction with a hook
 - Break into clear sections with headers
 - Include actionable takeaways
 - End with a strong conclusion
 - Aim for 1200-1800 words
-- Do NOT repeat themes from the content log below`, input.VoiceProfile, input.ToneProfile),
+- Do NOT repeat themes from the content log below`, input.Profile),
 		},
 		{
 			Role: "user",
@@ -68,8 +66,7 @@ Guidelines:
 type SocialInput struct {
 	PillarContent string
 	Platform      string
-	VoiceProfile  string
-	ToneProfile   string
+	Profile       string // serialized profile sections
 	TemplateSlots string
 }
 
@@ -89,12 +86,12 @@ func (a *ContentAgent) socialMessages(input SocialInput) []types.Message {
 			Role: "system",
 			Content: fmt.Sprintf(`You are a social media content expert. Repurpose the pillar blog post into a %s post.
 
-Voice profile: %s
-Tone profile: %s
+Client Profile:
+%s
 
 Platform guidelines: %s
 
-If template slots are provided, output JSON with the slot values (Title, Body, ImageURL). Otherwise output the post text directly.`, input.Platform, input.VoiceProfile, input.ToneProfile, platformGuide),
+If template slots are provided, output JSON with the slot values (Title, Body, ImageURL). Otherwise output the post text directly.`, input.Platform, input.Profile, platformGuide),
 		},
 		{
 			Role:    "user",
