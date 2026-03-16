@@ -1,0 +1,5 @@
+*.db
+*_templ.go
+/server
+/marketminded
+.env
