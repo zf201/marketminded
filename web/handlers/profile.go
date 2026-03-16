@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/search"
@@ -113,7 +114,9 @@ func (h *ProfileHandler) stream(w http.ResponseWriter, r *http.Request, projectI
 		}
 	}
 
-	systemPrompt := fmt.Sprintf(`You are an expert content marketing strategist building a client profile. This profile is the foundation for ALL content creation — blog posts, social media, email, newsletters. Every section must be specific enough that a writer could produce on-brand content without asking further questions.
+	systemPrompt := fmt.Sprintf(`Today's date: %s
+
+You are an expert content marketing strategist building a client profile. This profile is the foundation for ALL content creation — blog posts, social media, email, newsletters. Every section must be specific enough that a writer could produce on-brand content without asking further questions.`, time.Now().Format("January 2, 2006")) + fmt.Sprintf(`
 
 ## Profile sections (5 total)
 
