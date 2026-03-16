@@ -10,10 +10,10 @@ import (
 
 type VoiceAgent struct {
 	ai    types.AIClient
-	model string
+	model func() string
 }
 
-func NewVoiceAgent(ai types.AIClient, model string) *VoiceAgent {
+func NewVoiceAgent(ai types.AIClient, model func() string) *VoiceAgent {
 	return &VoiceAgent{ai: ai, model: model}
 }
 
@@ -40,5 +40,5 @@ Return ONLY valid JSON.`,
 		},
 	}
 
-	return a.ai.Complete(ctx, a.model, messages)
+	return a.ai.Complete(ctx, a.model(), messages)
 }

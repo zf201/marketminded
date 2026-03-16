@@ -14,10 +14,10 @@ import (
 type BrainstormHandler struct {
 	queries *store.Queries
 	ai      types.AIClient
-	model   string
+	model   func() string
 }
 
-func NewBrainstormHandler(q *store.Queries, ai types.AIClient, model string) *BrainstormHandler {
+func NewBrainstormHandler(q *store.Queries, ai types.AIClient, model func() string) *BrainstormHandler {
 	return &BrainstormHandler{queries: q, ai: ai, model: model}
 }
 
@@ -125,7 +125,7 @@ Help the user brainstorm content ideas, angles, and strategies. Be creative and 
 		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
 	}
 
-	response, err := h.ai.Complete(r.Context(), h.model, aiMsgs)
+	response, err := h.ai.Complete(r.Context(), h.model(), aiMsgs)
 	if err != nil {
 		response = "Error: " + err.Error()
 	}

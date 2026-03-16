@@ -21,7 +21,7 @@ func TestIdeaAgent_Generate(t *testing.T) {
 		{Title: "Web Agency Growth", URL: "https://example.com", Description: "Guide to growing"},
 	}}
 
-	agent := NewIdeaAgent(ai, searcher, "test-model")
+	agent := NewIdeaAgent(ai, searcher, testModel)
 
 	ideas, err := agent.Generate(context.Background(), IdeaInput{
 		Niche:        "web development agency",

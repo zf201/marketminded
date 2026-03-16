@@ -67,7 +67,16 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
-		_, err = templBuffer.WriteString("</a></nav><main>")
+		_, err = templBuffer.WriteString("</a><div class=\"nav-links\"><a href=\"/settings\">")
+		if err != nil {
+			return err
+		}
+		var_7 := `Settings`
+		_, err = templBuffer.WriteString(var_7)
+		if err != nil {
+			return err
+		}
+		_, err = templBuffer.WriteString("</a></div></nav><main>")
 		if err != nil {
 			return err
 		}

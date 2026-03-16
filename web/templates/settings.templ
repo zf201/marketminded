@@ -1,0 +1,45 @@
+package templates
+
+type SettingsData struct {
+	ModelContent  string
+	ModelIdeation string
+	Saved         bool
+}
+
+templ SettingsPage(data SettingsData) {
+	@Layout("Settings") {
+		<div class="flex-between mb-4">
+			<h1>Settings</h1>
+			<a href="/" class="btn btn-secondary">Back</a>
+		</div>
+
+		if data.Saved {
+			<div class="card" style="background:#d1fae5;border-color:#059669;margin-bottom:1rem">
+				<p style="color:#065f46">Settings saved.</p>
+			</div>
+		}
+
+		<form method="POST" action="/settings">
+			<div class="card">
+				<h3 style="margin-bottom:1rem">AI Models</h3>
+				<p class="text-muted mb-2">Choose which OpenRouter models to use. Leave blank to use defaults from environment variables.</p>
+
+				<div class="form-group">
+					<label for="model_content">Content Model (pillar writing, social posts, voice/tone analysis)</label>
+					<input type="text" id="model_content" name="model_content" value={ data.ModelContent } placeholder="e.g. anthropic/claude-sonnet-4-20250514"/>
+				</div>
+
+				<div class="form-group">
+					<label for="model_ideation">Ideation Model (brainstorming, idea generation)</label>
+					<input type="text" id="model_ideation" name="model_ideation" value={ data.ModelIdeation } placeholder="e.g. anthropic/claude-sonnet-4-20250514"/>
+				</div>
+
+				<p class="text-muted mb-2" style="font-size:0.75rem">
+					Popular models: anthropic/claude-sonnet-4-20250514, openai/gpt-4o, google/gemini-2.0-flash-001, meta-llama/llama-3.1-70b-instruct
+				</p>
+
+				<button type="submit" class="btn">Save Settings</button>
+			</div>
+		</form>
+	}
+}

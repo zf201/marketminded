@@ -17,19 +17,19 @@ type IdeaInput struct {
 type IdeaAgent struct {
 	ai       types.AIClient
 	searcher types.Searcher
-	model    string
+	model    func() string
 }
 
-func NewIdeaAgent(ai types.AIClient, searcher types.Searcher, model string) *IdeaAgent {
+func NewIdeaAgent(ai types.AIClient, searcher types.Searcher, model func() string) *IdeaAgent {
 	return &IdeaAgent{ai: ai, searcher: searcher, model: model}
 }
 
 func (a *IdeaAgent) Generate(ctx context.Context, input IdeaInput) (string, error) {
-	return a.ai.Complete(ctx, a.model, a.ideaMessages(ctx, input))
+	return a.ai.Complete(ctx, a.model(), a.ideaMessages(ctx, input))
 }
 
 func (a *IdeaAgent) GenerateStream(ctx context.Context, input IdeaInput, fn types.StreamFunc) (string, error) {
-	return a.ai.Stream(ctx, a.model, a.ideaMessages(ctx, input), fn)
+	return a.ai.Stream(ctx, a.model(), a.ideaMessages(ctx, input), fn)
 }
 
 func (a *IdeaAgent) ideaMessages(ctx context.Context, input IdeaInput) []types.Message {

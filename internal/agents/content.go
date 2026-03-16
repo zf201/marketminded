@@ -10,10 +10,10 @@ import (
 
 type ContentAgent struct {
 	ai    types.AIClient
-	model string
+	model func() string
 }
 
-func NewContentAgent(ai types.AIClient, model string) *ContentAgent {
+func NewContentAgent(ai types.AIClient, model func() string) *ContentAgent {
 	return &ContentAgent{ai: ai, model: model}
 }
 
@@ -25,11 +25,11 @@ type PillarInput struct {
 }
 
 func (a *ContentAgent) WritePillar(ctx context.Context, input PillarInput) (string, error) {
-	return a.ai.Complete(ctx, a.model, a.pillarMessages(input))
+	return a.ai.Complete(ctx, a.model(), a.pillarMessages(input))
 }
 
 func (a *ContentAgent) WritePillarStream(ctx context.Context, input PillarInput, fn types.StreamFunc) (string, error) {
-	return a.ai.Stream(ctx, a.model, a.pillarMessages(input), fn)
+	return a.ai.Stream(ctx, a.model(), a.pillarMessages(input), fn)
 }
 
 func (a *ContentAgent) pillarMessages(input PillarInput) []types.Message {
@@ -74,11 +74,11 @@ type SocialInput struct {
 }
 
 func (a *ContentAgent) WriteSocialPost(ctx context.Context, input SocialInput) (string, error) {
-	return a.ai.Complete(ctx, a.model, a.socialMessages(input))
+	return a.ai.Complete(ctx, a.model(), a.socialMessages(input))
 }
 
 func (a *ContentAgent) WriteSocialPostStream(ctx context.Context, input SocialInput, fn types.StreamFunc) (string, error) {
-	return a.ai.Stream(ctx, a.model, a.socialMessages(input), fn)
+	return a.ai.Stream(ctx, a.model(), a.socialMessages(input), fn)
 }
 
 func (a *ContentAgent) socialMessages(input SocialInput) []types.Message {

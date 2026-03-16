@@ -33,11 +33,25 @@ func main() {
 	aiClient := ai.NewClient(cfg.OpenRouterAPIKey)
 	braveClient := search.NewBraveClient(cfg.BraveAPIKey)
 
+	// Model resolvers: DB setting > env var default
+	contentModel := func() string {
+		if v, err := queries.GetSetting("model_content"); err == nil && v != "" {
+			return v
+		}
+		return cfg.ModelContent
+	}
+	ideationModel := func() string {
+		if v, err := queries.GetSetting("model_ideation"); err == nil && v != "" {
+			return v
+		}
+		return cfg.ModelIdeation
+	}
+
 	// Agents
-	voiceAgent := agents.NewVoiceAgent(aiClient, cfg.ModelContent)
-	toneAgent := agents.NewToneAgent(aiClient, cfg.ModelContent)
-	ideaAgent := agents.NewIdeaAgent(aiClient, braveClient, cfg.ModelIdeation)
-	contentAgent := agents.NewContentAgent(aiClient, cfg.ModelContent)
+	voiceAgent := agents.NewVoiceAgent(aiClient, contentModel)
+	toneAgent := agents.NewToneAgent(aiClient, contentModel)
+	ideaAgent := agents.NewIdeaAgent(aiClient, braveClient, ideationModel)
+	contentAgent := agents.NewContentAgent(aiClient, contentModel)
 
 	// Pipeline
 	pipelineStore := &pipelineStoreAdapter{queries: queries}
@@ -50,15 +64,17 @@ func main() {
 	pipelineHandler := handlers.NewPipelineHandler(queries, pip, ideaAgent, contentAgent)
 	contentHandler := handlers.NewContentHandler(queries)
 	templateHandler := handlers.NewTemplateHandler(queries)
-	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, cfg.ModelIdeation)
+	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, ideationModel)
+	settingsHandler := handlers.NewSettingsHandler(queries)
 
 	mux := http.NewServeMux()
 
 	// Static files
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
-	// Dashboard
+	// Dashboard + Settings
 	mux.Handle("/", dashboardHandler)
+	mux.Handle("/settings", settingsHandler)
 
 	// Project routes
 	projectHandler.Register(mux)

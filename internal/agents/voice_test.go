@@ -21,8 +21,10 @@ func (m *mockAI) Stream(ctx context.Context, model string, msgs []types.Message,
 	return m.response, nil
 }
 
+func testModel() string { return "test-model" }
+
 func TestVoiceAgent_BuildProfile(t *testing.T) {
-	agent := NewVoiceAgent(&mockAI{response: `{"tone":"professional","vocabulary":"technical"}`}, "test-model")
+	agent := NewVoiceAgent(&mockAI{response: `{"tone":"professional","vocabulary":"technical"}`}, testModel)
 
 	samples := []string{
 		"We build scalable web applications using modern frameworks.",

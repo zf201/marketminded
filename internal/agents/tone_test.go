@@ -6,7 +6,7 @@ import (
 )
 
 func TestToneAgent_BuildProfile(t *testing.T) {
-	agent := NewToneAgent(&mockAI{response: `{"formality":"high","humor":"low"}`}, "test-model")
+	agent := NewToneAgent(&mockAI{response: `{"formality":"high","humor":"low"}`}, testModel)
 
 	samples := []string{"Professional content sample."}
 	brandDocs := []string{"Brand guidelines: formal, no slang."}

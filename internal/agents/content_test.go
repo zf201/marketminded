@@ -7,7 +7,7 @@ import (
 
 func TestContentAgent_WritePillar(t *testing.T) {
 	ai := &mockAI{response: "# How to Scale Your Agency\n\nGreat blog post content here..."}
-	agent := NewContentAgent(ai, "test-model")
+	agent := NewContentAgent(ai, testModel)
 
 	result, err := agent.WritePillar(context.Background(), PillarInput{
 		Topic:        "How to scale your web development agency",
@@ -25,7 +25,7 @@ func TestContentAgent_WritePillar(t *testing.T) {
 
 func TestContentAgent_WriteSocialPost(t *testing.T) {
 	ai := &mockAI{response: "Scaling your agency? Here are 3 lessons we learned..."}
-	agent := NewContentAgent(ai, "test-model")
+	agent := NewContentAgent(ai, testModel)
 
 	result, err := agent.WriteSocialPost(context.Background(), SocialInput{
 		PillarContent: "# How to Scale\n\nFull blog post...",
