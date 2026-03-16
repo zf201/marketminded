@@ -46,3 +46,25 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 textarea:disabled { opacity: 0.6; cursor: not-allowed; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Profile page 70/30 layout */
+.profile-layout { display: flex; gap: 1.5rem; min-height: calc(100vh - 150px); }
+.profile-chat { flex: 7; display: flex; flex-direction: column; }
+.profile-chat .chat-messages { flex: 1; overflow-y: auto; max-height: calc(100vh - 300px); }
+.profile-cards { flex: 3; overflow-y: auto; max-height: calc(100vh - 150px); }
+.profile-card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; }
+.profile-card-empty { opacity: 0.5; border-style: dashed; }
+.profile-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.profile-card-content { font-size: 0.85rem; line-height: 1.4; }
+.profile-card-content p { margin: 0; }
+.profile-card-editing textarea { width: 100%; min-height: 80px; font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+/* Proposal blocks in chat */
+.proposal-block { border: 2px solid #3b82f6; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; background: #eff6ff; }
+.proposal-block-header { font-weight: 600; font-size: 0.8rem; color: #1e40af; margin-bottom: 0.5rem; text-transform: capitalize; }
+.proposal-block-content { font-size: 0.85rem; white-space: pre-wrap; margin-bottom: 0.75rem; padding: 0.5rem; background: white; border-radius: 4px; }
+.proposal-block-actions { display: flex; gap: 0.5rem; }
+.proposal-block-accepted { border-color: #059669; background: #ecfdf5; }
+.proposal-block-rejected { border-color: #d1d5db; background: #f9fafb; opacity: 0.6; }
+.proposal-building { border: 2px dashed #3b82f6; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; background: #eff6ff; }
+.proposal-building-header { font-weight: 600; font-size: 0.8rem; color: #1e40af; }
