@@ -60,9 +60,9 @@ func main() {
 	pipelineHandler := handlers.NewPipelineHandler(queries, pip, ideaAgent, contentAgent)
 	contentHandler := handlers.NewContentHandler(queries)
 	templateHandler := handlers.NewTemplateHandler(queries)
-	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, ideationModel)
+	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
-	profileHandler := handlers.NewProfileHandler(queries, aiClient, contentModel)
+	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
 
 	mux := http.NewServeMux()
 

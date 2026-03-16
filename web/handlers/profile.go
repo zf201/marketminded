@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
+	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
@@ -17,13 +21,14 @@ var allSections = []string{
 }
 
 type ProfileHandler struct {
-	queries *store.Queries
-	ai      types.AIClient
-	model   func() string
+	queries     *store.Queries
+	aiClient    *ai.Client
+	braveClient *search.BraveClient
+	model       func() string
 }
 
-func NewProfileHandler(q *store.Queries, ai types.AIClient, model func() string) *ProfileHandler {
-	return &ProfileHandler{queries: q, ai: ai, model: model}
+func NewProfileHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *ProfileHandler {
+	return &ProfileHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
 }
 
 func (h *ProfileHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -129,24 +134,18 @@ You have 10 profile sections to fill:
 
 ## How to propose updates
 
-When you learn something relevant to a section, propose an update using this exact format:
-
-[UPDATE:section_name]
-Write the full updated content for this section here.
-Use clear, natural prose. Not JSON. Not raw bullet lists unless they genuinely fit.
-If the section already has content, rewrite it to incorporate both old and new information.
-[/UPDATE]
+When you learn something relevant to a section, use the update_section tool to propose an update. The user will see the proposal and can accept or reject it.
 
 ## Rules
 
-- Propose one section update at a time. If you have updates for multiple sections from a single message, include them all in your response but each as a separate [UPDATE] block.
+- Propose one section update at a time. If you have updates for multiple sections from a single message, call update_section multiple times.
 - Always rewrite the full section content when updating — do not write diffs or "add this to existing."
 - After proposing updates, continue the conversation. Ask follow-up questions to fill gaps in other sections.
 - Do not make up information. Only propose updates based on what the user has actually told you.
 - Be conversational and concise. Don't lecture. Don't repeat back everything the user said.
 - If the user gives you a large dump of info (like a website paste), process it methodically — propose the most important sections first.
 - If a proposal is rejected, acknowledge it briefly and move on. You'll see rejected proposals in the chat history.
-- You CANNOT browse URLs or fetch websites. If the user shares a URL, ask them to paste the relevant content from that page instead. Do not pretend you can access links.`, project.Name, profileState.String())
+- You have access to web search and URL fetching tools. Use them when the user shares a URL or asks you to research something.`, project.Name, profileState.String())
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
@@ -164,26 +163,82 @@ If the section already has content, rewrite it to incorporate both old and new i
 		return
 	}
 
-	sendChunk := func(chunk string) error {
-		data, _ := json.Marshal(map[string]string{"chunk": chunk})
+	sendEvent := func(v any) {
+		data, _ := json.Marshal(v)
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
+	}
+
+	// Build tools
+	toolList := []ai.Tool{
+		tools.NewFetchTool(),
+		tools.NewSearchTool(),
+		tools.NewUpdateSectionTool(),
+	}
+
+	// Create search executor
+	searchExec := tools.NewSearchExecutor(h.braveClient)
+
+	// Executor switch
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		switch name {
+		case "fetch_url":
+			return tools.ExecuteFetch(ctx, args)
+		case "web_search":
+			return searchExec(ctx, args)
+		case "update_section":
+			return tools.ExecuteUpdateSection(ctx, args)
+		default:
+			return "", fmt.Errorf("unknown tool: %s", name)
+		}
+	}
+
+	// Tool event callback
+	onToolEvent := func(event ai.ToolEvent) {
+		switch event.Type {
+		case "tool_start":
+			summary := ""
+			switch event.Tool {
+			case "fetch_url":
+				summary = tools.FetchSummary(event.Args)
+			case "web_search":
+				summary = tools.SearchSummary(event.Args)
+			case "update_section":
+				summary = "Proposing update..."
+			}
+			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
+		case "tool_result":
+			summary := event.Summary
+			if len(summary) > 200 {
+				summary = summary[:200] + "..."
+			}
+			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
+		}
+
+		// Special handling for update_section: emit proposal event
+		if event.Tool == "update_section" && event.Type == "tool_result" {
+			args, err := tools.ParseUpdateArgs(event.Args)
+			if err == nil {
+				sendEvent(map[string]string{"type": "proposal", "section": args.Section, "content": args.Content})
+			}
+		}
+	}
+
+	// Chunk callback
+	sendChunk := func(chunk string) error {
+		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
 		return nil
 	}
 
-	fullResponse, err := h.ai.Stream(r.Context(), h.model(), aiMsgs, sendChunk)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk)
 	if err != nil {
-		errData, _ := json.Marshal(map[string]string{"error": err.Error()})
-		fmt.Fprintf(w, "data: %s\n\n", errData)
-		flusher.Flush()
+		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
 	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
 
-	doneData, _ := json.Marshal(map[string]bool{"done": true})
-	fmt.Fprintf(w, "data: %s\n\n", doneData)
-	flusher.Flush()
+	sendEvent(map[string]string{"type": "done"})
 }
 
 func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
