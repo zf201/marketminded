@@ -1,0 +1,248 @@
+package templates
+
+import "fmt"
+
+type ProfilePageData struct {
+	ProjectID   int64
+	ProjectName string
+	Sections    []ProfileSectionView
+	References  []ReferenceView
+	ActiveTab   string
+	AllSections []string
+}
+
+type ProfileSectionView struct {
+	Name      string
+	Content   string
+	HasData   bool
+	Inputs    []SectionInputView
+	Proposals []ProposalView
+}
+
+type SectionInputView struct {
+	ID      int64
+	Title   string
+	Content string
+	Section string
+}
+
+type ProposalView struct {
+	ID      int64
+	Section string
+	Content string
+}
+
+type ReferenceView struct {
+	ID        int64
+	Title     string
+	Content   string
+	SourceURL string
+	SavedBy   string
+}
+
+func sectionLabel(s string) string {
+	if s == "" {
+		return s
+	}
+	return fmt.Sprintf("%s%s", string([]rune(s)[:1:1]), s[1:])
+}
+
+templ ProfilePage(data ProfilePageData) {
+	@Layout(data.ProjectName + " - Profile") {
+		<div class="flex-between mb-4">
+			<div>
+				<h1>Client Profile</h1>
+				<p class="text-muted">{ data.ProjectName }</p>
+			</div>
+			<div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/analyze", data.ProjectID)) } style="display:inline">
+					<button type="submit" class="btn">Analyze Inputs</button>
+				</form>
+			</div>
+		</div>
+
+		<!-- Tab nav -->
+		<div style="display:flex;gap:0.25rem;flex-wrap:wrap;margin-bottom:1.5rem;border-bottom:2px solid #e5e5e5;padding-bottom:0;">
+			for _, section := range data.AllSections {
+				if section == data.ActiveTab {
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile?tab=%s", data.ProjectID, section)) }
+						style="padding:0.5rem 1rem;text-decoration:none;font-size:0.875rem;font-weight:600;color:#1a1a1a;border-bottom:2px solid #1a1a1a;margin-bottom:-2px;">
+						{ section }
+					</a>
+				} else {
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile?tab=%s", data.ProjectID, section)) }
+						style="padding:0.5rem 1rem;text-decoration:none;font-size:0.875rem;color:#6b7280;">
+						{ section }
+					</a>
+				}
+			}
+			if "references" == data.ActiveTab {
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile?tab=references", data.ProjectID)) }
+					style="padding:0.5rem 1rem;text-decoration:none;font-size:0.875rem;font-weight:600;color:#1a1a1a;border-bottom:2px solid #1a1a1a;margin-bottom:-2px;">
+					references
+				</a>
+			} else {
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile?tab=references", data.ProjectID)) }
+					style="padding:0.5rem 1rem;text-decoration:none;font-size:0.875rem;color:#6b7280;">
+					references
+				</a>
+			}
+		</div>
+
+		<!-- References tab -->
+		if data.ActiveTab == "references" {
+			<div>
+				<h2 class="mb-4">Reference Library</h2>
+
+				<!-- Add reference form -->
+				<div class="card mb-4">
+					<h3>Add Reference</h3>
+					<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/references", data.ProjectID)) }>
+						<div class="form-group">
+							<label>Title</label>
+							<input type="text" name="title" placeholder="Reference title..."/>
+						</div>
+						<div class="form-group">
+							<label>Content <span style="color:#dc2626">*</span></label>
+							<textarea name="content" placeholder="Paste reference content..." style="min-height:80px" required></textarea>
+						</div>
+						<div class="form-group">
+							<label>Source URL</label>
+							<input type="url" name="source_url" placeholder="https://..."/>
+						</div>
+						<button type="submit" class="btn">Add Reference</button>
+					</form>
+				</div>
+
+				if len(data.References) == 0 {
+					<p class="text-muted">No references yet. Add content you want to reference during profile analysis.</p>
+				}
+				for _, ref := range data.References {
+					<div class="card">
+						<div class="flex-between mb-2">
+							<div>
+								if ref.Title != "" {
+									<strong>{ ref.Title }</strong>
+								} else {
+									<strong style="color:#6b7280">(untitled)</strong>
+								}
+								<span class="badge badge-draft" style="margin-left:0.5rem">{ ref.SavedBy }</span>
+							</div>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/references/%d/delete-ref", data.ProjectID, ref.ID)) }>
+								<button type="submit" class="btn btn-danger" style="font-size:0.75rem;padding:0.25rem 0.5rem">Delete</button>
+							</form>
+						</div>
+						if ref.SourceURL != "" {
+							<p class="text-muted" style="font-size:0.75rem;margin-bottom:0.5rem">{ ref.SourceURL }</p>
+						}
+						<p style="white-space:pre-wrap;font-size:0.875rem">{ ref.Content }</p>
+					</div>
+				}
+			</div>
+		} else {
+			<!-- Section tabs -->
+			for _, section := range data.Sections {
+				if section.Name == data.ActiveTab {
+					<div>
+						<!-- Current approved content -->
+						<div class="card mb-4">
+							<div class="flex-between mb-2">
+								<h2>{ section.Name }</h2>
+								if section.HasData {
+									<span class="badge badge-approved">Configured</span>
+								} else {
+									<span class="badge badge-draft">Empty</span>
+								}
+							</div>
+							if section.HasData {
+								<pre style="white-space:pre-wrap;background:#f9f9f9;padding:1rem;border-radius:4px;font-family:monospace;font-size:0.875rem;margin:0">{ section.Content }</pre>
+							} else {
+								<p class="text-muted">No approved content yet. Add inputs and run analysis to generate proposals.</p>
+							}
+						</div>
+
+						<!-- Pending proposals -->
+						if len(section.Proposals) > 0 {
+							<div class="mb-4">
+								<h3 style="margin-bottom:0.75rem">Pending Proposals</h3>
+								for _, proposal := range section.Proposals {
+									<div class="card" style="border-color:#fbbf24">
+										<div class="flex-between mb-2">
+											<span class="badge badge-draft">Pending</span>
+										</div>
+										<pre style="white-space:pre-wrap;background:#fffbeb;padding:1rem;border-radius:4px;font-family:monospace;font-size:0.875rem;margin-bottom:1rem">{ proposal.Content }</pre>
+										<div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-start">
+											<!-- Approve as-is -->
+											<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/proposals/%d/approve", data.ProjectID, proposal.ID)) }>
+												<button type="submit" class="btn" style="background:#059669">Approve</button>
+											</form>
+											<!-- Approve with edit -->
+											<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/proposals/%d/approve", data.ProjectID, proposal.ID)) } style="flex:1;min-width:300px">
+												<div style="display:flex;gap:0.5rem">
+													<textarea name="edited_content" placeholder="Edit content then approve..." style="flex:1;min-height:60px;font-family:monospace;font-size:0.875rem">{ proposal.Content }</textarea>
+													<button type="submit" class="btn btn-secondary">Approve Edited</button>
+												</div>
+											</form>
+											<!-- Reject -->
+											<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/proposals/%d/reject", data.ProjectID, proposal.ID)) } style="display:flex;gap:0.5rem;align-items:flex-start">
+												<input type="text" name="reason" placeholder="Rejection reason..." style="width:200px"/>
+												<button type="submit" class="btn btn-danger">Reject</button>
+											</form>
+										</div>
+									</div>
+								}
+							</div>
+						}
+
+						<!-- Inputs -->
+						<div class="mb-4">
+							<h3 style="margin-bottom:0.75rem">Inputs ({ fmt.Sprintf("%d", len(section.Inputs)) })</h3>
+							if len(section.Inputs) == 0 {
+								<p class="text-muted" style="font-size:0.875rem">No inputs yet for this section.</p>
+							}
+							for _, inp := range section.Inputs {
+								<div class="card" style="padding:0.75rem">
+									<div class="flex-between mb-1">
+										<div>
+											if inp.Title != "" {
+												<strong style="font-size:0.875rem">{ inp.Title }</strong>
+											} else {
+												<strong style="font-size:0.875rem;color:#6b7280">(no title)</strong>
+											}
+										</div>
+										<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/inputs/%d/delete-input", data.ProjectID, inp.ID)) }>
+											<button type="submit" class="btn btn-danger" style="font-size:0.75rem;padding:0.2rem 0.4rem">×</button>
+										</form>
+									</div>
+									<p style="font-size:0.875rem;white-space:pre-wrap;margin:0">{ inp.Content }</p>
+								</div>
+							}
+						</div>
+
+						<!-- Add input form -->
+						<div class="card">
+							<h3>Add Input</h3>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/inputs", data.ProjectID)) }>
+								<input type="hidden" name="section" value={ section.Name }/>
+								<div class="form-group">
+									<label>Title</label>
+									<input type="text" name="title" placeholder="e.g., Brand description, Client bio..."/>
+								</div>
+								<div class="form-group">
+									<label>Content <span style="color:#dc2626">*</span></label>
+									<textarea name="content" placeholder="Paste raw content to analyze..." style="min-height:100px" required></textarea>
+								</div>
+								<div class="form-group">
+									<label>Source URL (optional)</label>
+									<input type="url" name="source_url" placeholder="https://..."/>
+								</div>
+								<button type="submit" class="btn btn-secondary">Add Input</button>
+							</form>
+						</div>
+					</div>
+				}
+			}
+		}
+	}
+}
