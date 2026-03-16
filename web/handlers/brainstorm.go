@@ -1,25 +1,30 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
+	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
 type BrainstormHandler struct {
-	queries *store.Queries
-	ai      types.AIClient
-	model   func() string
+	queries     *store.Queries
+	aiClient    *ai.Client
+	braveClient *search.BraveClient
+	model       func() string
 }
 
-func NewBrainstormHandler(q *store.Queries, ai types.AIClient, model func() string) *BrainstormHandler {
-	return &BrainstormHandler{queries: q, ai: ai, model: model}
+func NewBrainstormHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *BrainstormHandler {
+	return &BrainstormHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
 }
 
 func (h *BrainstormHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -131,7 +136,9 @@ func (h *BrainstormHandler) streamResponse(w http.ResponseWriter, r *http.Reques
 Client Profile:
 %s
 
-Help the user brainstorm content ideas, angles, and strategies. Be creative, specific, and actionable. Reference the brand's voice and tone when making suggestions.`, project.Name, profile)
+Help the user brainstorm content ideas, angles, and strategies. Be creative, specific, and actionable. Reference the brand's voice and tone when making suggestions.
+
+You have access to web search and URL fetching tools. Use them when the user asks you to research something or shares a URL.`, project.Name, profile)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
@@ -149,18 +156,63 @@ Help the user brainstorm content ideas, angles, and strategies. Be creative, spe
 		return
 	}
 
-	sendChunk := func(chunk string) error {
-		data, _ := json.Marshal(map[string]string{"chunk": chunk})
+	sendEvent := func(v any) {
+		data, _ := json.Marshal(v)
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
+	}
+
+	// Build tools (fetch + search only, no update_section)
+	toolList := []ai.Tool{
+		tools.NewFetchTool(),
+		tools.NewSearchTool(),
+	}
+
+	// Create search executor
+	searchExec := tools.NewSearchExecutor(h.braveClient)
+
+	// Executor switch
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		switch name {
+		case "fetch_url":
+			return tools.ExecuteFetch(ctx, args)
+		case "web_search":
+			return searchExec(ctx, args)
+		default:
+			return "", fmt.Errorf("unknown tool: %s", name)
+		}
+	}
+
+	// Tool event callback
+	onToolEvent := func(event ai.ToolEvent) {
+		switch event.Type {
+		case "tool_start":
+			summary := ""
+			switch event.Tool {
+			case "fetch_url":
+				summary = tools.FetchSummary(event.Args)
+			case "web_search":
+				summary = tools.SearchSummary(event.Args)
+			}
+			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
+		case "tool_result":
+			summary := event.Summary
+			if len(summary) > 200 {
+				summary = summary[:200] + "..."
+			}
+			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
+		}
+	}
+
+	// Chunk callback
+	sendChunk := func(chunk string) error {
+		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
 		return nil
 	}
 
-	fullResponse, err := h.ai.Stream(r.Context(), h.model(), aiMsgs, sendChunk)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk)
 	if err != nil {
-		errData, _ := json.Marshal(map[string]string{"error": err.Error()})
-		fmt.Fprintf(w, "data: %s\n\n", errData)
-		flusher.Flush()
+		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
@@ -168,9 +220,7 @@ Help the user brainstorm content ideas, angles, and strategies. Be creative, spe
 	h.queries.AddBrainstormMessage(chatID, "assistant", fullResponse)
 
 	// Signal done
-	doneData, _ := json.Marshal(map[string]bool{"done": true})
-	fmt.Fprintf(w, "data: %s\n\n", doneData)
-	flusher.Flush()
+	sendEvent(map[string]string{"type": "done"})
 }
 
 func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64) {
