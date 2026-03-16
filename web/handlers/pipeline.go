@@ -187,23 +187,23 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 		return
 	}
 
-	sendChunk := func(chunk string) error {
-		data, _ := json.Marshal(map[string]string{"chunk": chunk})
+	sendEvent := func(v any) {
+		data, _ := json.Marshal(v)
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
+	}
+
+	sendChunk := func(chunk string) error {
+		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
 		return nil
 	}
 
 	sendDone := func() {
-		data, _ := json.Marshal(map[string]bool{"done": true})
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
+		sendEvent(map[string]string{"type": "done"})
 	}
 
 	sendError := func(errMsg string) {
-		data, _ := json.Marshal(map[string]string{"error": errMsg})
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
+		sendEvent(map[string]string{"type": "error", "error": errMsg})
 	}
 
 	// Build context
