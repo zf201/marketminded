@@ -166,13 +166,15 @@ function initProfileChat(projectID) {
     }
 
     function addChatText(container, text) {
-        var span = container.querySelector('.chat-text');
-        if (!span) {
-            span = document.createElement('span');
-            span.className = 'chat-text';
-            container.appendChild(span);
+        // Always append to the LAST .chat-text span — or create one if
+        // the last child isn't a text span (e.g. after a tool/proposal block)
+        var last = container.lastElementChild;
+        if (!last || !last.classList.contains('chat-text')) {
+            last = document.createElement('span');
+            last.className = 'chat-text';
+            container.appendChild(last);
         }
-        span.textContent += text;
+        last.textContent += text;
     }
 
     function createToolIndicator(summary) {
