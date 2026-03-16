@@ -7,14 +7,6 @@ import (
 	"github.com/zanfridau/marketminded/internal/types"
 )
 
-type mockSearcher struct {
-	results []types.SearchResult
-}
-
-func (m *mockSearcher) Search(ctx context.Context, query string, count int) ([]types.SearchResult, error) {
-	return m.results, nil
-}
-
 func TestIdeaAgent_Generate(t *testing.T) {
 	ai := &mockAI{response: "1. How to scale your web agency\n2. 5 tips for client retention"}
 	searcher := &mockSearcher{results: []types.SearchResult{
