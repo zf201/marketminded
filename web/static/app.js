@@ -16,20 +16,20 @@ document.addEventListener('alpine:init', () => {
             this.source = new EventSource(url);
             this.source.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.done) {
+                if (data.type === 'done') {
                     this.source.close();
                     this.source = null;
                     this.loading = false;
                     return;
                 }
-                if (data.error) {
+                if (data.type === 'error') {
                     this.error = data.error;
                     this.source.close();
                     this.source = null;
                     this.loading = false;
                     return;
                 }
-                if (data.chunk) {
+                if (data.type === 'chunk') {
                     this.content += data.chunk;
                 }
             };
@@ -94,7 +94,7 @@ document.addEventListener('alpine:init', () => {
                 this.source.onmessage = (event) => {
                     const data = JSON.parse(event.data);
 
-                    if (data.done) {
+                    if (data.type === 'done') {
                         this.source.close();
                         this.source = null;
                         this.streaming = false;
@@ -103,16 +103,23 @@ document.addEventListener('alpine:init', () => {
                         window.location.reload();
                         return;
                     }
-                    if (data.error) {
+                    if (data.type === 'error') {
                         this.error = data.error;
                         this.source.close();
                         this.source = null;
                         this.streaming = false;
                         return;
                     }
-                    if (data.chunk) {
+                    if (data.type === 'chunk') {
                         this.streamContent += data.chunk;
                         this.scrollToBottom();
+                    }
+                    if (data.type === 'tool_start') {
+                        this.streamContent += '\n[' + data.summary + '...]\n';
+                        this.scrollToBottom();
+                    }
+                    if (data.type === 'tool_result') {
+                        // Tool result received, AI will continue
                     }
                 };
 
@@ -166,6 +173,26 @@ function initProfileChat(projectID) {
             container.appendChild(span);
         }
         span.textContent += text;
+    }
+
+    function createToolIndicator(summary) {
+        var el = document.createElement('div');
+        el.className = 'tool-indicator';
+        var dots = document.createElement('span');
+        dots.className = 'typing-indicator';
+        dots.textContent = '...';
+        el.appendChild(dots);
+        el.appendChild(document.createTextNode(' ' + summary));
+        return el;
+    }
+
+    function createToolResult(summary) {
+        var details = document.createElement('details');
+        details.className = 'tool-result-block';
+        var summaryEl = document.createElement('summary');
+        summaryEl.textContent = summary;
+        details.appendChild(summaryEl);
+        return details;
     }
 
     function createProposalBlock(section, content) {
@@ -236,17 +263,6 @@ function initProfileChat(projectID) {
         return block;
     }
 
-    function createBuildingIndicator(section) {
-        var el = document.createElement('div');
-        el.className = 'proposal-building';
-        el.dataset.section = section;
-        var header = document.createElement('div');
-        header.className = 'proposal-building-header';
-        header.textContent = 'Building proposal: ' + section + '...';
-        el.appendChild(header);
-        return el;
-    }
-
     // Direct card editing
     function editCard(section) {
         var card = document.getElementById('card-' + section);
@@ -312,7 +328,7 @@ function initProfileChat(projectID) {
         ta.focus();
     }
 
-    // Chat send with [UPDATE] marker parsing
+    // Chat send with typed SSE events
     input.addEventListener('keydown', function(e) {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
             e.preventDefault();
@@ -356,116 +372,60 @@ function initProfileChat(projectID) {
         messagesEl.appendChild(assistantDiv);
         scrollToBottom();
 
-        // Stream with [UPDATE] parsing
+        // Stream with typed SSE events
         fetch('/projects/' + projectID + '/profile/message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: 'content=' + encodeURIComponent(msg)
         }).then(function() {
             var source = new EventSource('/projects/' + projectID + '/profile/stream');
-            var buffer = '';
-            var inUpdate = false;
-            var updateSection = '';
-            var updateContent = '';
-            var buildingEl = null;
+            var lastToolIndicator = null;
 
             source.onmessage = function(event) {
                 var d = JSON.parse(event.data);
-                if (d.done) {
-                    source.close();
-                    // If we were mid-update when stream ended, finalize the proposal
-                    if (inUpdate && buildingEl) {
-                        updateContent += buffer;
-                        updateContent = updateContent.replace(/\[\/UPDATE\][\s]*$/, '').replace(/\n$/, '');
-                        var proposalBlock = createProposalBlock(updateSection, updateContent);
-                        buildingEl.replaceWith(proposalBlock);
-                        buildingEl = null;
-                        buffer = '';
-                        inUpdate = false;
-                    }
-                    // Flush any remaining buffer as text
-                    if (buffer && !inUpdate) {
-                        addChatText(aBody, buffer);
-                        buffer = '';
-                    }
-                    input.disabled = false;
-                    btn.disabled = false;
-                    btn.textContent = 'Send';
+
+                switch (d.type) {
+                case 'chunk':
+                    addChatText(aBody, d.chunk);
                     scrollToBottom();
-                    return;
-                }
-                if (d.error) {
+                    break;
+
+                case 'tool_start':
+                    lastToolIndicator = createToolIndicator(d.summary);
+                    aBody.appendChild(lastToolIndicator);
+                    scrollToBottom();
+                    break;
+
+                case 'tool_result':
+                    if (lastToolIndicator) {
+                        var resultBlock = createToolResult(d.summary);
+                        lastToolIndicator.replaceWith(resultBlock);
+                        lastToolIndicator = null;
+                    }
+                    scrollToBottom();
+                    break;
+
+                case 'proposal':
+                    var proposalBlock = createProposalBlock(d.section, d.content);
+                    aBody.appendChild(proposalBlock);
+                    scrollToBottom();
+                    break;
+
+                case 'error':
                     source.close();
                     addChatText(aBody, '\nError: ' + d.error);
                     input.disabled = false;
                     btn.disabled = false;
                     btn.textContent = 'Send';
-                    return;
-                }
-                if (d.chunk) {
-                    buffer += d.chunk;
+                    break;
 
-                    // Process buffer
-                    while (true) {
-                        if (!inUpdate) {
-                            var openIdx = buffer.indexOf('[UPDATE:');
-                            if (openIdx === -1) {
-                                // No marker — keep last 30 chars as buffer (max marker: [UPDATE:competitors] = 22 chars, plus safety)
-                                var safe = buffer.length > 30 ? buffer.length - 30 : 0;
-                                if (safe > 0) {
-                                    addChatText(aBody, buffer.substring(0, safe));
-                                    buffer = buffer.substring(safe);
-                                }
-                                break;
-                            }
-                            // Render text before marker
-                            if (openIdx > 0) {
-                                addChatText(aBody, buffer.substring(0, openIdx));
-                            }
-                            var closeBracket = buffer.indexOf(']', openIdx);
-                            if (closeBracket === -1) break; // partial marker, wait for more
-                            updateSection = buffer.substring(openIdx + 8, closeBracket);
-                            var afterMarker = closeBracket + 1;
-                            // Skip newline after opening marker
-                            if (buffer[afterMarker] === '\n') afterMarker++;
-                            buffer = buffer.substring(afterMarker);
-                            inUpdate = true;
-                            updateContent = '';
-                            // Show building indicator
-                            buildingEl = createBuildingIndicator(updateSection);
-                            aBody.appendChild(buildingEl);
-                            scrollToBottom();
-                        }
-
-                        if (inUpdate) {
-                            var closeIdx = buffer.indexOf('[/UPDATE]');
-                            if (closeIdx === -1) {
-                                // Still accumulating update content
-                                updateContent += buffer;
-                                buffer = '';
-                                break;
-                            }
-                            // Complete update found
-                            updateContent += buffer.substring(0, closeIdx);
-                            // Trim trailing newline
-                            updateContent = updateContent.replace(/\n$/, '');
-                            var afterClose = closeIdx + 9;
-                            if (buffer[afterClose] === '\n') afterClose++;
-                            buffer = buffer.substring(afterClose);
-                            inUpdate = false;
-                            // Replace building indicator with proposal block
-                            if (buildingEl) {
-                                var proposalBlock = createProposalBlock(updateSection, updateContent);
-                                buildingEl.replaceWith(proposalBlock);
-                                buildingEl = null;
-                            }
-                            scrollToBottom();
-                            updateSection = '';
-                            updateContent = '';
-                            // Continue loop to process more markers
-                        }
-                    }
+                case 'done':
+                    source.close();
+                    input.disabled = false;
+                    btn.disabled = false;
+                    btn.textContent = 'Send';
                     scrollToBottom();
+                    break;
                 }
             };
             source.onerror = function() {

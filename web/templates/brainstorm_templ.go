@@ -343,12 +343,12 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 						var accumulated = '';
 						source.onmessage = function(event) {
 							var d = JSON.parse(event.data);
-							if (d.done) {
+							if (d.type === 'done') {
 								source.close();
 								location.reload();
 								return;
 							}
-							if (d.error) {
+							if (d.type === 'error') {
 								source.close();
 								bodyEl.textContent = accumulated + '\nError: ' + d.error;
 								input.disabled = false;
@@ -356,8 +356,14 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 								btn.textContent = 'Send';
 								return;
 							}
-							if (d.chunk) {
+							if (d.type === 'chunk') {
 								accumulated += d.chunk;
+								bodyEl.textContent = accumulated;
+								bodyEl.appendChild(indicator);
+								scrollToBottom();
+							}
+							if (d.type === 'tool_start') {
+								accumulated += '\n[' + d.summary + '...]\n';
 								bodyEl.textContent = accumulated;
 								bodyEl.appendChild(indicator);
 								scrollToBottom();

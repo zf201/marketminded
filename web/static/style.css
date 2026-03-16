@@ -68,3 +68,10 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .proposal-block-rejected { border-color: #d1d5db; background: #f9fafb; opacity: 0.6; }
 .proposal-building { border: 2px dashed #3b82f6; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; background: #eff6ff; }
 .proposal-building-header { font-weight: 600; font-size: 0.8rem; color: #1e40af; }
+
+/* Tool indicators */
+.tool-indicator { color: #6b7280; font-size: 0.85rem; padding: 0.5rem 0; }
+.tool-indicator .typing-indicator { display: inline; }
+.tool-result-block { margin: 0.25rem 0; }
+.tool-result-block summary { font-size: 0.8rem; color: #6b7280; cursor: pointer; }
+.tool-result-block summary:hover { color: #374151; }
