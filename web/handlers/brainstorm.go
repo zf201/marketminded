@@ -135,7 +135,7 @@ Help the user brainstorm content ideas, angles, and strategies. Be creative and 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/brainstorm/%d", projectID, chatID), http.StatusSeeOther)
 }
 
-func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64, _ string) {
 	r.ParseForm()
 	topic := r.FormValue("topic")
 	if topic == "" {
