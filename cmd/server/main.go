@@ -50,8 +50,6 @@ func main() {
 	// Agents
 	ideaAgent := agents.NewIdeaAgent(aiClient, braveClient, ideationModel)
 	contentAgent := agents.NewContentAgent(aiClient, contentModel)
-	profileAgent := agents.NewProfileAgent(aiClient, contentModel)
-
 	// Pipeline
 	pipelineStore := &pipelineStoreAdapter{queries: queries}
 	pip := pipeline.New(pipelineStore)
@@ -64,7 +62,7 @@ func main() {
 	templateHandler := handlers.NewTemplateHandler(queries)
 	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
-	profileHandler := handlers.NewProfileHandler(queries, profileAgent)
+	profileHandler := handlers.NewProfileHandler(queries, aiClient, contentModel)
 
 	mux := http.NewServeMux()
 
