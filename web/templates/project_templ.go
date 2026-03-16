@@ -15,8 +15,7 @@ type ProjectDetail struct {
 	ID           int64
 	Name         string
 	Description  string
-	HasVoice     bool
-	HasTone      bool
+	HasProfile   bool
 	ContentCount int
 	RunCount     int
 }
@@ -71,16 +70,16 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_6 := `Setup`
+			var_6 := `Client Profile`
 			_, err = templBuffer.WriteString(var_6)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-1\">")
+			_, err = templBuffer.WriteString("</h3><p class=\"mb-2\">")
 			if err != nil {
 				return err
 			}
-			var_7 := `Voice:`
+			var_7 := `Profile:`
 			_, err = templBuffer.WriteString(var_7)
 			if err != nil {
 				return err
@@ -89,12 +88,12 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			if p.HasVoice {
+			if p.HasProfile {
 				_, err = templBuffer.WriteString("<span class=\"badge badge-approved\">")
 				if err != nil {
 					return err
 				}
-				var_8 := `Ready`
+				var_8 := `Configured`
 				_, err = templBuffer.WriteString(var_8)
 				if err != nil {
 					return err
@@ -118,54 +117,12 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 					return err
 				}
 			}
-			_, err = templBuffer.WriteString("</p><p class=\"mb-2\">")
-			if err != nil {
-				return err
-			}
-			var_10 := `Tone:`
-			_, err = templBuffer.WriteString(var_10)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString(" ")
-			if err != nil {
-				return err
-			}
-			if p.HasTone {
-				_, err = templBuffer.WriteString("<span class=\"badge badge-approved\">")
-				if err != nil {
-					return err
-				}
-				var_11 := `Ready`
-				_, err = templBuffer.WriteString(var_11)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</span>")
-				if err != nil {
-					return err
-				}
-			} else {
-				_, err = templBuffer.WriteString("<span class=\"badge badge-draft\">")
-				if err != nil {
-					return err
-				}
-				var_12 := `Not set`
-				_, err = templBuffer.WriteString(var_12)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</span>")
-				if err != nil {
-					return err
-				}
-			}
 			_, err = templBuffer.WriteString("</p><a href=\"")
 			if err != nil {
 				return err
 			}
-			var var_13 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/knowledge", p.ID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_13)))
+			var var_10 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/profile", p.ID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_10)))
 			if err != nil {
 				return err
 			}
@@ -173,8 +130,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_14 := `Manage Knowledge`
-			_, err = templBuffer.WriteString(var_14)
+			var_11 := `Manage Profile`
+			_, err = templBuffer.WriteString(var_11)
 			if err != nil {
 				return err
 			}
@@ -182,8 +139,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_15 := `Content Pipeline`
-			_, err = templBuffer.WriteString(var_15)
+			var_12 := `Content Pipeline`
+			_, err = templBuffer.WriteString(var_12)
 			if err != nil {
 				return err
 			}
@@ -191,8 +148,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_16 string = fmt.Sprintf("%d pieces created", p.ContentCount)
-			_, err = templBuffer.WriteString(templ.EscapeString(var_16))
+			var var_13 string = fmt.Sprintf("%d pieces created", p.ContentCount)
+			_, err = templBuffer.WriteString(templ.EscapeString(var_13))
 			if err != nil {
 				return err
 			}
@@ -200,8 +157,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_17 string = fmt.Sprintf("%d pipeline runs", p.RunCount)
-			_, err = templBuffer.WriteString(templ.EscapeString(var_17))
+			var var_14 string = fmt.Sprintf("%d pipeline runs", p.RunCount)
+			_, err = templBuffer.WriteString(templ.EscapeString(var_14))
 			if err != nil {
 				return err
 			}
@@ -209,8 +166,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_18 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_18)))
+			var var_15 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_15)))
 			if err != nil {
 				return err
 			}
@@ -218,8 +175,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_19 := `Pipeline Runs`
-			_, err = templBuffer.WriteString(var_19)
+			var_16 := `Pipeline Runs`
+			_, err = templBuffer.WriteString(var_16)
 			if err != nil {
 				return err
 			}
@@ -227,44 +184,44 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_20 := `Brainstorm`
+			var_17 := `Brainstorm`
+			_, err = templBuffer.WriteString(var_17)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</h3><p class=\"mb-2 text-muted\">")
+			if err != nil {
+				return err
+			}
+			var_18 := `Chat with AI using project context`
+			_, err = templBuffer.WriteString(var_18)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</p><a href=\"")
+			if err != nil {
+				return err
+			}
+			var var_19 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_19)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
+			if err != nil {
+				return err
+			}
+			var_20 := `Open Chat`
 			_, err = templBuffer.WriteString(var_20)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-2 text-muted\">")
-			if err != nil {
-				return err
-			}
-			var_21 := `Chat with AI using project context`
-			_, err = templBuffer.WriteString(var_21)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</p><a href=\"")
-			if err != nil {
-				return err
-			}
-			var var_22 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_22)))
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
-			if err != nil {
-				return err
-			}
-			var_23 := `Open Chat`
-			_, err = templBuffer.WriteString(var_23)
-			if err != nil {
-				return err
-			}
 			_, err = templBuffer.WriteString("</a></div><div class=\"card\"><h3>")
 			if err != nil {
 				return err
 			}
-			var_24 := `Templates`
-			_, err = templBuffer.WriteString(var_24)
+			var_21 := `Templates`
+			_, err = templBuffer.WriteString(var_21)
 			if err != nil {
 				return err
 			}
@@ -272,8 +229,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_25 := `HTML templates for social posts`
-			_, err = templBuffer.WriteString(var_25)
+			var_22 := `HTML templates for social posts`
+			_, err = templBuffer.WriteString(var_22)
 			if err != nil {
 				return err
 			}
@@ -281,8 +238,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_26 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_26)))
+			var var_23 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_23)))
 			if err != nil {
 				return err
 			}
@@ -290,8 +247,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_27 := `Manage Templates`
-			_, err = templBuffer.WriteString(var_27)
+			var_24 := `Manage Templates`
+			_, err = templBuffer.WriteString(var_24)
 			if err != nil {
 				return err
 			}

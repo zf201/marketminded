@@ -50,6 +50,7 @@ func main() {
 	// Agents
 	ideaAgent := agents.NewIdeaAgent(aiClient, braveClient, ideationModel)
 	contentAgent := agents.NewContentAgent(aiClient, contentModel)
+	profileAgent := agents.NewProfileAgent(aiClient, contentModel)
 
 	// Pipeline
 	pipelineStore := &pipelineStoreAdapter{queries: queries}
@@ -63,6 +64,7 @@ func main() {
 	templateHandler := handlers.NewTemplateHandler(queries)
 	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
+	profileHandler := handlers.NewProfileHandler(queries, profileAgent)
 
 	mux := http.NewServeMux()
 
@@ -100,6 +102,8 @@ func main() {
 			templateHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "brainstorm"):
 			brainstormHandler.Handle(w, r, projectID, rest)
+		case strings.HasPrefix(rest, "profile"):
+			profileHandler.Handle(w, r, projectID, rest)
 		default:
 			http.NotFound(w, r)
 		}
