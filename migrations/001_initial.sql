@@ -14,43 +14,9 @@ CREATE TABLE profile_sections (
         'business','audience','voice','tone','strategy',
         'pillars','guidelines','competitors','inspiration','offers'
     )),
-    content TEXT NOT NULL DEFAULT '{}',
+    content TEXT NOT NULL DEFAULT '',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(project_id, section)
-);
-
-CREATE TABLE section_inputs (
-    id INTEGER PRIMARY KEY,
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    section TEXT,
-    title TEXT,
-    content TEXT NOT NULL,
-    source_url TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_section_inputs_project ON section_inputs(project_id, section);
-
-CREATE TABLE section_proposals (
-    id INTEGER PRIMARY KEY,
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    section TEXT NOT NULL,
-    proposed_content TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
-    rejection_reason TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_section_proposals_project ON section_proposals(project_id, section);
-
-CREATE TABLE project_references (
-    id INTEGER PRIMARY KEY,
-    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    title TEXT,
-    content TEXT NOT NULL,
-    source_url TEXT,
-    saved_by TEXT NOT NULL DEFAULT 'user' CHECK(saved_by IN ('user','agent')),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE templates (
@@ -127,8 +93,5 @@ DROP TABLE agent_runs;
 DROP TABLE content_pieces;
 DROP TABLE pipeline_runs;
 DROP TABLE templates;
-DROP TABLE project_references;
-DROP TABLE section_proposals;
-DROP TABLE section_inputs;
 DROP TABLE profile_sections;
 DROP TABLE projects;

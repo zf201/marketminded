@@ -71,6 +71,19 @@ func (q *Queries) AddBrainstormMessage(chatID int64, role, content string) (*Bra
 	return m, err
 }
 
+func (q *Queries) GetOrCreateProfileChat(projectID int64) (*BrainstormChat, error) {
+	c := &BrainstormChat{}
+	err := q.db.QueryRow(
+		"SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE project_id = ? AND section = 'profile'",
+		projectID,
+	).Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt)
+	if err == nil {
+		return c, nil
+	}
+	// Not found, create it
+	return q.CreateBrainstormChat(projectID, "Profile Builder", "profile")
+}
+
 func (q *Queries) ListBrainstormMessages(chatID int64) ([]BrainstormMessage, error) {
 	rows, err := q.db.Query("SELECT id, chat_id, role, content, created_at FROM brainstorm_messages WHERE chat_id = ? ORDER BY created_at ASC", chatID)
 	if err != nil {
