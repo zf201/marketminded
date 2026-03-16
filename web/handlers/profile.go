@@ -17,7 +17,7 @@ import (
 
 var allSections = []string{
 	"product_and_positioning", "audience", "voice_and_tone",
-	"content_strategy", "guidelines", "waterfalls",
+	"content_strategy", "guidelines",
 }
 
 type ProfileHandler struct {
@@ -133,41 +133,12 @@ Ideal customer profile: demographics, roles, company type/size (if B2B). Their t
 How the brand communicates: personality traits, vocabulary level, sentence style, formality, humor, warmth. Characteristic phrases to use. How they relate to the audience (peer, mentor, authority). Words/phrases to always use and to never use. Ask for examples of writing they like — use THEIR words, not marketing theory. Include content role models: creators, brands, or accounts they admire and why.
 
 ### 4. Content Strategy (content_strategy)
-Content goals (traffic, leads, authority, community). Which platforms to post on and why. Content formats per platform (blog, carousel, reel, thread, newsletter). Posting frequency per platform. 3-5 content pillars: recurring topic categories with example post ideas for each. For each pillar, include both "searchable" content (captures existing demand via SEO) and "shareable" content (creates demand through insights, stories, original takes). Content repurposing flow (e.g. blog → LinkedIn → Instagram → email).
+Content goals (traffic, leads, authority, community). Which platforms to post on and why. Content formats per platform (blog, carousel, reel, thread, newsletter). Posting frequency per platform. 3-5 content pillars: recurring topic categories with example post ideas for each. For each pillar, include both "searchable" content (captures existing demand via SEO) and "shareable" content (creates demand through insights, stories, original takes).
+
+IMPORTANT: The core of this strategy is the "content waterfall" approach. One cornerstone piece of content (like a blog post or video) gets repurposed into many smaller pieces across platforms. Define the client's waterfall flows clearly. For example: "Each blog post becomes 2 Instagram posts, 2 reels, 1 LinkedIn post, 1 X post, and 1 X thread." Or: "Each YouTube video becomes a blog post, 3 shorts, 2 reels, and a LinkedIn post." There may be multiple waterfall patterns depending on the type of cornerstone content. Be specific about what goes where and how many.
 
 ### 5. Guidelines (guidelines)
 Content-specific rules: topics that are off-limits, formatting preferences, hashtag strategy, emoji usage, visual style. Anti-patterns: what should content NEVER look or sound like. Any brand-specific dos and don'ts not covered elsewhere.
-
-### 6. Waterfalls (waterfalls)
-Content repurposing recipes. Each waterfall defines how one pillar piece of content gets broken down into multiple pieces across platforms. For this section ONLY, use JSON format so the content pipeline can consume it programmatically.
-
-Example format:
-` + "`" + `[
-  {
-    "name": "Blog Waterfall",
-    "pillar": "blog_post",
-    "outputs": [
-      {"platform": "instagram", "format": "post", "count": 2},
-      {"platform": "instagram", "format": "reel", "count": 2},
-      {"platform": "linkedin", "format": "post", "count": 1},
-      {"platform": "x", "format": "post", "count": 1},
-      {"platform": "x", "format": "thread", "count": 1}
-    ]
-  },
-  {
-    "name": "Video Waterfall",
-    "pillar": "youtube_video",
-    "outputs": [
-      {"platform": "blog", "format": "post", "count": 1},
-      {"platform": "youtube", "format": "short", "count": 3},
-      {"platform": "instagram", "format": "reel", "count": 2},
-      {"platform": "linkedin", "format": "post", "count": 1},
-      {"platform": "x", "format": "thread", "count": 1}
-    ]
-  }
-]` + "`" + `
-
-Ask what types of pillar content they create and how they want to repurpose each.
 
 ## Current profile state for "%s"
 
@@ -188,7 +159,14 @@ CRITICAL RULES:
 - NEVER move to the next section before the current one is accepted. If a section is rejected, stay on it.
 - Write specific prose about THIS client. If your writeup could apply to any random company, it's too generic — rewrite it.
 - Use fetch_url when the user shares a link. Use web_search to research competitors or industry context.
-- Be conversational and efficient. Don't repeat what the user said. Don't explain marketing theory.`, project.Name, profileState.String())
+- Be conversational and efficient. Don't repeat what the user said. Don't explain marketing theory.
+
+WRITING STYLE — THIS APPLIES TO EVERYTHING YOU WRITE INCLUDING SECTION PROPOSALS:
+- Write like a human. NEVER sound like AI-generated content.
+- NEVER use em dashes (—). Use commas, periods, or restructure the sentence instead.
+- NEVER overuse emojis. Zero emojis in profile sections. In chat, one max per message if it fits naturally.
+- Avoid AI clichés: "dive into", "leverage", "elevate", "streamline", "at the end of the day", "it's worth noting", "game-changer", "unlock", "harness the power of".
+- Use short, direct sentences. Vary sentence length. Sound like a person talking, not a press release.`, project.Name, profileState.String())
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
