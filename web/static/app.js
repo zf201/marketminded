@@ -373,6 +373,16 @@ function initProfileChat(projectID) {
                 var d = JSON.parse(event.data);
                 if (d.done) {
                     source.close();
+                    // If we were mid-update when stream ended, finalize the proposal
+                    if (inUpdate && buildingEl) {
+                        updateContent += buffer;
+                        updateContent = updateContent.replace(/\[\/UPDATE\][\s]*$/, '').replace(/\n$/, '');
+                        var proposalBlock = createProposalBlock(updateSection, updateContent);
+                        buildingEl.replaceWith(proposalBlock);
+                        buildingEl = null;
+                        buffer = '';
+                        inUpdate = false;
+                    }
                     // Flush any remaining buffer as text
                     if (buffer && !inUpdate) {
                         addChatText(aBody, buffer);
@@ -400,8 +410,8 @@ function initProfileChat(projectID) {
                         if (!inUpdate) {
                             var openIdx = buffer.indexOf('[UPDATE:');
                             if (openIdx === -1) {
-                                // No marker — render all buffered text except last 20 chars (could be partial marker)
-                                var safe = buffer.length > 20 ? buffer.length - 20 : 0;
+                                // No marker — keep last 30 chars as buffer (max marker: [UPDATE:competitors] = 22 chars, plus safety)
+                                var safe = buffer.length > 30 ? buffer.length - 30 : 0;
                                 if (safe > 0) {
                                     addChatText(aBody, buffer.substring(0, safe));
                                     buffer = buffer.substring(safe);

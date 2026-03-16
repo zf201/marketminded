@@ -27,8 +27,8 @@ func Load() (*Config, error) {
 		DBPath:           envOr("MARKETMINDED_DB_PATH", "./marketminded.db"),
 		OpenRouterAPIKey: orKey,
 		BraveAPIKey:      braveKey,
-		ModelContent:     envOr("MARKETMINDED_MODEL_CONTENT", "anthropic/claude-sonnet-4-20250514"),
-		ModelIdeation:    envOr("MARKETMINDED_MODEL_IDEATION", "anthropic/claude-sonnet-4-20250514"),
+		ModelContent:     envOr("MARKETMINDED_MODEL_CONTENT", "x-ai/grok-4.1-fast"),
+		ModelIdeation:    envOr("MARKETMINDED_MODEL_IDEATION", "x-ai/grok-4.1-fast"),
 	}, nil
 }
 

@@ -145,7 +145,8 @@ If the section already has content, rewrite it to incorporate both old and new i
 - Do not make up information. Only propose updates based on what the user has actually told you.
 - Be conversational and concise. Don't lecture. Don't repeat back everything the user said.
 - If the user gives you a large dump of info (like a website paste), process it methodically — propose the most important sections first.
-- If a proposal is rejected, acknowledge it briefly and move on. You'll see rejected proposals in the chat history.`, project.Name, profileState.String())
+- If a proposal is rejected, acknowledge it briefly and move on. You'll see rejected proposals in the chat history.
+- You CANNOT browse URLs or fetch websites. If the user shares a URL, ask them to paste the relevant content from that page instead. Do not pretend you can access links.`, project.Name, profileState.String())
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
