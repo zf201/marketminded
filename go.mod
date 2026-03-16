@@ -4,13 +4,13 @@ go 1.25.6
 
 require (
 	github.com/a-h/templ v0.3.1001
+	github.com/go-rod/rod v0.116.2
 	github.com/pressly/goose/v3 v3.27.0
 	modernc.org/sqlite v1.46.1
 )
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/go-rod/rod v0.116.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
