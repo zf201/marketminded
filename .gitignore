@@ -1,4 +1,6 @@
 *.db
+*.db-shm
+*.db-wal
 *_templ.go
 /server
 /marketminded
