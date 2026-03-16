@@ -11,8 +11,8 @@ CREATE TABLE profile_sections (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     section TEXT NOT NULL CHECK(section IN (
-        'business','audience','voice_and_tone','content_pillars','content_strategy',
-        'guidelines','competitors','inspiration','offers'
+        'product_and_positioning','audience','voice_and_tone',
+        'content_strategy','guidelines','waterfalls'
     )),
     content TEXT NOT NULL DEFAULT '',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

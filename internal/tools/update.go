@@ -9,9 +9,8 @@ import (
 )
 
 var validSections = map[string]bool{
-	"business": true, "audience": true, "voice_and_tone": true,
-	"content_pillars": true, "content_strategy": true, "guidelines": true,
-	"competitors": true, "inspiration": true, "offers": true,
+	"product_and_positioning": true, "audience": true, "voice_and_tone": true,
+	"content_strategy": true, "guidelines": true, "waterfalls": true,
 }
 
 func NewUpdateSectionTool() ai.Tool {
@@ -19,8 +18,8 @@ func NewUpdateSectionTool() ai.Tool {
 		Type: "function",
 		Function: ai.ToolFunction{
 			Name:        "update_section",
-			Description: "Propose an update to a profile section. The user will be asked to accept or reject. Write the full new content for the section as clear, natural prose specific to this client. Do not use generic marketing language.",
-			Parameters: json.RawMessage(`{"type":"object","properties":{"section":{"type":"string","enum":["business","audience","voice_and_tone","content_pillars","content_strategy","competitors","inspiration","offers","guidelines"],"description":"The profile section to update"},"content":{"type":"string","description":"The full new content for this section. Write specific, natural prose — not JSON, not generic filler."}},"required":["section","content"]}`),
+			Description: "Propose an update to a profile section. The user will accept or reject it. Write thorough, specific prose about this client — not generic marketing advice.",
+			Parameters: json.RawMessage(`{"type":"object","properties":{"section":{"type":"string","enum":["product_and_positioning","audience","voice_and_tone","content_strategy","guidelines","waterfalls"],"description":"The profile section to update"},"content":{"type":"string","description":"The full new content for this section. Must be specific to this client. For waterfalls, use JSON format."}},"required":["section","content"]}`),
 		},
 	}
 }
@@ -36,7 +35,7 @@ func ExecuteUpdateSection(ctx context.Context, argsJSON string) (string, error) 
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 	if !validSections[args.Section] {
-		return fmt.Sprintf("Error: '%s' is not a valid section. Valid sections: business, audience, voice_and_tone, content_pillars, content_strategy, competitors, inspiration, offers, guidelines.", args.Section), nil
+		return fmt.Sprintf("Error: '%s' is not a valid section. Valid sections: product_and_positioning, audience, voice_and_tone, content_strategy, guidelines, waterfalls.", args.Section), nil
 	}
 	return fmt.Sprintf("Proposed update to %s section. Waiting for user approval.", args.Section), nil
 }
