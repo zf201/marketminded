@@ -271,7 +271,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" id=\"push-form\" style=\"display:none\"><input type=\"hidden\" name=\"topic\" id=\"push-topic-hidden\"><button type=\"submit\" class=\"btn\">")
+			_, err = templBuffer.WriteString("\" id=\"push-form\" style=\"display:none\"><input type=\"hidden\" name=\"topic\" id=\"push-topic-hidden\"><input type=\"hidden\" name=\"conversation\" id=\"push-conversation-hidden\"><button type=\"submit\" class=\"btn\">")
 			if err != nil {
 				return err
 			}
@@ -479,6 +479,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 									pushTopicHidden.value = pushTopic.value;
 								});
 								pushTopicHidden.value = data.topic;
+								document.getElementById('push-conversation-hidden').value = data.conversation || '';
 							})
 							.catch(function(err) {
 								pushStatus.textContent = 'Error: ' + err.message;

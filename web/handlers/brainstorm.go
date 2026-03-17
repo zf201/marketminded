@@ -278,44 +278,48 @@ func (h *BrainstormHandler) generateTopic(w http.ResponseWriter, r *http.Request
 		fmt.Fprintf(&conversation, "%s: %s\n\n", m.Role, m.Content)
 	}
 
+	// Generate a short title
 	aiMsgs := []types.Message{
 		{
-			Role: "system",
-			Content: `You are distilling a brainstorming conversation into a single, specific content topic for a production pipeline.
-
-Read the conversation and propose ONE specific topic/title that would make a great cornerstone content piece (blog post, video, etc).
-
-Rules:
-- Be specific. Not "content marketing tips" but "5 SEO mistakes that cost e-commerce brands $10K/month"
-- The topic should be the strongest idea from the conversation
-- Return ONLY the topic text, nothing else. No quotes, no explanation.`,
+			Role:    "system",
+			Content: "Distill this brainstorming conversation into a single specific content topic title (5-10 words). Return ONLY the title, nothing else.",
 		},
 		{
 			Role:    "user",
-			Content: fmt.Sprintf("Here is the brainstorming conversation:\n\n%s\n\nWhat's the best single topic for a content pipeline from this conversation?", conversation.String()),
+			Content: conversation.String(),
 		},
 	}
 
-	topic, err := h.aiClient.Complete(r.Context(), h.model(), aiMsgs)
+	title, err := h.aiClient.Complete(r.Context(), h.model(), aiMsgs)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	topic = strings.TrimSpace(topic)
+	title = strings.TrimSpace(title)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"topic": topic})
+	json.NewEncoder(w).Encode(map[string]string{
+		"topic":        title,
+		"conversation": conversation.String(),
+	})
 }
 
 func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
 	topic := r.FormValue("topic")
+	conversation := r.FormValue("conversation")
 	if topic == "" {
 		http.Error(w, "Topic required", http.StatusBadRequest)
 		return
 	}
 
-	run, err := h.queries.CreatePipelineRun(projectID, topic)
+	// Store full brainstorm conversation as the topic brief
+	brief := topic
+	if conversation != "" {
+		brief = fmt.Sprintf("Topic: %s\n\nBrainstorm conversation:\n%s", topic, conversation)
+	}
+
+	run, err := h.queries.CreatePipelineRun(projectID, brief)
 	if err != nil {
 		http.Error(w, "Failed to create run", http.StatusInternalServerError)
 		return

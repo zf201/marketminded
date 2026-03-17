@@ -69,6 +69,7 @@ templ BrainstormChatPage(data BrainstormChatData) {
 					<div style="display:flex;gap:0.5rem">
 						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID)) } id="push-form" style="display:none">
 							<input type="hidden" name="topic" id="push-topic-hidden"/>
+							<input type="hidden" name="conversation" id="push-conversation-hidden"/>
 							<button type="submit" class="btn">Create Pipeline Run</button>
 						</form>
 						<button class="btn btn-secondary" id="push-cancel">Cancel</button>
@@ -226,6 +227,7 @@ templ BrainstormChatPage(data BrainstormChatData) {
 									pushTopicHidden.value = pushTopic.value;
 								});
 								pushTopicHidden.value = data.topic;
+								document.getElementById('push-conversation-hidden').value = data.conversation || '';
 							})
 							.catch(function(err) {
 								pushStatus.textContent = 'Error: ' + err.message;

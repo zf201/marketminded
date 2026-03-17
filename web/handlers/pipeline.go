@@ -91,10 +91,18 @@ func (h *PipelineHandler) list(w http.ResponseWriter, r *http.Request, projectID
 	runs, _ := h.queries.ListPipelineRuns(projectID)
 	views := make([]templates.PipelineRunView, len(runs))
 	for i, run := range runs {
+		// Show just the first line of the topic (may contain full conversation)
+		topicDisplay := run.Topic
+		if idx := strings.Index(topicDisplay, "\n"); idx != -1 {
+			topicDisplay = topicDisplay[:idx]
+		}
+		if len(topicDisplay) > 100 {
+			topicDisplay = topicDisplay[:100] + "..."
+		}
 		views[i] = templates.PipelineRunView{
 			ID:     run.ID,
 			Status: run.Status,
-			Topic:  run.Topic,
+			Topic:  topicDisplay,
 		}
 	}
 
@@ -189,15 +197,16 @@ func (h *PipelineHandler) streamPlan(w http.ResponseWriter, r *http.Request, pro
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
-You are a content production planner. Given a topic and the client's content strategy, create a production plan.
+You are a content production planner. Given a topic brief (which may include a brainstorming conversation) and the client's content strategy, create a production plan.
 
 Client profile:
 %s
 
-Topic: %s
+Topic brief:
+%s
 
-Based on the content strategy and waterfall flows defined in the profile, propose:
-1. The cornerstone content type (blog post, video script, etc.)
+Read the topic brief carefully. If it contains a brainstorm conversation, extract the best content angle from it. Based on the content strategy and waterfall flows defined in the profile, propose:
+1. The cornerstone content type (blog post, video script, etc.) with a specific working title
 2. The waterfall pieces that will be produced from it, with platform and format for each
 
 Be specific. Reference the waterfall patterns from the content strategy section. If the strategy doesn't define waterfalls, propose reasonable defaults based on the platforms listed.
