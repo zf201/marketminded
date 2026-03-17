@@ -53,8 +53,8 @@ func (h *BrainstormHandler) list(w http.ResponseWriter, r *http.Request, project
 
 	views := make([]templates.BrainstormChatView, 0, len(chats))
 	for _, c := range chats {
-		// Skip profile chats — those show on the profile page
-		if c.Section == "profile" {
+		// Skip non-brainstorm chats (profile sections, context items, piece improvements)
+		if c.Section != "" || c.ContentPieceID != nil {
 			continue
 		}
 		preview := ""
