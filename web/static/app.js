@@ -1127,16 +1127,15 @@ function initProductionBoard(projectID, runID) {
         }
     });
 
-    // Proofread buttons — open modal with streaming analysis
+    // Proofread buttons — stream corrected version in modal, offer accept/reject
     document.querySelectorAll('.proofread-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var pieceId = btn.dataset.pieceId;
 
-            // Create modal
             var overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center';
             var modal = document.createElement('div');
-            modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:600px;width:90%;max-height:80vh;display:flex;flex-direction:column';
+            modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:80vh;display:flex;flex-direction:column';
 
             var title = document.createElement('h3');
             title.textContent = 'Proofreading...';
@@ -1144,39 +1143,72 @@ function initProductionBoard(projectID, runID) {
             modal.appendChild(title);
 
             var output = document.createElement('div');
-            output.style.cssText = 'white-space:pre-wrap;font-size:0.85rem;line-height:1.5;overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:1rem';
+            output.style.cssText = 'white-space:pre-wrap;font-size:0.85rem;line-height:1.5;overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:1rem;min-height:200px';
             modal.appendChild(output);
 
-            var closeBtn = document.createElement('button');
-            closeBtn.className = 'btn btn-secondary';
-            closeBtn.textContent = 'Close';
-            closeBtn.style.display = 'none';
-            closeBtn.onclick = function() { overlay.remove(); window.location.reload(); };
-            modal.appendChild(closeBtn);
+            var actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;gap:0.5rem';
+            actions.style.display = 'none';
+            modal.appendChild(actions);
 
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
 
-            // Stream proofread
+            var correctedContent = '';
+
             var source = new EventSource(basePath + '/piece/' + pieceId + '/proofread');
             source.onmessage = function(event) {
                 var d = JSON.parse(event.data);
                 if (d.type === 'chunk') {
                     output.textContent += d.chunk;
                     output.scrollTop = output.scrollHeight;
+                } else if (d.type === 'proofread_result') {
+                    correctedContent = d.corrected;
                 } else if (d.type === 'done') {
                     source.close();
-                    title.textContent = 'Proofread Complete';
-                    closeBtn.style.display = 'inline-block';
+                    title.textContent = 'Proofread Complete — Accept changes?';
+                    actions.style.display = 'flex';
+
+                    var acceptBtn = document.createElement('button');
+                    acceptBtn.className = 'btn';
+                    acceptBtn.textContent = 'Accept';
+                    acceptBtn.onclick = function() {
+                        var form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = basePath + '/piece/' + pieceId + '/save-proofread';
+                        var inp = document.createElement('input');
+                        inp.type = 'hidden'; inp.name = 'corrected'; inp.value = correctedContent;
+                        form.appendChild(inp);
+                        document.body.appendChild(form);
+                        form.submit();
+                    };
+                    actions.appendChild(acceptBtn);
+
+                    var rejectBtn = document.createElement('button');
+                    rejectBtn.className = 'btn btn-secondary';
+                    rejectBtn.textContent = 'Reject';
+                    rejectBtn.onclick = function() { overlay.remove(); };
+                    actions.appendChild(rejectBtn);
                 } else if (d.type === 'error') {
                     source.close();
                     output.textContent += '\nError: ' + d.error;
-                    closeBtn.style.display = 'inline-block';
+                    var closeBtn = document.createElement('button');
+                    closeBtn.className = 'btn btn-secondary';
+                    closeBtn.textContent = 'Close';
+                    closeBtn.onclick = function() { overlay.remove(); };
+                    actions.style.display = 'flex';
+                    actions.appendChild(closeBtn);
                 }
             };
             source.onerror = function() {
                 source.close();
-                closeBtn.style.display = 'inline-block';
+                title.textContent = 'Connection lost';
+                var closeBtn = document.createElement('button');
+                closeBtn.className = 'btn btn-secondary';
+                closeBtn.textContent = 'Close';
+                closeBtn.onclick = function() { overlay.remove(); };
+                actions.style.display = 'flex';
+                actions.appendChild(closeBtn);
             };
         });
     });

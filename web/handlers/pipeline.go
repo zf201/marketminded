@@ -75,6 +75,8 @@ func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, project
 		h.saveImproveMessage(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/proofread") && r.Method == "GET":
 		h.proofread(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/save-proofread") && r.Method == "POST":
+		h.saveProofread(w, r, projectID, rest)
 	default:
 		// pipeline/{id}
 		h.show(w, r, projectID, rest)
@@ -677,7 +679,6 @@ func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, proj
 		language = "English"
 	}
 
-	// SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -694,50 +695,47 @@ func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, proj
 		flusher.Flush()
 	}
 
-	// Step 1: Stream the AI's analysis/thinking
-	analyzePrompt := fmt.Sprintf(`You are a proofreader working in %s. Analyze the following content and list the issues you find. Be specific about each fix.
-
-Content:
-%s
-
-List each issue on its own line: what's wrong and what the fix is. Be concise. Then say "Applying fixes now."`, language, piece.Body)
-
-	sendChunk := func(chunk string) error {
-		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
-		return nil
-	}
-
-	h.aiClient.Stream(r.Context(), h.model(), []types.Message{
-		{Role: "user", Content: analyzePrompt},
-	}, sendChunk)
-
-	// Step 2: Now do the actual correction (non-streaming)
-	sendEvent(map[string]string{"type": "chunk", "chunk": "\n\n---\nApplying corrections...\n"})
-
+	// Single pass: stream the corrected version
 	correctPrompt := fmt.Sprintf(`You are a proofreader. Fix grammar, spelling, and punctuation in the following content. The content language is %s.
 
 Rules:
 - Fix errors only. Do not rewrite or change the style/voice.
 - Keep the exact same structure and formatting.
 - If the content is JSON, fix text values only, do not change keys or structure.
-- Return ONLY the corrected content. No explanations, no markdown fences.
+- Return ONLY the corrected content. No explanations, no markdown fences, no commentary.
 
 Content to proofread:
 %s`, language, piece.Body)
 
-	corrected, err := h.aiClient.Complete(r.Context(), h.model(), []types.Message{
+	sendChunk := func(chunk string) error {
+		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
+		return nil
+	}
+
+	corrected, err := h.aiClient.Stream(r.Context(), h.model(), []types.Message{
 		{Role: "user", Content: correctPrompt},
-	})
+	}, sendChunk)
 	if err != nil {
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
+	// Send the corrected content as a "proofread_result" event for the frontend to offer accept/reject
 	corrected = strings.TrimSpace(corrected)
-	h.queries.UpdateContentPieceBody(pieceID, piece.Title, corrected)
-
-	sendEvent(map[string]string{"type": "chunk", "chunk": "Done! Corrections saved."})
+	sendEvent(map[string]any{"type": "proofread_result", "corrected": corrected, "piece_id": pieceID})
 	sendEvent(map[string]string{"type": "done"})
+}
+
+func (h *PipelineHandler) saveProofread(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	pieceID := h.parsePieceID(rest)
+	piece, _ := h.queries.GetContentPiece(pieceID)
+	r.ParseForm()
+	corrected := r.FormValue("corrected")
+	if corrected != "" {
+		h.queries.UpdateContentPieceBody(pieceID, piece.Title, corrected)
+	}
+	runID := h.parseRunID(rest)
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
 }
 
 func (h *PipelineHandler) parseRunID(rest string) int64 {
