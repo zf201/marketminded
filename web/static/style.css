@@ -115,3 +115,4 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .slide-card { padding: 0.5rem 0.75rem; background: #f9fafb; border-radius: 4px; margin-bottom: 0.5rem; }
 .slide-card-title { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; }
 .slide-card-body { font-size: 0.85rem; }
+.content-section-label { display: block; font-size: 0.8rem; text-transform: uppercase; color: #374151; margin-bottom: 0.5rem; margin-top: 0.75rem; }

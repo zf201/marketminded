@@ -735,6 +735,7 @@ function renderXPost(el, data) {
 
 function renderXThread(el, data) {
     if (!data.tweets) return;
+    var lbl = document.createElement('strong'); lbl.className = 'content-section-label'; lbl.textContent = 'Tweets'; el.appendChild(lbl);
     var items = document.createElement('div'); items.className = 'content-items';
     data.tweets.forEach(function(tweet, i) {
         var item = document.createElement('div'); item.className = 'content-item';
@@ -748,6 +749,7 @@ function renderXThread(el, data) {
 
 function renderLinkedinCarousel(el, data) {
     if (data.slides) {
+        var lbl = document.createElement('strong'); lbl.className = 'content-section-label'; lbl.textContent = 'Slides'; el.appendChild(lbl);
         data.slides.forEach(function(slide, i) {
             var card = document.createElement('div'); card.className = 'slide-card';
             var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1) + ': ' + (slide.title || '');
@@ -755,21 +757,21 @@ function renderLinkedinCarousel(el, data) {
             card.appendChild(title); card.appendChild(body); el.appendChild(card);
         });
     }
-    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.style.marginTop = '0.5rem'; c.textContent = data.caption; el.appendChild(c); }
+    renderField(el, 'Caption', data.caption);
 }
 
 function renderInstagramCarousel(el, data) {
     if (data.slides) {
-        var items = document.createElement('div'); items.className = 'content-items';
+        var lbl = document.createElement('strong'); lbl.className = 'content-section-label'; lbl.textContent = 'Slides'; el.appendChild(lbl);
         data.slides.forEach(function(slide, i) {
-            var item = document.createElement('div'); item.className = 'content-item';
-            item.textContent = 'Slide ' + (i + 1) + ': ' + (slide.text || '');
-            items.appendChild(item);
+            var card = document.createElement('div'); card.className = 'slide-card';
+            var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1);
+            var body = document.createElement('div'); body.className = 'slide-card-body'; body.textContent = slide.text || '';
+            card.appendChild(title); card.appendChild(body); el.appendChild(card);
         });
-        el.appendChild(items);
     }
-    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.style.marginTop = '0.5rem'; c.textContent = data.caption; el.appendChild(c); }
-    if (data.hashtags) { var h = document.createElement('div'); h.className = 'content-hashtags'; h.textContent = data.hashtags; el.appendChild(h); }
+    renderField(el, 'Caption', data.caption);
+    if (data.hashtags) { renderField(el, 'Hashtags', data.hashtags); }
 }
 
 function renderScript(el, data) {
