@@ -503,16 +503,35 @@ WRITING RULES:
 func (h *PipelineHandler) cornerstonePrompt(topic, platform, format, profile, rejectionReason string) string {
 	prompt := fmt.Sprintf(`Today's date: %s
 
-You are a content writer. Write the cornerstone piece for this production run.
+You are an expert content writer creating a %s %s.
 
-Client profile:
+## Client profile
 %s
 
+## Assignment
 Topic: %s
-Format: %s %s
 
-Write the complete piece in markdown. Follow the client's voice and tone exactly. Reference their content pillars where relevant. The piece should be thorough, specific to this client's expertise, and valuable to their target audience.`,
-		time.Now().Format("January 2, 2006"), profile, topic, platform, format)
+## Writing principles
+1. Clarity over creativity. When in doubt, be clear.
+2. Benefits over features. Focus on outcomes the reader cares about.
+3. Specificity over vagueness. Use concrete numbers, examples, and details. Never use abstract filler.
+4. Customer language over corporate jargon. Write the way the client's audience actually talks.
+5. One idea per section. Build logical flow, don't overload paragraphs.
+
+## Structure
+- Headline: communicate the core value clearly and specifically
+- Introduction: hook the reader with a relatable problem or surprising insight. No generic openings.
+- Body: clear sections with headers, each making one point. Include actionable takeaways.
+- Conclusion: strong close with a clear next step or CTA.
+
+## Critical rules
+- ONLY use information from the client profile. Do NOT invent statistics, case studies, quotes, customer names, revenue numbers, or any specific claims that aren't in the profile.
+- If the profile doesn't contain specific data points, write around it. Use frameworks, principles, and advice instead of fabricated numbers.
+- Follow the client's voice and tone exactly as described in the profile.
+- Use web search (web_search tool) if you need real, current information to support the piece. This is better than making things up.
+- Use active voice. Remove hedging words ("almost", "very", "basically").
+- Show outcomes, don't claim them.`,
+		time.Now().Format("January 2, 2006"), platform, format, profile, topic)
 
 	if rejectionReason != "" {
 		prompt += fmt.Sprintf("\n\nPrevious version was rejected. Feedback: %s. Address this in your rewrite.", rejectionReason)
@@ -520,12 +539,13 @@ Write the complete piece in markdown. Follow the client's voice and tone exactly
 
 	prompt += `
 
-WRITING RULES:
+STYLE:
 - Write like a human. Never sound AI-generated.
 - Never use em dashes. Use commas, periods, or restructure.
 - No emoji in blog posts or scripts.
-- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".
-- Short, direct sentences. Vary length. Sound like a real person.`
+- Avoid these words entirely: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "revolutionize", "cutting-edge", "innovative", "seamlessly".
+- Short, direct sentences. Vary length. Sound like a sharp person talking, not a press release.
+- No filler paragraphs. Every sentence should earn its place.`
 
 	return prompt
 }
@@ -540,18 +560,26 @@ func (h *PipelineHandler) waterfallPrompt(platform, format, profile, cornerstone
 
 	prompt := fmt.Sprintf(`Today's date: %s
 
-You are a content repurposer. Adapt the cornerstone content into a %s %s.
+You are repurposing cornerstone content into a %s %s.
 
-Client profile:
+## Client profile
 %s
 
-Cornerstone content:
+## Cornerstone content (your source material)
 %s
 
-Target: %s %s
+## Target: %s %s
 %s
 
-Adapt the cornerstone into this format. Don't just summarize. Reshape the content to work natively on this platform. Match the client's voice and tone.`,
+## Instructions
+Reshape the cornerstone into this format. Don't just summarize or truncate. Pull out the most compelling angle for this specific platform and audience. The output should feel native to the platform, not like a copy-paste job.
+
+Key principles:
+- Benefits over features. What does the reader get from this?
+- Specificity. Concrete details, not abstract statements.
+- Customer language. Write how the audience on this platform actually talks.
+- ONLY use information from the cornerstone and client profile. Do NOT invent statistics, quotes, or claims.
+- Match the client's voice and tone.`,
 		time.Now().Format("January 2, 2006"), platform, format, profile, cornerstoneBody, platform, format, guidance)
 
 	if rejectionReason != "" {
@@ -560,12 +588,12 @@ Adapt the cornerstone into this format. Don't just summarize. Reshape the conten
 
 	prompt += `
 
-WRITING RULES:
+STYLE:
 - Write like a human. Never sound AI-generated.
 - Never use em dashes. Use commas, periods, or restructure.
-- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".
-- Short, direct sentences. Vary length. Sound like a real person.
-- Adapt emoji/hashtag usage to platform norms only where the client's guidelines allow it.`
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "revolutionize", "cutting-edge", "seamlessly".
+- Adapt emoji/hashtag usage to platform norms only where the client's guidelines allow it.
+- Every word must earn its place. No filler.`
 
 	return prompt
 }
