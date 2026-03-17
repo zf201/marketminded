@@ -685,7 +685,9 @@ Fix grammar, spelling, and punctuation. Lightly improve sentence flow where it r
 
 %s`, language, piece.Body)
 
-	corrected, err := h.aiClient.Complete(r.Context(), h.model(), []types.Message{
+	// Use a fast model for proofreading — no need for a reasoning model
+	proofModel := "openai/gpt-4o-mini"
+	corrected, err := h.aiClient.Complete(r.Context(), proofModel, []types.Message{
 		{Role: "user", Content: correctPrompt},
 	})
 	if err != nil {
