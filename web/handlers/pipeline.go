@@ -19,25 +19,30 @@ import (
 
 var platformGuidance = map[string]map[string]string{
 	"linkedin": {
-		"post": "Professional but personal. Hook in the first line. Use line breaks for readability. 1300 char max. End with a question or CTA. No hashtags in body, 3-5 at the end if guidelines allow.",
+		"post":     "Professional but personal. First line is everything (hook before 'see more'). Use line breaks for readability. 1200-1500 chars performs well. Put links in comments, not post body (kills reach). End with a question to drive comments. Comments > reactions > clicks for the algorithm. First hour engagement matters most. No external links in post body.",
+		"carousel": "Document/carousel format. Slide 1: bold statement or question. Slides 2-9: one point per slide with visual + text. Slide 10: summary + CTA. Carousels get strong organic reach on LinkedIn.",
 	},
 	"instagram": {
-		"post": "Visual-first caption. Hook in first line. Short paragraphs. Hashtags at the end (up to 15 relevant ones). Under 2200 chars. Engage with a question.",
-		"reel": "Script for a 30-60 second video. Hook in first 3 seconds. One clear point. End with CTA. Conversational, not scripted-sounding.",
+		"post":     "Visual-first caption. Hook in first line. Short paragraphs. Under 2200 chars. Hashtags at the end (up to 15 relevant ones). Saves and shares matter more than likes for the algorithm. End with a question to drive comments.",
+		"reel":     "Script for a 30-60 second video. Hook in first 1-2 seconds (pattern interrupt or bold claim). Setup context in 2-5s. Deliver the value in 5-25s. CTA in last 5s. Conversational, not scripted-sounding. Reels get 2x reach of static posts. First frame must hook.",
+		"carousel": "10 slides max. Slide 1: bold hook. Slides 2-9: educational content, one point per slide. Final slide: summary + CTA. Saves are the key metric.",
 	},
 	"x": {
-		"post":   "Single tweet, under 280 chars. Punchy, opinionated, or surprising. No filler words.",
-		"thread": "5-8 tweets. First tweet is the hook. Each tweet stands alone but builds on the previous. Last tweet is CTA. Number them.",
+		"post":   "Single tweet. Under 280 chars. Punchy, opinionated, or surprising. No filler words. Tweets under 100 chars get more engagement. Use visuals to stop the scroll.",
+		"thread": "5-8 tweets. Tweet 1: hook + promise of value. Tweets 2-7: one point each with details. Final tweet: summary + follow CTA. Number them. Threads keep people on platform and are rewarded by the algorithm. Each tweet should stand alone but build on previous.",
 	},
 	"blog": {
-		"post": "Long-form markdown. 1200-2000 words. SEO-friendly headers. Intro with hook, clear sections, actionable takeaways, strong conclusion.",
+		"post": "Long-form markdown. 1200-2000 words. SEO-friendly H2/H3 headers. Headline: specific > generic, communicate core value. Intro: hook with relatable problem or surprising insight. Body: clear sections, each advancing one argument. Include actionable takeaways. Conclusion: recap value + clear CTA. Use subheadings for scannability. No fluff paragraphs.",
 	},
 	"youtube": {
-		"script": "Video script with timestamps. Hook in first 15 seconds. Clear sections. Conversational delivery notes in [brackets].",
-		"short":  "Script for under 60 seconds. One point. Hook immediately. Fast-paced. End with follow CTA.",
+		"script": "Video script with section markers. Hook in first 15 seconds (question or bold claim). Clear sections with transitions. Conversational delivery notes in [brackets]. Include B-roll suggestions. End with strong CTA (subscribe, comment, link).",
+		"short":  "Script for under 60 seconds. Hook in first 1-2 seconds. One clear point. Fast-paced delivery. End with follow/subscribe CTA. Vertical 9:16 format. Use trending sounds if appropriate.",
 	},
 	"facebook": {
-		"post": "Conversational. Hook first line. Encourage comments. 500 chars ideal. One CTA.",
+		"post": "Conversational tone. Hook in first line. Encourage comments and discussion. 500 chars ideal. One CTA. No external links in post body (kills reach). Native video outperforms. Questions and polls drive engagement.",
+	},
+	"tiktok": {
+		"video": "Native, unpolished content. Hook in first 1-2 seconds. Under 30 seconds to start. Vertical 9:16. Use trending sounds. Educational content in entertaining wrapper. End with follow CTA. Don't over-produce.",
 	},
 }
 
@@ -571,10 +576,23 @@ Each section advances one argument. Build logical flow down the page.
 ## Absolute rules
 - ONLY use information from the client profile. If the profile lacks data, write around it with frameworks and principles instead of making things up.
 - Use web_search if you need real, current facts or statistics. This is always better than fabricating.
-- Never use em dashes. Use commas, periods, or restructure.
-- No emoji in blog posts or scripts.
-- Never use: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "revolutionize", "cutting-edge", "innovative", "seamlessly", "at the end of the day", "it's worth noting".
-- Every sentence must earn its place. No filler.`
+- Every sentence must earn its place. No filler.
+
+## Anti-AI writing rules (CRITICAL — your output will be checked against these)
+
+NEVER use em dashes (—). They are the #1 marker of AI writing. Use commas, colons, or parentheses instead.
+No emoji in blog posts or scripts.
+
+Banned verbs: delve, leverage, optimize, utilize, facilitate, foster, bolster, underscore, unveil, navigate, streamline, enhance, endeavour, ascertain, elucidate
+Banned adjectives: robust, comprehensive, pivotal, crucial, vital, transformative, cutting-edge, groundbreaking, innovative, seamless, intricate, nuanced, multifaceted, holistic
+Banned transitions: furthermore, moreover, notwithstanding, "that being said", "at its core", "it is worth noting", "in the realm of", "in today's [anything]"
+Banned openings: "In today's fast-paced world", "In today's digital age", "In an era of", "In the ever-evolving landscape", "Let's delve into", "Imagine a world where"
+Banned conclusions: "In conclusion", "To sum up", "At the end of the day", "All things considered", "In the final analysis"
+Banned patterns: "Whether you're a X, Y, or Z", "It's not just X, it's also Y", starting sentences with "By" + gerund ("By understanding X, you can Y")
+Banned filler: absolutely, basically, certainly, clearly, definitely, essentially, extremely, fundamentally, incredibly, interestingly, naturally, obviously, quite, really, significantly, simply, surely, truly, ultimately, undoubtedly, very
+
+Use natural transitions instead: "Here's the thing", "But", "So", "Also", "Plus", "On top of that", "That said", "However"
+Vary sentence length. Read it aloud. If it sounds like a press release, rewrite it.`
 
 	return prompt
 }
@@ -623,12 +641,28 @@ You are an expert social media strategist repurposing cornerstone content into a
 
 	prompt += `
 
-## Style
-- Write like a human. Never sound AI-generated.
-- Never use em dashes. Use commas, periods, or restructure.
-- Never use: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "revolutionize", "cutting-edge", "innovative", "seamlessly".
-- Adapt emoji/hashtag usage to platform norms only where the client's guidelines allow it.
-- Every word must earn its place.`
+## Post structure templates (use the right one for this format)
+
+LinkedIn post: [Hook first line] → [Set scene] → [Key insight, 3-5 points with line breaks] → [Wrap-up] → [Question or CTA]
+LinkedIn carousel: [Slide 1: bold statement] → [Slides 2-9: one point per slide] → [Slide 10: summary + CTA]
+X post: Single tweet. Under 280 chars. Punchy. One idea.
+X thread: [Tweet 1: hook + promise] → [Tweets 2-7: one point each] → [Final: summary + CTA]. Number them.
+Instagram post: [Hook caption] → [Short paragraphs] → [Hashtags at end]. Under 2200 chars.
+Instagram reel script: [Hook 0-2s: pattern interrupt] → [Setup 2-5s: context] → [Value 5-25s: the advice] → [CTA 25-30s]
+Blog post: [Headline] → [Hook intro] → [Sections with headers] → [Actionable takeaways] → [Strong conclusion + CTA]
+
+## Anti-AI writing rules (same as cornerstone — CRITICAL)
+
+NEVER use em dashes (—). Use commas, colons, or parentheses.
+Adapt emoji/hashtag usage to platform norms only where the client's guidelines allow it.
+
+Banned verbs: delve, leverage, optimize, utilize, facilitate, foster, bolster, underscore, unveil, navigate, streamline, enhance
+Banned adjectives: robust, comprehensive, pivotal, crucial, vital, transformative, cutting-edge, groundbreaking, innovative, seamless
+Banned transitions: furthermore, moreover, "that being said", "at its core", "it is worth noting", "in today's [anything]"
+Banned openings: "In today's fast-paced world", "In the ever-evolving landscape", "Let's delve into"
+Banned filler: absolutely, basically, certainly, clearly, definitely, essentially, extremely, fundamentally, incredibly, obviously, quite, really, significantly, simply, truly, ultimately, very
+
+Every word must earn its place. Read it aloud. If it sounds like a robot wrote it, rewrite.`
 
 	return prompt
 }
