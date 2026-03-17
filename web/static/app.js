@@ -1145,9 +1145,8 @@ function initProductionBoard(projectID, runID) {
             modal.appendChild(title);
 
             var spinner = document.createElement('div');
-            spinner.className = 'text-muted';
             spinner.style.cssText = 'text-align:center;padding:2rem';
-            spinner.textContent = 'AI is checking grammar, spelling, and punctuation...';
+            spinner.innerHTML = '<div class="spinner"></div><p class="text-muted" style="margin-top:1rem">Proofreading content...</p>';
             modal.appendChild(spinner);
 
             var output = document.createElement('div');
@@ -1158,13 +1157,27 @@ function initProductionBoard(projectID, runID) {
             actions.style.cssText = 'display:none;gap:0.5rem';
             modal.appendChild(actions);
 
+            var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn btn-secondary';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.marginTop = '1rem';
+            cancelBtn.onclick = function() {
+                if (controller) controller.abort();
+                overlay.remove();
+                btn.disabled = false;
+                btn.textContent = 'Proofread';
+            };
+            modal.appendChild(cancelBtn);
+
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
 
-            fetch(basePath + '/piece/' + pieceId + '/proofread')
+            var controller = new AbortController();
+            fetch(basePath + '/piece/' + pieceId + '/proofread', { signal: controller.signal })
                 .then(function(res) { return res.json(); })
                 .then(function(data) {
                     spinner.style.display = 'none';
+                    cancelBtn.style.display = 'none';
                     output.style.display = 'block';
                     output.textContent = data.corrected;
                     title.textContent = 'Proofread Complete — Accept changes?';
