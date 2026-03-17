@@ -1,3 +1,6 @@
+include .env
+export
+
 .PHONY: generate build run dev start restart test clean reset
 
 generate:
