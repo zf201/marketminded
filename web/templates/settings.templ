@@ -1,10 +1,11 @@
 package templates
 
 type SettingsData struct {
-	ModelContent  string
-	ModelIdeation string
-	Temperature   string
-	Saved         bool
+	ModelContent   string
+	ModelIdeation  string
+	ModelProofread string
+	Temperature    string
+	Saved          bool
 }
 
 templ SettingsPage(data SettingsData) {
@@ -33,6 +34,11 @@ templ SettingsPage(data SettingsData) {
 				<div class="form-group">
 					<label for="model_ideation">Ideation Model (brainstorming, idea generation)</label>
 					<input type="text" id="model_ideation" name="model_ideation" value={ data.ModelIdeation } placeholder="e.g. anthropic/claude-sonnet-4-20250514"/>
+				</div>
+
+				<div class="form-group">
+					<label for="model_proofread">Proofread Model (should be fast + cheap, e.g. openai/gpt-4o-mini)</label>
+					<input type="text" id="model_proofread" name="model_proofread" value={ data.ModelProofread } placeholder="openai/gpt-4o-mini"/>
 				</div>
 
 				<div class="form-group">
