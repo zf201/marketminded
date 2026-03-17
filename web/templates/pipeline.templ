@@ -171,7 +171,9 @@ templ ProductionBoardPage(data ProductionBoardData) {
 							<button class="btn piece-generate-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Generate</button>
 						}
 						if piece.Status == "generating" {
-							<button class="btn btn-danger piece-abort-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Abort</button>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/abort", data.ProjectID, data.RunID, piece.ID)) } style="display:inline">
+								<button type="submit" class="btn btn-danger">Abort</button>
+							</form>
 						}
 						if piece.Status == "draft" {
 							<button class="btn piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>

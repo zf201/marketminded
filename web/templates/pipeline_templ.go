@@ -709,15 +709,15 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					}
 				}
 				if piece.Status == "generating" {
-					_, err = templBuffer.WriteString("<button class=\"btn btn-danger piece-abort-btn\" data-piece-id=\"")
+					_, err = templBuffer.WriteString("<form method=\"POST\" action=\"")
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/abort", data.ProjectID, data.RunID, piece.ID))))
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\">")
+					_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn btn-danger\">")
 					if err != nil {
 						return err
 					}
@@ -726,7 +726,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</button>")
+					_, err = templBuffer.WriteString("</button></form>")
 					if err != nil {
 						return err
 					}
