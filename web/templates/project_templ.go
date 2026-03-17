@@ -174,7 +174,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_16 := `Brainstorm`
+			var_16 := `Chat`
 			_, err = templBuffer.WriteString(var_16)
 			if err != nil {
 				return err
@@ -183,7 +183,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_17 := `Chat with AI using project context`
+			var_17 := `Brainstorm content ideas with AI`
 			_, err = templBuffer.WriteString(var_17)
 			if err != nil {
 				return err

@@ -9,28 +9,31 @@ type BrainstormListData struct {
 }
 
 type BrainstormChatView struct {
-	ID    int64
-	Title string
+	ID      int64
+	Title   string
+	Preview string
 }
 
 templ BrainstormListPage(data BrainstormListData) {
-	@Layout(data.ProjectName + " - Brainstorm") {
+	@Layout(data.ProjectName + " - Chat") {
 		<div class="flex-between mb-4">
-			<h1>Brainstorm</h1>
+			<h1>Chat</h1>
 			<div>
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)) } style="display:inline">
-					<input type="text" name="title" placeholder="Chat title..." style="width:200px;display:inline" required/>
-					<button type="submit" class="btn">New Chat</button>
+					<button type="submit" class="btn">New</button>
 				</form>
 			</div>
 		</div>
 		if len(data.Chats) == 0 {
-			<p class="text-muted">No brainstorm chats yet.</p>
+			<p class="text-muted">No chats yet. Start a new one.</p>
 		}
 		for _, chat := range data.Chats {
 			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d", data.ProjectID, chat.ID)) } class="card" style="text-decoration:none;color:inherit;display:block">
 				<strong>{ chat.Title }</strong>
+				if chat.Preview != "" {
+					<p class="text-muted" style="margin-top:0.25rem;font-size:0.85rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{ chat.Preview }</p>
+				}
 			</a>
 		}
 	}

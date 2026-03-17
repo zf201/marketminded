@@ -49,9 +49,24 @@ func (h *BrainstormHandler) list(w http.ResponseWriter, r *http.Request, project
 	project, _ := h.queries.GetProject(projectID)
 	chats, _ := h.queries.ListBrainstormChats(projectID)
 
-	views := make([]templates.BrainstormChatView, len(chats))
-	for i, c := range chats {
-		views[i] = templates.BrainstormChatView{ID: c.ID, Title: c.Title}
+	views := make([]templates.BrainstormChatView, 0, len(chats))
+	for _, c := range chats {
+		// Skip profile chats — those show on the profile page
+		if c.Section == "profile" {
+			continue
+		}
+		preview := ""
+		msgs, _ := h.queries.ListBrainstormMessages(c.ID)
+		for _, m := range msgs {
+			if m.Role == "user" {
+				preview = m.Content
+				if len(preview) > 120 {
+					preview = preview[:120] + "..."
+				}
+				break
+			}
+		}
+		views = append(views, templates.BrainstormChatView{ID: c.ID, Title: c.Title, Preview: preview})
 	}
 
 	templates.BrainstormListPage(templates.BrainstormListData{
@@ -62,11 +77,7 @@ func (h *BrainstormHandler) list(w http.ResponseWriter, r *http.Request, project
 }
 
 func (h *BrainstormHandler) createChat(w http.ResponseWriter, r *http.Request, projectID int64) {
-	r.ParseForm()
-	title := r.FormValue("title")
-	if title == "" {
-		title = "Untitled Chat"
-	}
+	title := time.Now().Format("Jan 2, 2006 3:04 PM")
 	chat, err := h.queries.CreateBrainstormChat(projectID, title, "", nil)
 	if err != nil {
 		http.Error(w, "Failed to create chat", http.StatusInternalServerError)

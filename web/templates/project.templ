@@ -39,8 +39,8 @@ templ ProjectOverview(p ProjectDetail) {
 			</div>
 
 			<div class="card">
-				<h3>Brainstorm</h3>
-				<p class="mb-2 text-muted">Chat with AI using project context</p>
+				<h3>Chat</h3>
+				<p class="mb-2 text-muted">Brainstorm content ideas with AI</p>
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-secondary">Open Chat</a>
 			</div>
 
