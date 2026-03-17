@@ -170,6 +170,9 @@ templ ProductionBoardPage(data ProductionBoardData) {
 						if piece.Status == "pending" || piece.Status == "rejected" {
 							<button class="btn piece-generate-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Generate</button>
 						}
+						if piece.Status == "generating" {
+							<button class="btn btn-danger piece-abort-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Abort</button>
+						}
 						if piece.Status == "draft" {
 							<button class="btn piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>
 							<button class="btn btn-danger piece-reject-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Reject</button>

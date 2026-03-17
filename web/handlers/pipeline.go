@@ -72,6 +72,8 @@ func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, project
 		h.approvePiece(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/reject") && r.Method == "POST":
 		h.rejectPiece(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/abort") && r.Method == "POST":
+		h.abortPiece(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/improve/stream"):
 		h.streamImprove(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/improve") && r.Method == "POST":
@@ -418,6 +420,14 @@ func (h *PipelineHandler) rejectPiece(w http.ResponseWriter, r *http.Request, pr
 	reason := r.FormValue("reason")
 	h.queries.SetContentPieceRejection(pieceID, reason)
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *PipelineHandler) abortPiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	pieceID := h.parsePieceID(rest)
+	// Reset from generating back to pending so it can be re-triggered
+	h.queries.SetContentPieceStatus(pieceID, "pending")
+	runID := h.parseRunID(rest)
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
 }
 
 // --- Improve ---

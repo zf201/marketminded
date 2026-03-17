@@ -92,8 +92,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .board-card-rejected { border-color: #dc2626; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
 .board-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.board-card-body { white-space: pre-wrap; font-size: 0.85rem; max-height: 300px; overflow-y: auto; margin-bottom: 0.75rem; }
-.board-card-body.collapsed { max-height: 100px; overflow: hidden; }
+.board-card-body { white-space: pre-wrap; font-size: 0.85rem; margin-bottom: 0.75rem; }
 .board-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .board-plan-list { font-size: 0.9rem; line-height: 1.6; }
 .improve-chat { background: #f9fafb; border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; }
