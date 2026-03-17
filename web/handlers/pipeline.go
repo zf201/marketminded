@@ -91,18 +91,10 @@ func (h *PipelineHandler) list(w http.ResponseWriter, r *http.Request, projectID
 	runs, _ := h.queries.ListPipelineRuns(projectID)
 	views := make([]templates.PipelineRunView, len(runs))
 	for i, run := range runs {
-		// Show just the first line of the topic (may contain full conversation)
-		topicDisplay := run.Topic
-		if idx := strings.Index(topicDisplay, "\n"); idx != -1 {
-			topicDisplay = topicDisplay[:idx]
-		}
-		if len(topicDisplay) > 100 {
-			topicDisplay = topicDisplay[:100] + "..."
-		}
 		views[i] = templates.PipelineRunView{
 			ID:     run.ID,
 			Status: run.Status,
-			Topic:  topicDisplay,
+			Topic:  run.Topic,
 		}
 	}
 
@@ -115,12 +107,12 @@ func (h *PipelineHandler) list(w http.ResponseWriter, r *http.Request, projectID
 
 func (h *PipelineHandler) create(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
-	topic := r.FormValue("topic")
-	if topic == "" {
+	brief := r.FormValue("topic")
+	if brief == "" {
 		http.Error(w, "Topic required", http.StatusBadRequest)
 		return
 	}
-	run, err := h.queries.CreatePipelineRun(projectID, topic)
+	run, err := h.queries.CreatePipelineRun(projectID, brief)
 	if err != nil {
 		http.Error(w, "Failed to create run", http.StatusInternalServerError)
 		return
@@ -226,7 +218,7 @@ Valid formats: post, thread, reel, carousel, script, short, video
 WRITING RULES:
 - Write like a human. Never sound AI-generated.
 - Never use em dashes. Use commas, periods, or restructure.
-- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".`, time.Now().Format("January 2, 2006"), profile, run.Topic)
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".`, time.Now().Format("January 2, 2006"), profile, run.Brief)
 
 	// If there's already a plan (re-plan after rejection), include rejection context
 	var userMsg string
@@ -322,6 +314,11 @@ func (h *PipelineHandler) approvePlan(w http.ResponseWriter, r *http.Request, pr
 		}
 	}
 
+	// Auto-generate topic from cornerstone title
+	if plan.Cornerstone.Title != "" {
+		h.queries.UpdatePipelineTopic(runID, plan.Cornerstone.Title)
+	}
+
 	// Update run status
 	h.queries.UpdatePipelineStatus(runID, "producing")
 
@@ -359,7 +356,7 @@ func (h *PipelineHandler) buildPiecePrompt(piece *store.ContentPiece, run *store
 
 	if piece.ParentID == nil {
 		// Cornerstone
-		prompt += fmt.Sprintf("\n## Topic\n%s\n", run.Topic)
+		prompt += fmt.Sprintf("\n## Topic brief\n%s\n", run.Brief)
 	} else {
 		// Waterfall — inject cornerstone
 		cornerstone, _ := h.queries.GetContentPiece(*piece.ParentID)
