@@ -167,7 +167,7 @@ templ ProductionBoardPage(data ProductionBoardData) {
 					}
 
 					<div class="board-card-actions" id={ fmt.Sprintf("piece-actions-%d", piece.ID) }>
-						if piece.Status == "pending" || piece.Status == "rejected" {
+						if piece.ID == data.NextPieceID && (piece.Status == "pending" || piece.Status == "rejected") {
 							<button class="btn piece-generate-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Generate</button>
 						}
 						if piece.Status == "generating" {

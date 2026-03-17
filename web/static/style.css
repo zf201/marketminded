@@ -86,7 +86,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .board-header { margin-bottom: 1.5rem; }
 .board-card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
 .board-card-cornerstone { border-left: 4px solid #3b82f6; }
-.board-card-pending { opacity: 0.5; border-style: dashed; }
+.board-card-pending { opacity: 0.75; border-style: dashed; }
 .board-card-generating { border-color: #f59e0b; animation: pulse 2s infinite; }
 .board-card-draft { border-color: #3b82f6; }
 .board-card-approved { border-color: #059669; }

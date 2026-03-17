@@ -701,7 +701,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 				if err != nil {
 					return err
 				}
-				if piece.Status == "pending" || piece.Status == "rejected" {
+				if piece.ID == data.NextPieceID && (piece.Status == "pending" || piece.Status == "rejected") {
 					_, err = templBuffer.WriteString("<button class=\"btn piece-generate-btn\" data-piece-id=\"")
 					if err != nil {
 						return err
