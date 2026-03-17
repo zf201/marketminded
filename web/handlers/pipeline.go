@@ -162,6 +162,7 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 		ProjectName: project.Name,
 		RunID:       runID,
 		Topic:       run.Topic,
+		Brief:       run.Brief,
 		Plan:        run.Plan,
 		Status:      run.Status,
 		Pieces:      contentViews,
