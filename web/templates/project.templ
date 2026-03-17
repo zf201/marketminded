@@ -60,7 +60,9 @@ templ ProjectOverview(p ProjectDetail) {
 
 		<div class="flex-between mt-2 mb-2">
 			<h2>Context</h2>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID)) } class="btn">Add Context</a>
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID)) } style="display:inline">
+				<button type="submit" class="btn">Add Context</button>
+			</form>
 		</div>
 		if len(p.ContextItems) == 0 {
 			<p class="text-muted">No context items yet. Add info about campaigns, announcements, competitor intel, etc.</p>

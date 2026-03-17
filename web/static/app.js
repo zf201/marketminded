@@ -707,7 +707,7 @@ function initContextChat(projectID, itemID) {
         });
     });
 
-    // Save button — collects last assistant message as content
+    // Save button — collects last assistant message as content, AI generates title
     saveBtn.addEventListener('click', function() {
         // Get all assistant messages, take the last one as the refined content
         var assistantMsgs = messagesEl.querySelectorAll('.chat-msg-assistant');
@@ -727,15 +727,16 @@ function initContextChat(projectID, itemID) {
             }
         }
 
-        var title = prompt('Title for this context item:', document.querySelector('h1').textContent || '');
-        if (title === null) return;
+        if (!content) { alert('Nothing to save yet. Chat first.'); return; }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
 
         var form = document.createElement('form');
         form.method = 'POST';
         form.action = '/projects/' + projectID + '/context/' + itemID + '/save';
-        var tInput = document.createElement('input'); tInput.type = 'hidden'; tInput.name = 'title'; tInput.value = title;
         var cInput = document.createElement('input'); cInput.type = 'hidden'; cInput.name = 'content'; cInput.value = content;
-        form.appendChild(tInput); form.appendChild(cInput);
+        form.appendChild(cInput);
         document.body.appendChild(form);
         form.submit();
     });

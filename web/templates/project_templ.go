@@ -258,25 +258,24 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h2><a href=\"")
+			_, err = templBuffer.WriteString("</h2><form method=\"POST\" action=\"")
 			if err != nil {
 				return err
 			}
-			var var_25 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_25)))
+			_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID))))
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn\">")
+			_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn\">")
 			if err != nil {
 				return err
 			}
-			var_26 := `Add Context`
-			_, err = templBuffer.WriteString(var_26)
+			var_25 := `Add Context`
+			_, err = templBuffer.WriteString(var_25)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div> ")
+			_, err = templBuffer.WriteString("</button></form></div> ")
 			if err != nil {
 				return err
 			}
@@ -285,8 +284,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_27 := `No context items yet. Add info about campaigns, announcements, competitor intel, etc.`
-				_, err = templBuffer.WriteString(var_27)
+				var_26 := `No context items yet. Add info about campaigns, announcements, competitor intel, etc.`
+				_, err = templBuffer.WriteString(var_26)
 				if err != nil {
 					return err
 				}
@@ -304,8 +303,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_28 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID))
-				_, err = templBuffer.WriteString(templ.EscapeString(string(var_28)))
+				var var_27 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID))
+				_, err = templBuffer.WriteString(templ.EscapeString(string(var_27)))
 				if err != nil {
 					return err
 				}
@@ -313,8 +312,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_29 string = item.Title
-				_, err = templBuffer.WriteString(templ.EscapeString(var_29))
+				var var_28 string = item.Title
+				_, err = templBuffer.WriteString(templ.EscapeString(var_28))
 				if err != nil {
 					return err
 				}
@@ -327,8 +326,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_30 string = item.Preview
-					_, err = templBuffer.WriteString(templ.EscapeString(var_30))
+					var var_29 string = item.Preview
+					_, err = templBuffer.WriteString(templ.EscapeString(var_29))
 					if err != nil {
 						return err
 					}
@@ -349,8 +348,8 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_31 := `Delete`
-				_, err = templBuffer.WriteString(var_31)
+				var_30 := `Delete`
+				_, err = templBuffer.WriteString(var_30)
 				if err != nil {
 					return err
 				}

@@ -26,9 +26,7 @@ func NewContextHandler(q *store.Queries, aiClient *ai.Client, model func() strin
 
 func (h *ContextHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	switch {
-	case rest == "context/new" && r.Method == "GET":
-		h.newItem(w, r, projectID)
-	case rest == "context/new" && r.Method == "POST":
+	case rest == "context/new" && (r.Method == "GET" || r.Method == "POST"):
 		h.createItem(w, r, projectID)
 	case strings.HasSuffix(rest, "/message") && r.Method == "POST":
 		h.saveMessage(w, r, projectID, rest)
@@ -43,20 +41,8 @@ func (h *ContextHandler) Handle(w http.ResponseWriter, r *http.Request, projectI
 	}
 }
 
-func (h *ContextHandler) newItem(w http.ResponseWriter, r *http.Request, projectID int64) {
-	project, _ := h.queries.GetProject(projectID)
-	templates.ContextNewPage(templates.ContextNewData{
-		ProjectID:   projectID,
-		ProjectName: project.Name,
-	}).Render(r.Context(), w)
-}
-
 func (h *ContextHandler) createItem(w http.ResponseWriter, r *http.Request, projectID int64) {
-	r.ParseForm()
-	title := r.FormValue("title")
-	if title == "" {
-		title = time.Now().Format("Jan 2, 2006")
-	}
+	title := time.Now().Format("Jan 2, 2006 3:04 PM")
 	item, err := h.queries.CreateContextItem(projectID, title)
 	if err != nil {
 		http.Error(w, "Failed to create", http.StatusInternalServerError)
@@ -181,8 +167,24 @@ Be concise. Don't lecture. Help them turn raw info into something useful.`, time
 func (h *ContextHandler) saveContent(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	itemID := h.parseItemID(rest)
 	r.ParseForm()
-	title := r.FormValue("title")
 	content := r.FormValue("content")
+
+	// Auto-generate title from content using AI
+	title := ""
+	if content != "" {
+		titleMsgs := []types.Message{
+			{Role: "system", Content: "Generate a short title (5-8 words max) for this context item. Return ONLY the title, nothing else."},
+			{Role: "user", Content: content},
+		}
+		generated, err := h.aiClient.Complete(r.Context(), h.model(), titleMsgs)
+		if err == nil {
+			title = strings.TrimSpace(generated)
+		}
+	}
+	if title == "" {
+		title = time.Now().Format("Jan 2, 2006")
+	}
+
 	h.queries.UpdateContextItem(itemID, title, content)
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d", projectID), http.StatusSeeOther)
 }
