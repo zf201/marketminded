@@ -642,6 +642,8 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID in
 						"data":     json.RawMessage(piece.Body),
 					})
 				}
+				// Send done immediately — don't let AI continue after writing
+				sendEvent(map[string]string{"type": "done"})
 				return
 			}
 			summary := event.Summary

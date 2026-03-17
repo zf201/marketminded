@@ -629,6 +629,53 @@ function initProfileSectionChat(projectID, sectionName) {
     scrollToBottom();
 }
 
+// --- Helpers ---
+
+function renderField(parent, label, value) {
+    if (!value) return;
+    var sec = document.createElement('div');
+    sec.className = 'script-section';
+    var lbl = document.createElement('strong');
+    lbl.textContent = label;
+    sec.appendChild(lbl);
+    var txt = document.createElement('div');
+    txt.style.whiteSpace = 'pre-wrap';
+    txt.textContent = value;
+    sec.appendChild(txt);
+    parent.appendChild(sec);
+}
+
+function renderPlan(el) {
+    var raw = el.textContent.trim();
+    if (!raw) return;
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    el.textContent = '';
+
+    if (data.cornerstone) {
+        var h = document.createElement('div');
+        h.style.cssText = 'font-weight:600;margin-bottom:0.5rem;font-size:0.95rem';
+        h.textContent = 'Cornerstone: ' + (data.cornerstone.platform || '') + '/' + (data.cornerstone.format || '') + (data.cornerstone.title ? ' — ' + data.cornerstone.title : '');
+        el.appendChild(h);
+    }
+
+    if (data.waterfall && data.waterfall.length > 0) {
+        var wh = document.createElement('div');
+        wh.style.cssText = 'font-weight:600;margin-top:0.75rem;margin-bottom:0.5rem;font-size:0.9rem';
+        wh.textContent = 'Waterfall pieces:';
+        el.appendChild(wh);
+        var list = document.createElement('div');
+        list.className = 'content-items';
+        data.waterfall.forEach(function(w) {
+            var item = document.createElement('div');
+            item.className = 'content-item';
+            item.textContent = (w.count || 1) + 'x ' + w.platform + ' ' + w.format;
+            list.appendChild(item);
+        });
+        el.appendChild(list);
+    }
+}
+
 // --- Content type renderers ---
 
 function renderContentBody(el, platform, format, bodyText) {
@@ -671,19 +718,19 @@ function renderContentBody(el, platform, format, bodyText) {
 }
 
 function renderBlogPost(el, data) {
-    if (data.title) { var h = document.createElement('h3'); h.className = 'content-title'; h.textContent = data.title; el.appendChild(h); }
-    if (data.body) { var b = document.createElement('div'); b.className = 'content-caption'; b.textContent = data.body; el.appendChild(b); }
-    if (data.meta_description) { var m = document.createElement('div'); m.className = 'content-meta text-muted'; m.textContent = 'Meta: ' + data.meta_description; el.appendChild(m); }
+    renderField(el, 'Title', data.title);
+    renderField(el, 'Body', data.body);
+    renderField(el, 'Meta Description', data.meta_description);
 }
 
 function renderSimplePost(el, data) {
-    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.textContent = data.caption; el.appendChild(c); }
+    renderField(el, 'Caption', data.caption);
     if (data.hashtags) { var h = document.createElement('div'); h.className = 'content-hashtags'; h.textContent = data.hashtags; el.appendChild(h); }
-    if (data.image_instructions) { var i = document.createElement('div'); i.className = 'content-instructions text-muted'; i.textContent = 'Image: ' + data.image_instructions; el.appendChild(i); }
+    if (data.image_instructions) { renderField(el, 'Image Instructions', data.image_instructions); }
 }
 
 function renderXPost(el, data) {
-    if (data.text) { var t = document.createElement('div'); t.className = 'content-caption'; t.textContent = data.text; el.appendChild(t); }
+    renderField(el, 'Tweet', data.text);
 }
 
 function renderXThread(el, data) {
@@ -914,6 +961,12 @@ function initProductionBoard(projectID, runID) {
             });
         });
     });
+
+    // Render plan card as human-readable
+    var planBody = document.getElementById('plan-body');
+    if (planBody) {
+        renderPlan(planBody);
+    }
 
     // Render existing content bodies with type-specific renderers
     document.querySelectorAll('.board-card-body').forEach(function(el) {
