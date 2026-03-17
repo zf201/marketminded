@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
@@ -17,34 +18,23 @@ import (
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
-var platformGuidance = map[string]map[string]string{
-	"linkedin": {
-		"post":     "Professional but personal. First line is everything (hook before 'see more'). Use line breaks for readability. 1200-1500 chars performs well. Put links in comments, not post body (kills reach). End with a question to drive comments. Comments > reactions > clicks for the algorithm. First hour engagement matters most. No external links in post body.",
-		"carousel": "Document/carousel format. Slide 1: bold statement or question. Slides 2-9: one point per slide with visual + text. Slide 10: summary + CTA. Carousels get strong organic reach on LinkedIn.",
-	},
-	"instagram": {
-		"post":     "Visual-first caption. Hook in first line. Short paragraphs. Under 2200 chars. Hashtags at the end (up to 15 relevant ones). Saves and shares matter more than likes for the algorithm. End with a question to drive comments.",
-		"reel":     "Script for a 30-60 second video. Hook in first 1-2 seconds (pattern interrupt or bold claim). Setup context in 2-5s. Deliver the value in 5-25s. CTA in last 5s. Conversational, not scripted-sounding. Reels get 2x reach of static posts. First frame must hook.",
-		"carousel": "10 slides max. Slide 1: bold hook. Slides 2-9: educational content, one point per slide. Final slide: summary + CTA. Saves are the key metric.",
-	},
-	"x": {
-		"post":   "Single tweet. Under 280 chars. Punchy, opinionated, or surprising. No filler words. Tweets under 100 chars get more engagement. Use visuals to stop the scroll.",
-		"thread": "5-8 tweets. Tweet 1: hook + promise of value. Tweets 2-7: one point each with details. Final tweet: summary + follow CTA. Number them. Threads keep people on platform and are rewarded by the algorithm. Each tweet should stand alone but build on previous.",
-	},
-	"blog": {
-		"post": "Long-form markdown. 1200-2000 words. SEO-friendly H2/H3 headers. Headline: specific > generic, communicate core value. Intro: hook with relatable problem or surprising insight. Body: clear sections, each advancing one argument. Include actionable takeaways. Conclusion: recap value + clear CTA. Use subheadings for scannability. No fluff paragraphs.",
-	},
-	"youtube": {
-		"script": "Video script with section markers. Hook in first 15 seconds (question or bold claim). Clear sections with transitions. Conversational delivery notes in [brackets]. Include B-roll suggestions. End with strong CTA (subscribe, comment, link).",
-		"short":  "Script for under 60 seconds. Hook in first 1-2 seconds. One clear point. Fast-paced delivery. End with follow/subscribe CTA. Vertical 9:16 format. Use trending sounds if appropriate.",
-	},
-	"facebook": {
-		"post": "Conversational tone. Hook in first line. Encourage comments and discussion. 500 chars ideal. One CTA. No external links in post body (kills reach). Native video outperforms. Questions and polls drive engagement.",
-	},
-	"tiktok": {
-		"video": "Native, unpolished content. Hook in first 1-2 seconds. Under 30 seconds to start. Vertical 9:16. Use trending sounds. Educational content in entertaining wrapper. End with follow CTA. Don't over-produce.",
-	},
-}
+const antiAIRules = `
+
+## Anti-AI writing rules (CRITICAL)
+
+NEVER use em dashes (—). They are the #1 marker of AI writing. Use commas, colons, or parentheses instead.
+No emoji in blog posts or scripts.
+
+Banned verbs: delve, leverage, optimize, utilize, facilitate, foster, bolster, underscore, unveil, navigate, streamline, enhance, endeavour, ascertain, elucidate
+Banned adjectives: robust, comprehensive, pivotal, crucial, vital, transformative, cutting-edge, groundbreaking, innovative, seamless, intricate, nuanced, multifaceted, holistic
+Banned transitions: furthermore, moreover, notwithstanding, "that being said", "at its core", "it is worth noting", "in the realm of", "in today's [anything]"
+Banned openings: "In today's fast-paced world", "In today's digital age", "In an era of", "In the ever-evolving landscape", "Let's delve into", "Imagine a world where"
+Banned conclusions: "In conclusion", "To sum up", "At the end of the day", "All things considered", "In the final analysis"
+Banned patterns: "Whether you're a X, Y, or Z", "It's not just X, it's also Y", starting sentences with "By" + gerund ("By understanding X, you can Y")
+Banned filler: absolutely, basically, certainly, clearly, definitely, essentially, extremely, fundamentally, incredibly, interestingly, naturally, obviously, quite, really, significantly, simply, surely, truly, ultimately, undoubtedly, very
+
+Use natural transitions instead: "Here's the thing", "But", "So", "Also", "Plus", "On top of that", "That said", "However"
+Vary sentence length. Read it aloud. If it sounds like a press release, rewrite it.`
 
 type PipelineHandler struct {
 	queries     *store.Queries
@@ -219,8 +209,8 @@ You MUST respond with ONLY a JSON object in this exact format, no other text:
   ]
 }
 
-Valid platforms: blog, linkedin, instagram, x, youtube, facebook
-Valid formats: post, thread, reel, script, short
+Valid platforms: blog, linkedin, instagram, x, youtube, facebook, tiktok
+Valid formats: post, thread, reel, carousel, script, short, video
 
 WRITING RULES:
 - Write like a human. Never sound AI-generated.
@@ -245,8 +235,8 @@ WRITING RULES:
 		return
 	}
 
-	toolList, executor := h.buildTools()
-	onToolEvent := h.buildToolEventCallback(sendEvent)
+	toolList, executor := h.buildTools(0)
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
@@ -341,6 +331,39 @@ func (h *PipelineHandler) rejectPlan(w http.ResponseWriter, r *http.Request, pro
 
 // --- Piece generation ---
 
+func (h *PipelineHandler) buildPiecePrompt(piece *store.ContentPiece, run *store.PipelineRun, profile string) string {
+	ct, ok := content.LookupType(piece.Platform, piece.Format)
+
+	var promptText string
+	if ok {
+		promptText, _ = content.LoadPrompt(ct.PromptFile)
+	}
+	if promptText == "" {
+		// Fallback if prompt file not found
+		promptText = fmt.Sprintf("You are writing a %s %s.", piece.Platform, piece.Format)
+	}
+
+	prompt := fmt.Sprintf("Today's date: %s\n\n%s\n\n## Client profile\n%s\n",
+		time.Now().Format("January 2, 2006"), promptText, profile)
+
+	if piece.ParentID == nil {
+		// Cornerstone
+		prompt += fmt.Sprintf("\n## Topic\n%s\n", run.Topic)
+	} else {
+		// Waterfall — inject cornerstone
+		cornerstone, _ := h.queries.GetContentPiece(*piece.ParentID)
+		prompt += fmt.Sprintf("\n## Cornerstone content (your source material)\n%s\n", cornerstone.Body)
+	}
+
+	if piece.RejectionReason != "" {
+		prompt += fmt.Sprintf("\nPrevious version was rejected. Feedback: %s. Address this.\n", piece.RejectionReason)
+	}
+
+	prompt += antiAIRules
+
+	return prompt
+}
+
 func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	runID := h.parseRunID(rest)
 	pieceID := h.parsePieceID(rest)
@@ -356,15 +379,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	run, _ := h.queries.GetPipelineRun(runID)
 	profile, _ := h.queries.BuildProfileString(projectID)
 
-	var systemPrompt string
-	if piece.ParentID == nil {
-		// Cornerstone
-		systemPrompt = h.cornerstonePrompt(run.Topic, piece.Platform, piece.Format, profile, piece.RejectionReason)
-	} else {
-		// Waterfall - get cornerstone body
-		cornerstone, _ := h.queries.GetContentPiece(*piece.ParentID)
-		systemPrompt = h.waterfallPrompt(piece.Platform, piece.Format, profile, cornerstone.Body, piece.RejectionReason)
-	}
+	systemPrompt := h.buildPiecePrompt(piece, run, profile)
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt},
@@ -376,8 +391,14 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 		return
 	}
 
-	toolList, executor := h.buildTools()
-	onToolEvent := h.buildToolEventCallback(sendEvent)
+	toolList, executor := h.buildTools(pieceID)
+	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
+
+	// Add the content type's write tool
+	ct, ctOk := content.LookupType(piece.Platform, piece.Format)
+	if ctOk {
+		toolList = append(toolList, ct.Tool)
+	}
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
@@ -386,9 +407,13 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 		return
 	}
 
-	// Save body and set to draft
-	h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
-	h.queries.SetContentPieceStatus(pieceID, "draft")
+	// If the AI used a write tool, the body was already saved by the executor.
+	// If not (fallback), save the raw text response.
+	currentPiece, _ := h.queries.GetContentPiece(pieceID)
+	if currentPiece.Status != "draft" {
+		h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
+		h.queries.SetContentPieceStatus(pieceID, "draft")
+	}
 	sendDone()
 }
 
@@ -440,14 +465,14 @@ func (h *PipelineHandler) abortPiece(w http.ResponseWriter, r *http.Request, pro
 func (h *PipelineHandler) saveImproveMessage(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	pieceID := h.parsePieceID(rest)
 	r.ParseForm()
-	content := r.FormValue("content")
-	if content == "" {
+	msgContent := r.FormValue("content")
+	if msgContent == "" {
 		http.Error(w, "Content required", http.StatusBadRequest)
 		return
 	}
 
 	chat, _ := h.queries.GetOrCreatePieceChat(projectID, pieceID)
-	h.queries.AddBrainstormMessage(chat.ID, "user", content)
+	h.queries.AddBrainstormMessage(chat.ID, "user", msgContent)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -463,25 +488,28 @@ func (h *PipelineHandler) streamImprove(w http.ResponseWriter, r *http.Request, 
 	chat, _ := h.queries.GetOrCreatePieceChat(projectID, pieceID)
 	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
 
+	ct, ctOk := content.LookupType(piece.Platform, piece.Format)
+
+	var promptText string
+	if ctOk {
+		promptText, _ = content.LoadPrompt(ct.PromptFile)
+	}
+	if promptText == "" {
+		promptText = fmt.Sprintf("You are improving a %s %s.", piece.Platform, piece.Format)
+	}
+
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
-You are improving a content piece. Here is the current version:
-
 %s
 
-Platform: %s, Format: %s
-
-Client profile:
+## Current version
 %s
 
-The user wants to improve this piece. Respond to their feedback and provide a complete rewritten version. Don't explain what you changed, just provide the improved content.
+## Client profile
+%s
 
-WRITING RULES:
-- Write like a human. Never sound AI-generated.
-- Never use em dashes. Use commas, periods, or restructure.
-- No emoji in blog posts or scripts.
-- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".
-- Short, direct sentences. Vary length. Sound like a real person.`, time.Now().Format("January 2, 2006"), piece.Body, piece.Platform, piece.Format, profile)
+The user wants to improve this piece. Respond to their feedback and provide a complete rewritten version by calling the write tool. Don't explain what you changed.
+%s`, time.Now().Format("January 2, 2006"), promptText, piece.Body, profile, antiAIRules)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
@@ -493,8 +521,13 @@ WRITING RULES:
 		return
 	}
 
-	toolList, executor := h.buildTools()
-	onToolEvent := h.buildToolEventCallback(sendEvent)
+	toolList, executor := h.buildTools(pieceID)
+	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
+
+	// Add the content type's write tool
+	if ctOk {
+		toolList = append(toolList, ct.Tool)
+	}
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
@@ -506,166 +539,19 @@ WRITING RULES:
 	// Save assistant message
 	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
 
-	// Update piece body and reset to draft
-	h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
+	// If the AI used a write tool, the body was already saved by the executor.
+	// If not (fallback), save the raw text response.
+	currentPiece, _ := h.queries.GetContentPiece(pieceID)
+	if currentPiece.Body == piece.Body {
+		// Body didn't change via tool, save the text response
+		h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
+	}
 	h.queries.SetContentPieceStatus(pieceID, "draft")
 
 	sendDone()
 }
 
 // --- Helpers ---
-
-func (h *PipelineHandler) cornerstonePrompt(topic, platform, format, profile, rejectionReason string) string {
-	prompt := fmt.Sprintf(`Today's date: %s
-
-You are an expert conversion copywriter and content creator. Your goal is to write a %s %s that is clear, compelling, and drives action.
-
-## Client profile
-%s
-
-## Assignment
-Topic: %s
-
-## Copywriting principles (follow these exactly)
-
-### Clarity over cleverness
-If you have to choose between clear and creative, choose clear.
-
-### Benefits over features
-Features: what it does. Benefits: what that means for the customer. Always lead with benefits.
-
-### Specificity over vagueness
-- Vague: "Save time on your workflow"
-- Specific: "Cut your weekly reporting from 4 hours to 15 minutes"
-
-### Customer language over company language
-Use words the audience uses. Mirror their voice from the client profile. Not corporate speak.
-
-### One idea per section
-Each section advances one argument. Build logical flow down the page.
-
-## Writing style rules
-1. Simple over complex: "use" not "utilize", "help" not "facilitate"
-2. Specific over vague: avoid "streamline", "optimize", "innovative"
-3. Active over passive: "We generate reports" not "Reports are generated"
-4. Confident over qualified: remove "almost", "very", "really", "basically"
-5. Show over tell: describe the outcome instead of using adverbs
-6. Honest over sensational: fabricated statistics or testimonials erode trust. NEVER invent numbers, quotes, case studies, customer names, or revenue figures that aren't in the client profile.
-
-## Structure
-- Headline: your single most important message. Communicate core value. Specific > generic.
-- Subheadline/intro: expand on headline, add specificity, hook the reader with a relatable problem or surprising insight.
-- Body sections: each with a clear header, one key point, actionable content.
-- Conclusion: recap value, clear CTA or next step.
-
-## Quality check (apply before finishing)
-- Any jargon that could confuse outsiders? Remove it.
-- Any sentences trying to do too much? Split them.
-- Any passive voice? Rewrite to active.
-- Any exclamation points? Remove them.
-- Any marketing buzzwords without substance? Cut them.
-- Any fabricated claims or statistics? Delete them. Use web_search tool if you need real data.`,
-		time.Now().Format("January 2, 2006"), platform, format, profile, topic)
-
-	if rejectionReason != "" {
-		prompt += fmt.Sprintf("\n\nPrevious version was rejected. Feedback: %s. Address this in your rewrite.", rejectionReason)
-	}
-
-	prompt += `
-
-## Absolute rules
-- ONLY use information from the client profile. If the profile lacks data, write around it with frameworks and principles instead of making things up.
-- Use web_search if you need real, current facts or statistics. This is always better than fabricating.
-- Every sentence must earn its place. No filler.
-
-## Anti-AI writing rules (CRITICAL — your output will be checked against these)
-
-NEVER use em dashes (—). They are the #1 marker of AI writing. Use commas, colons, or parentheses instead.
-No emoji in blog posts or scripts.
-
-Banned verbs: delve, leverage, optimize, utilize, facilitate, foster, bolster, underscore, unveil, navigate, streamline, enhance, endeavour, ascertain, elucidate
-Banned adjectives: robust, comprehensive, pivotal, crucial, vital, transformative, cutting-edge, groundbreaking, innovative, seamless, intricate, nuanced, multifaceted, holistic
-Banned transitions: furthermore, moreover, notwithstanding, "that being said", "at its core", "it is worth noting", "in the realm of", "in today's [anything]"
-Banned openings: "In today's fast-paced world", "In today's digital age", "In an era of", "In the ever-evolving landscape", "Let's delve into", "Imagine a world where"
-Banned conclusions: "In conclusion", "To sum up", "At the end of the day", "All things considered", "In the final analysis"
-Banned patterns: "Whether you're a X, Y, or Z", "It's not just X, it's also Y", starting sentences with "By" + gerund ("By understanding X, you can Y")
-Banned filler: absolutely, basically, certainly, clearly, definitely, essentially, extremely, fundamentally, incredibly, interestingly, naturally, obviously, quite, really, significantly, simply, surely, truly, ultimately, undoubtedly, very
-
-Use natural transitions instead: "Here's the thing", "But", "So", "Also", "Plus", "On top of that", "That said", "However"
-Vary sentence length. Read it aloud. If it sounds like a press release, rewrite it.`
-
-	return prompt
-}
-
-func (h *PipelineHandler) waterfallPrompt(platform, format, profile, cornerstoneBody, rejectionReason string) string {
-	guidance := ""
-	if pg, ok := platformGuidance[platform]; ok {
-		if g, ok := pg[format]; ok {
-			guidance = g
-		}
-	}
-
-	prompt := fmt.Sprintf(`Today's date: %s
-
-You are an expert social media strategist repurposing cornerstone content into a %s %s.
-
-## Client profile
-%s
-
-## Cornerstone content (your source material)
-%s
-
-## Target: %s %s
-%s
-
-## How to repurpose (don't just summarize)
-1. Extract the most compelling angle from the cornerstone for THIS specific platform and audience
-2. Reshape it to feel native to the platform, not like a truncated blog post
-3. The first line is everything. Use a strong hook:
-   - Curiosity: "I was wrong about [common belief]" or "[Result] in [surprisingly short time]"
-   - Story: "Last week [unexpected thing happened]" or "I almost [big mistake]"
-   - Value: "How to [outcome] without [pain]" or "Stop [mistake]. Do this instead:"
-   - Contrarian: "Unpopular opinion: [bold take]" or "[Common advice] is wrong. Here's why:"
-4. Write in the client's voice and tone. Use their audience's language.
-5. End with a clear CTA or engagement prompt appropriate to the platform.
-
-## Rules
-- ONLY use information from the cornerstone and client profile. Never invent statistics, quotes, or claims.
-- Benefits over features. Specificity over vagueness. Customer language over corporate speak.
-- Simple words. Active voice. Confident tone. No hedging.`,
-		time.Now().Format("January 2, 2006"), platform, format, profile, cornerstoneBody, platform, format, guidance)
-
-	if rejectionReason != "" {
-		prompt += fmt.Sprintf("\n\nPrevious version was rejected. Feedback: %s. Address this in your rewrite.", rejectionReason)
-	}
-
-	prompt += `
-
-## Post structure templates (use the right one for this format)
-
-LinkedIn post: [Hook first line] → [Set scene] → [Key insight, 3-5 points with line breaks] → [Wrap-up] → [Question or CTA]
-LinkedIn carousel: [Slide 1: bold statement] → [Slides 2-9: one point per slide] → [Slide 10: summary + CTA]
-X post: Single tweet. Under 280 chars. Punchy. One idea.
-X thread: [Tweet 1: hook + promise] → [Tweets 2-7: one point each] → [Final: summary + CTA]. Number them.
-Instagram post: [Hook caption] → [Short paragraphs] → [Hashtags at end]. Under 2200 chars.
-Instagram reel script: [Hook 0-2s: pattern interrupt] → [Setup 2-5s: context] → [Value 5-25s: the advice] → [CTA 25-30s]
-Blog post: [Headline] → [Hook intro] → [Sections with headers] → [Actionable takeaways] → [Strong conclusion + CTA]
-
-## Anti-AI writing rules (same as cornerstone — CRITICAL)
-
-NEVER use em dashes (—). Use commas, colons, or parentheses.
-Adapt emoji/hashtag usage to platform norms only where the client's guidelines allow it.
-
-Banned verbs: delve, leverage, optimize, utilize, facilitate, foster, bolster, underscore, unveil, navigate, streamline, enhance
-Banned adjectives: robust, comprehensive, pivotal, crucial, vital, transformative, cutting-edge, groundbreaking, innovative, seamless
-Banned transitions: furthermore, moreover, "that being said", "at its core", "it is worth noting", "in today's [anything]"
-Banned openings: "In today's fast-paced world", "In the ever-evolving landscape", "Let's delve into"
-Banned filler: absolutely, basically, certainly, clearly, definitely, essentially, extremely, fundamentally, incredibly, obviously, quite, really, significantly, simply, truly, ultimately, very
-
-Every word must earn its place. Read it aloud. If it sounds like a robot wrote it, rewrite.`
-
-	return prompt
-}
 
 func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(any), func(string) error, func(), func(string)) {
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -700,7 +586,7 @@ func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(an
 	return flusher, sendEvent, sendChunk, sendDone, sendError
 }
 
-func (h *PipelineHandler) buildTools() ([]ai.Tool, ai.ToolExecutor) {
+func (h *PipelineHandler) buildTools(pieceID int64) ([]ai.Tool, ai.ToolExecutor) {
 	toolList := []ai.Tool{
 		tools.NewFetchTool(),
 		tools.NewSearchTool(),
@@ -715,6 +601,12 @@ func (h *PipelineHandler) buildTools() ([]ai.Tool, ai.ToolExecutor) {
 		case "web_search":
 			return searchExec(ctx, args)
 		default:
+			if content.IsWriteTool(name) && pieceID > 0 {
+				// Save structured content to piece body
+				h.queries.UpdateContentPieceBody(pieceID, "", args)
+				h.queries.SetContentPieceStatus(pieceID, "draft")
+				return "Content saved successfully. The user will review it.", nil
+			}
 			return "", fmt.Errorf("unknown tool: %s", name)
 		}
 	}
@@ -722,10 +614,14 @@ func (h *PipelineHandler) buildTools() ([]ai.Tool, ai.ToolExecutor) {
 	return toolList, executor
 }
 
-func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any)) ai.ToolEventFn {
+func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID int64) ai.ToolEventFn {
 	return func(event ai.ToolEvent) {
 		switch event.Type {
 		case "tool_start":
+			if content.IsWriteTool(event.Tool) {
+				// Don't show a tool indicator for write tools
+				return
+			}
 			summary := ""
 			switch event.Tool {
 			case "fetch_url":
@@ -735,6 +631,19 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any)) ai.ToolEve
 			}
 			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
 		case "tool_result":
+			if content.IsWriteTool(event.Tool) && pieceID > 0 {
+				// Send content_written event so the frontend can render immediately
+				piece, err := h.queries.GetContentPiece(pieceID)
+				if err == nil {
+					sendEvent(map[string]any{
+						"type":     "content_written",
+						"platform": piece.Platform,
+						"format":   piece.Format,
+						"data":     json.RawMessage(piece.Body),
+					})
+				}
+				return
+			}
 			summary := event.Summary
 			if len(summary) > 200 {
 				summary = summary[:200] + "..."
@@ -762,4 +671,3 @@ func (h *PipelineHandler) parsePieceID(rest string) int64 {
 	}
 	return 0
 }
-
