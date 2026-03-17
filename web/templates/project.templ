@@ -3,11 +3,18 @@ package templates
 import "fmt"
 
 type ProjectDetail struct {
-	ID          int64
-	Name        string
-	Description string
-	HasProfile  bool
-	RunCount    int
+	ID             int64
+	Name           string
+	Description    string
+	HasProfile     bool
+	RunCount       int
+	ContextItems   []ContextItemView
+}
+
+type ContextItemView struct {
+	ID      int64
+	Title   string
+	Preview string
 }
 
 templ ProjectOverview(p ProjectDetail) {
@@ -50,5 +57,28 @@ templ ProjectOverview(p ProjectDetail) {
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-secondary">Manage Templates</a>
 			</div>
 		</div>
+
+		<div class="flex-between mt-2 mb-2">
+			<h2>Context</h2>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID)) } class="btn">Add Context</a>
+		</div>
+		if len(p.ContextItems) == 0 {
+			<p class="text-muted">No context items yet. Add info about campaigns, announcements, competitor intel, etc.</p>
+		}
+		for _, item := range p.ContextItems {
+			<div class="card mb-1">
+				<div class="flex-between">
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID)) } style="text-decoration:none;color:inherit">
+						<strong>{ item.Title }</strong>
+						if item.Preview != "" {
+							<span class="text-muted" style="margin-left:0.5rem">{ item.Preview }</span>
+						}
+					</a>
+					<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d/delete", p.ID, item.ID)) } style="display:inline">
+						<button type="submit" class="btn btn-danger" style="font-size:0.7rem;padding:0.2rem 0.5rem">Delete</button>
+					</form>
+				</div>
+			</div>
+		}
 	}
 }

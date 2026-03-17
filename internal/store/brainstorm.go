@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type BrainstormChat struct {
 	ID             int64
@@ -83,6 +86,18 @@ func (q *Queries) GetOrCreateProfileChat(projectID int64) (*BrainstormChat, erro
 	}
 	// Not found, create it
 	return q.CreateBrainstormChat(projectID, "Profile Builder", "profile", nil)
+}
+
+func (q *Queries) GetOrCreateContextChat(projectID, contextItemID int64) (*BrainstormChat, error) {
+	c := &BrainstormChat{}
+	err := q.db.QueryRow(
+		"SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE project_id = ? AND section = ?",
+		projectID, fmt.Sprintf("context_%d", contextItemID),
+	).Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt)
+	if err == nil {
+		return c, nil
+	}
+	return q.CreateBrainstormChat(projectID, "Context Item", fmt.Sprintf("context_%d", contextItemID), nil)
 }
 
 func (q *Queries) GetOrCreateSectionChat(projectID int64, section string) (*BrainstormChat, error) {

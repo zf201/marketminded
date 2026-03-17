@@ -144,13 +144,19 @@ func (h *BrainstormHandler) streamResponse(w http.ResponseWriter, r *http.Reques
 	msgs, _ := h.queries.ListBrainstormMessages(chatID)
 
 	profile, _ := h.queries.BuildProfileString(projectID)
+	contextStr, _ := h.queries.BuildContextString(projectID)
+
+	contextSection := ""
+	if contextStr != "" {
+		contextSection = "\n## Additional Context\n" + contextStr
+	}
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
 You are a content brainstorming partner for "%s". Your job is to help generate specific, ready-to-execute content ideas based on the client's profile.
 
 ## Client Profile
-%s
+%s%s
 
 ## What brainstorming IS
 
@@ -175,7 +181,7 @@ WRITING STYLE:
 - NEVER use em dashes. Use commas, periods, or restructure instead.
 - NEVER overuse emojis. One max per message if it fits naturally. Zero in most cases.
 - Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "it's worth noting".
-- Short, direct sentences. Sound like a sharp colleague, not a marketing textbook.`, time.Now().Format("January 2, 2006"), project.Name, profile)
+- Short, direct sentences. Sound like a sharp colleague, not a marketing textbook.`, time.Now().Format("January 2, 2006"), project.Name, profile, contextSection)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {

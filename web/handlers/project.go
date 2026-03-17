@@ -86,12 +86,27 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 	sections, _ := h.queries.ListProfileSections(id)
 	hasProfile := len(sections) > 0
 
+	contextItems, _ := h.queries.ListContextItems(id)
+	ctxViews := make([]templates.ContextItemView, len(contextItems))
+	for i, c := range contextItems {
+		preview := c.Content
+		if len(preview) > 80 {
+			preview = preview[:80] + "..."
+		}
+		ctxViews[i] = templates.ContextItemView{
+			ID:      c.ID,
+			Title:   c.Title,
+			Preview: preview,
+		}
+	}
+
 	detail := templates.ProjectDetail{
-		ID:          project.ID,
-		Name:        project.Name,
-		Description: project.Description,
-		HasProfile:  hasProfile,
-		RunCount:    len(runs),
+		ID:           project.ID,
+		Name:         project.Name,
+		Description:  project.Description,
+		HasProfile:   hasProfile,
+		RunCount:     len(runs),
+		ContextItems: ctxViews,
 	}
 
 	templates.ProjectOverview(detail).Render(r.Context(), w)

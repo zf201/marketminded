@@ -54,6 +54,7 @@ func main() {
 	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
 	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
+	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
 
 	mux := http.NewServeMux()
 
@@ -93,6 +94,8 @@ func main() {
 			brainstormHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "profile"):
 			profileHandler.Handle(w, r, projectID, rest)
+		case strings.HasPrefix(rest, "context"):
+			contextHandler.Handle(w, r, projectID, rest)
 		default:
 			http.NotFound(w, r)
 		}

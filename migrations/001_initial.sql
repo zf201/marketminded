@@ -84,6 +84,15 @@ CREATE TABLE brainstorm_messages (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE context_items (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -94,6 +103,7 @@ INSERT INTO settings (key, value) VALUES ('model_ideation', '');
 
 -- +goose Down
 DROP TABLE settings;
+DROP TABLE context_items;
 DROP TABLE brainstorm_messages;
 DROP TABLE brainstorm_chats;
 DROP TABLE agent_runs;

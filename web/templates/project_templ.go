@@ -12,11 +12,18 @@ import "bytes"
 import "fmt"
 
 type ProjectDetail struct {
-	ID          int64
-	Name        string
-	Description string
-	HasProfile  bool
-	RunCount    int
+	ID           int64
+	Name         string
+	Description  string
+	HasProfile   bool
+	RunCount     int
+	ContextItems []ContextItemView
+}
+
+type ContextItemView struct {
+	ID      int64
+	Title   string
+	Preview string
 }
 
 func ProjectOverview(p ProjectDetail) templ.Component {
@@ -242,9 +249,115 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div></div>")
+			_, err = templBuffer.WriteString("</a></div></div> <div class=\"flex-between mt-2 mb-2\"><h2>")
 			if err != nil {
 				return err
+			}
+			var_24 := `Context`
+			_, err = templBuffer.WriteString(var_24)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</h2><a href=\"")
+			if err != nil {
+				return err
+			}
+			var var_25 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_25)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" class=\"btn\">")
+			if err != nil {
+				return err
+			}
+			var_26 := `Add Context`
+			_, err = templBuffer.WriteString(var_26)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</a></div> ")
+			if err != nil {
+				return err
+			}
+			if len(p.ContextItems) == 0 {
+				_, err = templBuffer.WriteString("<p class=\"text-muted\">")
+				if err != nil {
+					return err
+				}
+				var_27 := `No context items yet. Add info about campaigns, announcements, competitor intel, etc.`
+				_, err = templBuffer.WriteString(var_27)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</p>")
+				if err != nil {
+					return err
+				}
+			}
+			_, err = templBuffer.WriteString(" ")
+			if err != nil {
+				return err
+			}
+			for _, item := range p.ContextItems {
+				_, err = templBuffer.WriteString("<div class=\"card mb-1\"><div class=\"flex-between\"><a href=\"")
+				if err != nil {
+					return err
+				}
+				var var_28 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID))
+				_, err = templBuffer.WriteString(templ.EscapeString(string(var_28)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" style=\"text-decoration:none;color:inherit\"><strong>")
+				if err != nil {
+					return err
+				}
+				var var_29 string = item.Title
+				_, err = templBuffer.WriteString(templ.EscapeString(var_29))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</strong>")
+				if err != nil {
+					return err
+				}
+				if item.Preview != "" {
+					_, err = templBuffer.WriteString("<span class=\"text-muted\" style=\"margin-left:0.5rem\">")
+					if err != nil {
+						return err
+					}
+					var var_30 string = item.Preview
+					_, err = templBuffer.WriteString(templ.EscapeString(var_30))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</span>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</a><form method=\"POST\" action=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d/delete", p.ID, item.ID))))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn btn-danger\" style=\"font-size:0.7rem;padding:0.2rem 0.5rem\">")
+				if err != nil {
+					return err
+				}
+				var_31 := `Delete`
+				_, err = templBuffer.WriteString(var_31)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</button></form></div></div>")
+				if err != nil {
+					return err
+				}
 			}
 			if !templIsBuffer {
 				_, err = io.Copy(w, templBuffer)

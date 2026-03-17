@@ -458,6 +458,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (board) {
         initProductionBoard(board.dataset.projectId, board.dataset.runId);
     }
+
+    var contextPage = document.getElementById('context-chat-page');
+    if (contextPage) {
+        initContextChat(contextPage.dataset.projectId, contextPage.dataset.itemId);
+    }
 });
 
 function initProfileSectionChat(projectID, sectionName) {
@@ -624,6 +629,115 @@ function initProfileSectionChat(projectID, sectionName) {
             btn.disabled = false;
             btn.textContent = 'Send';
         });
+    });
+
+    scrollToBottom();
+}
+
+function initContextChat(projectID, itemID) {
+    var form = document.getElementById('context-chat-form');
+    var input = document.getElementById('context-chat-input');
+    var btn = document.getElementById('context-chat-send');
+    var saveBtn = document.getElementById('context-save-btn');
+    var messagesEl = document.getElementById('context-messages');
+    if (!form) return;
+
+    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+    function addMsg(role, text) {
+        var outer = document.createElement('div');
+        outer.className = 'chat-msg chat-msg-' + role;
+        var roleEl = document.createElement('div');
+        roleEl.className = 'chat-msg-role';
+        roleEl.textContent = role;
+        var bodyEl = document.createElement('div');
+        bodyEl.style.whiteSpace = 'pre-wrap';
+        bodyEl.textContent = text;
+        outer.appendChild(roleEl);
+        outer.appendChild(bodyEl);
+        messagesEl.appendChild(outer);
+        return bodyEl;
+    }
+
+    function addChatText(container, text) {
+        var last = container.lastElementChild;
+        if (!last || !last.classList.contains('chat-text')) {
+            last = document.createElement('span');
+            last.className = 'chat-text';
+            container.appendChild(last);
+        }
+        last.textContent += text;
+    }
+
+    input.addEventListener('keydown', function(e) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            form.dispatchEvent(new Event('submit'));
+        }
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var msg = input.value.trim();
+        if (!msg) return;
+
+        input.disabled = true;
+        btn.disabled = true;
+        btn.textContent = 'Thinking...';
+        input.value = '';
+
+        addMsg('user', msg);
+        var aBody = addMsg('assistant', '');
+        aBody.textContent = '';
+        scrollToBottom();
+
+        fetch('/projects/' + projectID + '/context/' + itemID + '/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'content=' + encodeURIComponent(msg)
+        }).then(function() {
+            var source = new EventSource('/projects/' + projectID + '/context/' + itemID + '/stream');
+            source.onmessage = function(event) {
+                var d = JSON.parse(event.data);
+                if (d.type === 'chunk') { addChatText(aBody, d.chunk); scrollToBottom(); }
+                else if (d.type === 'error') { source.close(); addChatText(aBody, '\nError: ' + d.error); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; }
+                else if (d.type === 'done') { source.close(); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; scrollToBottom(); }
+            };
+            source.onerror = function() { source.close(); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; };
+        });
+    });
+
+    // Save button — collects last assistant message as content
+    saveBtn.addEventListener('click', function() {
+        // Get all assistant messages, take the last one as the refined content
+        var assistantMsgs = messagesEl.querySelectorAll('.chat-msg-assistant');
+        var lastMsg = assistantMsgs.length > 0 ? assistantMsgs[assistantMsgs.length - 1] : null;
+        var content = '';
+        if (lastMsg) {
+            var bodyDiv = lastMsg.querySelector('div:last-child');
+            if (bodyDiv) content = bodyDiv.textContent.trim();
+        }
+        // If no assistant message, use the last user message
+        if (!content) {
+            var userMsgs = messagesEl.querySelectorAll('.chat-msg-user');
+            var lastUser = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1] : null;
+            if (lastUser) {
+                var uBody = lastUser.querySelector('div:last-child');
+                if (uBody) content = uBody.textContent.trim();
+            }
+        }
+
+        var title = prompt('Title for this context item:', document.querySelector('h1').textContent || '');
+        if (title === null) return;
+
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/projects/' + projectID + '/context/' + itemID + '/save';
+        var tInput = document.createElement('input'); tInput.type = 'hidden'; tInput.name = 'title'; tInput.value = title;
+        var cInput = document.createElement('input'); cInput.type = 'hidden'; cInput.name = 'content'; cInput.value = content;
+        form.appendChild(tInput); form.appendChild(cInput);
+        document.body.appendChild(form);
+        form.submit();
     });
 
     scrollToBottom();
