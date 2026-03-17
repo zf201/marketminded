@@ -828,15 +828,15 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</button> <form method=\"POST\" action=\"")
+					_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary proofread-btn\" data-piece-id=\"")
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/proofread", data.ProjectID, data.RunID, piece.ID))))
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\" style=\"display:inline\" onsubmit=\"this.querySelector(&#39;button&#39;).disabled=true;this.querySelector(&#39;button&#39;).textContent=&#39;Proofreading...&#39;\"><button type=\"submit\" class=\"btn btn-secondary\">")
+					_, err = templBuffer.WriteString("\">")
 					if err != nil {
 						return err
 					}
@@ -845,7 +845,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</button></form>")
+					_, err = templBuffer.WriteString("</button>")
 					if err != nil {
 						return err
 					}
@@ -868,15 +868,15 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</button> <form method=\"POST\" action=\"")
+					_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary proofread-btn\" data-piece-id=\"")
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/proofread", data.ProjectID, data.RunID, piece.ID))))
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\" style=\"display:inline\" onsubmit=\"this.querySelector(&#39;button&#39;).disabled=true;this.querySelector(&#39;button&#39;).textContent=&#39;Proofreading...&#39;\"><button type=\"submit\" class=\"btn btn-secondary\">")
+					_, err = templBuffer.WriteString("\">")
 					if err != nil {
 						return err
 					}
@@ -885,7 +885,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</button></form>")
+					_, err = templBuffer.WriteString("</button>")
 					if err != nil {
 						return err
 					}

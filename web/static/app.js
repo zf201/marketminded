@@ -1127,9 +1127,57 @@ function initProductionBoard(projectID, runID) {
         }
     });
 
-    // Auto-start plan generation if plan is empty and status is planning
-    // (checked via presence of generate-plan-btn)
+    // Proofread buttons — open modal with streaming analysis
+    document.querySelectorAll('.proofread-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var pieceId = btn.dataset.pieceId;
 
-    // Auto-generate first pending piece if we just entered producing state
-    // The next piece ID is set in the template data attribute
+            // Create modal
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center';
+            var modal = document.createElement('div');
+            modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:600px;width:90%;max-height:80vh;display:flex;flex-direction:column';
+
+            var title = document.createElement('h3');
+            title.textContent = 'Proofreading...';
+            title.style.marginBottom = '1rem';
+            modal.appendChild(title);
+
+            var output = document.createElement('div');
+            output.style.cssText = 'white-space:pre-wrap;font-size:0.85rem;line-height:1.5;overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:1rem';
+            modal.appendChild(output);
+
+            var closeBtn = document.createElement('button');
+            closeBtn.className = 'btn btn-secondary';
+            closeBtn.textContent = 'Close';
+            closeBtn.style.display = 'none';
+            closeBtn.onclick = function() { overlay.remove(); window.location.reload(); };
+            modal.appendChild(closeBtn);
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            // Stream proofread
+            var source = new EventSource(basePath + '/piece/' + pieceId + '/proofread');
+            source.onmessage = function(event) {
+                var d = JSON.parse(event.data);
+                if (d.type === 'chunk') {
+                    output.textContent += d.chunk;
+                    output.scrollTop = output.scrollHeight;
+                } else if (d.type === 'done') {
+                    source.close();
+                    title.textContent = 'Proofread Complete';
+                    closeBtn.style.display = 'inline-block';
+                } else if (d.type === 'error') {
+                    source.close();
+                    output.textContent += '\nError: ' + d.error;
+                    closeBtn.style.display = 'inline-block';
+                }
+            };
+            source.onerror = function() {
+                source.close();
+                closeBtn.style.display = 'inline-block';
+            };
+        });
+    });
 }
