@@ -495,32 +495,17 @@ func (h *PipelineHandler) streamImprove(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	profile, _ := h.queries.BuildProfileString(projectID)
 	chat, _ := h.queries.GetOrCreatePieceChat(projectID, pieceID)
 	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
 
 	ct, ctOk := content.LookupType(piece.Platform, piece.Format)
 
-	var promptText string
-	if ctOk {
-		promptText, _ = content.LoadPrompt(ct.PromptFile)
-	}
-	if promptText == "" {
-		promptText = fmt.Sprintf("You are improving a %s %s.", piece.Platform, piece.Format)
-	}
-
-	systemPrompt := fmt.Sprintf(`Today's date: %s
+	// Minimal prompt — just the content + format info. No profile, no prompt file bloat.
+	systemPrompt := fmt.Sprintf(`You are editing a %s %s. Here is the current version:
 
 %s
 
-## Current version
-%s
-
-## Client profile
-%s
-
-The user wants to improve this piece. Respond to their feedback and provide a complete rewritten version by calling the write tool. Don't explain what you changed.
-%s`, time.Now().Format("January 2, 2006"), promptText, piece.Body, profile, antiAIRules)
+Apply the user's feedback. Return the complete rewritten version by calling the write tool. Do not explain changes, just provide the improved content.`, piece.Platform, piece.Format, piece.Body)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
@@ -532,13 +517,20 @@ The user wants to improve this piece. Respond to their feedback and provide a co
 		return
 	}
 
-	toolList, executor := h.buildTools(pieceID)
-	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
-
-	// Add the content type's write tool
+	// Only the write tool — no fetch/search for improve (minimal context)
+	var toolList []ai.Tool
 	if ctOk {
-		toolList = append(toolList, ct.Tool)
+		toolList = []ai.Tool{ct.Tool}
 	}
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		if content.IsWriteTool(name) && pieceID > 0 {
+			h.queries.UpdateContentPieceBody(pieceID, "", args)
+			h.queries.SetContentPieceStatus(pieceID, "draft")
+			return "Content updated.", nil
+		}
+		return "", fmt.Errorf("unknown tool: %s", name)
+	}
+	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
@@ -550,14 +542,21 @@ The user wants to improve this piece. Respond to their feedback and provide a co
 	// Save assistant message
 	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
 
-	// If the AI used a write tool, the body was already saved by the executor.
-	// If not (fallback), save the raw text response.
+	// If the AI used a write tool, the body was already saved and content_written was sent.
+	// If not (fallback), save the text response and send content_written.
 	currentPiece, _ := h.queries.GetContentPiece(pieceID)
-	if currentPiece.Body == piece.Body {
-		// Body didn't change via tool, save the text response
+	if currentPiece.Body == piece.Body && fullResponse != "" {
+		// Body didn't change via tool — save text response as new body
 		h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
+		h.queries.SetContentPieceStatus(pieceID, "draft")
+		dataJSON, _ := json.Marshal(fullResponse)
+		sendEvent(map[string]any{
+			"type":     "content_written",
+			"platform": piece.Platform,
+			"format":   piece.Format,
+			"data":     json.RawMessage(dataJSON),
+		})
 	}
-	h.queries.SetContentPieceStatus(pieceID, "draft")
 
 	sendDone()
 }
