@@ -18,24 +18,23 @@ templ PipelineListPage(data PipelineListData) {
 	@Layout(data.ProjectName + " - Pipeline") {
 		<div class="flex-between mb-4">
 			<h1>Pipeline Runs</h1>
-			<div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
-				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } style="display:inline">
-					<button type="submit" class="btn">New Run</button>
-				</form>
-			</div>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
 		</div>
+		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="card mb-2">
+			<div class="form-group">
+				<label>Topic</label>
+				<input type="text" name="topic" required placeholder="What should the content be about?"/>
+			</div>
+			<button type="submit" class="btn">Start New Run</button>
+		</form>
 		if len(data.Runs) == 0 {
-			<p class="text-muted">No pipeline runs yet. Start one to generate content.</p>
+			<p class="text-muted">No pipeline runs yet. Enter a topic above to start.</p>
 		}
 		for _, run := range data.Runs {
 			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, run.ID)) } class="card" style="text-decoration:none;color:inherit;display:block">
 				<div class="flex-between">
 					<div>
-						<strong>Run #{ fmt.Sprintf("%d", run.ID) }</strong>
-						if run.Topic != "" {
-							<span class="text-muted"> — { run.Topic }</span>
-						}
+						<strong>{ run.Topic }</strong>
 					</div>
 					<span class={ "badge badge-" + run.Status }>{ run.Status }</span>
 				</div>
@@ -44,114 +43,183 @@ templ PipelineListPage(data PipelineListData) {
 	}
 }
 
-type PipelineRunData struct {
+type ProductionBoardData struct {
 	ProjectID   int64
 	ProjectName string
 	RunID       int64
-	Status      string
 	Topic       string
-	Content     []ContentPieceView
+	Plan        string
+	Status      string
+	Pieces      []ContentPieceView
+	NextPieceID int64
 }
 
 type ContentPieceView struct {
-	ID     int64
-	Type   string
-	Title  string
-	Body   string
-	Status string
+	ID              int64
+	Platform        string
+	Format          string
+	Title           string
+	Body            string
+	Status          string
+	SortOrder       int
+	RejectionReason string
+	IsCornerstone   bool
 }
 
-templ PipelineRunPage(data PipelineRunData) {
-	@Layout(fmt.Sprintf("Run #%d", data.RunID)) {
-		<div class="flex-between mb-4">
-			<h1>Pipeline Run #{ fmt.Sprintf("%d", data.RunID) }</h1>
-			<div>
-				<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary" style="margin-left:0.5rem">Back</a>
-			</div>
-		</div>
+type ContentEditData struct {
+	ProjectID int64
+	Piece     ContentPieceView
+}
 
-		if data.Status == "ideating" {
-			<div class="card" x-data="streamOutput">
-				<h3 class="mb-2">Stage 1: Ideation</h3>
-				<p class="text-muted mb-2">AI will research trends and suggest pillar topics.</p>
-				<button class="btn mb-2" @click={ fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/ideate')", data.ProjectID, data.RunID) } x-show="!loading">Generate Ideas</button>
-				<p x-show="loading" class="text-muted">Generating...</p>
-				<div class="stream-output" x-show="content" x-text="content"></div>
-				<p x-show="error" style="color:red" x-text="error"></p>
-				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID)) } x-show="content && !loading" class="mt-2">
-					<input type="hidden" name="next_status" value="creating_pillar"/>
-					<div class="form-group">
-						<label>Selected Topic</label>
-						<input type="text" name="topic" required placeholder="Type or paste the topic you chose"/>
+templ ProductionBoardPage(data ProductionBoardData) {
+	@Layout(fmt.Sprintf("Pipeline: %s", data.Topic)) {
+		<div id="production-board" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-run-id={ fmt.Sprintf("%d", data.RunID) } data-next-piece-id={ fmt.Sprintf("%d", data.NextPieceID) }>
+			<div class="board-header flex-between mb-4">
+				<div>
+					<h1>{ data.Topic }</h1>
+					<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
+				</div>
+				<div>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary">Back</a>
+					if data.Status != "complete" && data.Status != "abandoned" {
+						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } style="display:inline">
+							<button type="submit" class="btn btn-danger" style="margin-left:0.5rem">Abandon</button>
+						</form>
+					}
+				</div>
+			</div>
+
+			if data.Status == "planning" {
+				<div class="board-card" id="plan-card">
+					<div class="board-card-header">
+						<h3>Production Plan</h3>
+						<span class="badge badge-planning">planning</span>
 					</div>
-					<button type="submit" class="btn">Select Topic &amp; Continue</button>
-				</form>
-			</div>
-		}
+					if data.Plan != "" {
+						<div class="board-card-body" id="plan-body">{ data.Plan }</div>
+						<div class="board-card-actions">
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/approve-plan", data.ProjectID, data.RunID)) } style="display:inline">
+								<button type="submit" class="btn">Approve Plan</button>
+							</form>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/reject-plan", data.ProjectID, data.RunID)) } style="display:inline">
+								<input type="text" name="reason" placeholder="Rejection reason (optional)" style="width:auto;display:inline;margin:0"/>
+								<button type="submit" class="btn btn-secondary">Reject &amp; Re-plan</button>
+							</form>
+						</div>
+					} else {
+						<div class="board-card-body" id="plan-body">
+							<p class="text-muted">Click Generate to create a production plan.</p>
+						</div>
+						<div class="board-card-actions">
+							<button class="btn" id="generate-plan-btn">Generate Plan</button>
+						</div>
+					}
+				</div>
+			}
 
-		if data.Status == "creating_pillar" {
-			<div class="card" x-data="streamOutput">
-				<h3 class="mb-2">Stage 2: Create Pillar</h3>
-				<p class="text-muted mb-2">Topic: <strong>{ data.Topic }</strong></p>
-				<button class="btn mb-2" @click={ fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/pillar')", data.ProjectID, data.RunID) } x-show="!loading">Generate Blog Post</button>
-				<p x-show="loading" class="text-muted">Writing...</p>
-				<div class="stream-output" x-show="content" x-text="content"></div>
-				<p x-show="error" style="color:red" x-text="error"></p>
-				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID)) } x-show="content && !loading" class="mt-2">
-					<input type="hidden" name="next_status" value="waterfalling"/>
-					<button type="submit" class="btn">Approve &amp; Continue to Waterfall</button>
-				</form>
-			</div>
-		}
-
-		if data.Status == "waterfalling" {
-			<div class="card" x-data="streamOutput">
-				<h3 class="mb-2">Stage 3: Content Waterfall</h3>
-				<p class="text-muted mb-2">Generating social posts from pillar content.</p>
-				<button class="btn mb-2" @click={ fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/waterfall')", data.ProjectID, data.RunID) } x-show="!loading">Generate Social Posts</button>
-				<p x-show="loading" class="text-muted">Creating...</p>
-				<div class="stream-output" x-show="content" x-text="content"></div>
-				<p x-show="error" style="color:red" x-text="error"></p>
-				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID)) } x-show="content && !loading" class="mt-2">
-					<input type="hidden" name="next_status" value="complete"/>
-					<button type="submit" class="btn">Mark Complete</button>
-				</form>
-			</div>
-		}
-
-		if data.Status == "complete" || data.Status == "abandoned" {
-			<div class="card">
-				<h3 class="mb-2">Pipeline { data.Status }</h3>
-				if data.Topic != "" {
-					<p class="text-muted mb-2">Topic: { data.Topic }</p>
+			if data.Status == "producing" || data.Status == "complete" || data.Status == "abandoned" {
+				if data.Plan != "" {
+					<div class="board-card">
+						<div class="board-card-header">
+							<h3>Production Plan</h3>
+							<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
+						</div>
+						<div class="board-card-body collapsed" id="plan-body">{ data.Plan }</div>
+					</div>
 				}
-			</div>
-		}
+			}
 
-		if len(data.Content) > 0 {
-			<h2 class="mt-2 mb-2">Generated Content</h2>
-			for _, piece := range data.Content {
-				<div class="card">
-					<div class="flex-between mb-1">
+			for _, piece := range data.Pieces {
+				<div
+					class={ "board-card",
+						templ.KV("board-card-cornerstone", piece.IsCornerstone),
+						templ.KV("board-card-pending", piece.Status == "pending"),
+						templ.KV("board-card-generating", piece.Status == "generating"),
+						templ.KV("board-card-draft", piece.Status == "draft"),
+						templ.KV("board-card-approved", piece.Status == "approved"),
+						templ.KV("board-card-rejected", piece.Status == "rejected"),
+					}
+					data-piece-id={ fmt.Sprintf("%d", piece.ID) }
+				>
+					<div class="board-card-header">
 						<div>
-							<span class="badge badge-ideating">{ piece.Type }</span>
-							<strong> { piece.Title }</strong>
+							<span class="badge badge-planning">{ piece.Platform }/{ piece.Format }</span>
+							if piece.IsCornerstone {
+								<span class="badge badge-approved" style="margin-left:0.25rem">cornerstone</span>
+							}
+							if piece.Title != "" {
+								<strong style="margin-left:0.5rem">{ piece.Title }</strong>
+							}
 						</div>
 						<span class={ "badge badge-" + piece.Status }>{ piece.Status }</span>
 					</div>
-					<p style="white-space:pre-wrap;max-height:200px;overflow:auto" class="text-muted">{ piece.Body }</p>
-					<div class="mt-2">
-						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, piece.ID)) } class="btn btn-secondary" style="font-size:0.75rem">Edit</a>
+
+					<div class={ "board-card-body", templ.KV("collapsed", piece.Status == "approved") } id={ fmt.Sprintf("piece-body-%d", piece.ID) }>
+						if piece.Body != "" {
+							{ piece.Body }
+						} else if piece.Status == "pending" {
+							<p class="text-muted">Waiting to be generated...</p>
+						}
+					</div>
+
+					if piece.RejectionReason != "" && piece.Status == "rejected" {
+						<p style="color:#dc2626;font-size:0.85rem;margin-bottom:0.5rem">Rejected: { piece.RejectionReason }</p>
+					}
+
+					<div class="board-card-actions" id={ fmt.Sprintf("piece-actions-%d", piece.ID) }>
+						if piece.Status == "pending" || piece.Status == "rejected" {
+							<button class="btn piece-generate-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Generate</button>
+						}
+						if piece.Status == "draft" {
+							<button class="btn piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>
+							<button class="btn btn-danger piece-reject-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Reject</button>
+							<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
+						}
+						if piece.Status == "approved" {
+							<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
+						}
+					</div>
+
+					<div class="improve-chat" id={ fmt.Sprintf("improve-chat-%d", piece.ID) } style="display:none">
+						<div class="improve-chat-messages" id={ fmt.Sprintf("improve-messages-%d", piece.ID) }></div>
+						<form class="improve-form" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>
+							<textarea placeholder="What should be improved?" style="min-height:60px" name="content"></textarea>
+							<button type="submit" class="btn" style="margin-top:0.25rem">Send &amp; Rewrite</button>
+						</form>
 					</div>
 				</div>
 			}
-		}
+		</div>
+	}
+}
 
-		if data.Status != "complete" && data.Status != "abandoned" {
-			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } class="mt-2">
-				<button type="submit" class="btn btn-danger">Abandon Run</button>
+templ ContentEditPage(data ContentEditData) {
+	@Layout("Edit Content") {
+		<div class="flex-between mb-4">
+			<h1>Edit Content</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary">Back</a>
+		</div>
+
+		<div class="card">
+			<div class="flex-between mb-2">
+				<span class="badge badge-planning">{ data.Piece.Platform }/{ data.Piece.Format }</span>
+				<span class={ "badge badge-" + data.Piece.Status }>{ data.Piece.Status }</span>
+			</div>
+
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, data.Piece.ID)) }>
+				<div class="form-group">
+					<label>Title</label>
+					<input type="text" name="title" value={ data.Piece.Title }/>
+				</div>
+				<div class="form-group">
+					<label>Body</label>
+					<textarea name="body" style="min-height:400px">{ data.Piece.Body }</textarea>
+				</div>
+				<button type="submit" class="btn">Save</button>
+				if data.Piece.Status == "draft" {
+					<button type="submit" name="action" value="approve" class="btn" style="margin-left:0.5rem;background:#059669">Approve</button>
+				}
 			</form>
-		}
+		</div>
 	}
 }

@@ -3,12 +3,11 @@ package templates
 import "fmt"
 
 type ProjectDetail struct {
-	ID           int64
-	Name         string
-	Description  string
-	HasProfile   bool
-	ContentCount int
-	RunCount     int
+	ID          int64
+	Name        string
+	Description string
+	HasProfile  bool
+	RunCount    int
 }
 
 templ ProjectOverview(p ProjectDetail) {
@@ -35,7 +34,6 @@ templ ProjectOverview(p ProjectDetail) {
 
 			<div class="card">
 				<h3>Content Pipeline</h3>
-				<p class="mb-1 text-muted">{ fmt.Sprintf("%d pieces created", p.ContentCount) }</p>
 				<p class="mb-2 text-muted">{ fmt.Sprintf("%d pipeline runs", p.RunCount) }</p>
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn">Pipeline Runs</a>
 			</div>

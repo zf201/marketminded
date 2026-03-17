@@ -51,7 +51,7 @@ func PipelineListPage(data PipelineListData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1><div><a href=\"")
+			_, err = templBuffer.WriteString("</h1><a href=\"")
 			if err != nil {
 				return err
 			}
@@ -69,7 +69,7 @@ func PipelineListPage(data PipelineListData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a><form method=\"POST\" action=\"")
+			_, err = templBuffer.WriteString("</a></div> <form method=\"POST\" action=\"")
 			if err != nil {
 				return err
 			}
@@ -77,16 +77,25 @@ func PipelineListPage(data PipelineListData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn\">")
+			_, err = templBuffer.WriteString("\" class=\"card mb-2\"><div class=\"form-group\"><label>")
 			if err != nil {
 				return err
 			}
-			var_6 := `New Run`
+			var_6 := `Topic`
 			_, err = templBuffer.WriteString(var_6)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</button></form></div></div> ")
+			_, err = templBuffer.WriteString("</label><input type=\"text\" name=\"topic\" required placeholder=\"What should the content be about?\"></div><button type=\"submit\" class=\"btn\">")
+			if err != nil {
+				return err
+			}
+			var_7 := `Start New Run`
+			_, err = templBuffer.WriteString(var_7)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</button></form> ")
 			if err != nil {
 				return err
 			}
@@ -95,8 +104,8 @@ func PipelineListPage(data PipelineListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_7 := `No pipeline runs yet. Start one to generate content.`
-				_, err = templBuffer.WriteString(var_7)
+				var_8 := `No pipeline runs yet. Enter a topic above to start.`
+				_, err = templBuffer.WriteString(var_8)
 				if err != nil {
 					return err
 				}
@@ -114,8 +123,8 @@ func PipelineListPage(data PipelineListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_8 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, run.ID))
-				_, err = templBuffer.WriteString(templ.EscapeString(string(var_8)))
+				var var_9 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, run.ID))
+				_, err = templBuffer.WriteString(templ.EscapeString(string(var_9)))
 				if err != nil {
 					return err
 				}
@@ -123,46 +132,17 @@ func PipelineListPage(data PipelineListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_9 := `Run #`
-				_, err = templBuffer.WriteString(var_9)
-				if err != nil {
-					return err
-				}
-				var var_10 string = fmt.Sprintf("%d", run.ID)
+				var var_10 string = run.Topic
 				_, err = templBuffer.WriteString(templ.EscapeString(var_10))
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</strong>")
+				_, err = templBuffer.WriteString("</strong></div>")
 				if err != nil {
 					return err
 				}
-				if run.Topic != "" {
-					_, err = templBuffer.WriteString("<span class=\"text-muted\">")
-					if err != nil {
-						return err
-					}
-					var_11 := `— `
-					_, err = templBuffer.WriteString(var_11)
-					if err != nil {
-						return err
-					}
-					var var_12 string = run.Topic
-					_, err = templBuffer.WriteString(templ.EscapeString(var_12))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</span>")
-					if err != nil {
-						return err
-					}
-				}
-				_, err = templBuffer.WriteString("</div>")
-				if err != nil {
-					return err
-				}
-				var var_13 = []any{"badge badge-" + run.Status}
-				err = templ.RenderCSSItems(ctx, templBuffer, var_13...)
+				var var_11 = []any{"badge badge-" + run.Status}
+				err = templ.RenderCSSItems(ctx, templBuffer, var_11...)
 				if err != nil {
 					return err
 				}
@@ -170,7 +150,7 @@ func PipelineListPage(data PipelineListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_13).String()))
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_11).String()))
 				if err != nil {
 					return err
 				}
@@ -178,8 +158,8 @@ func PipelineListPage(data PipelineListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_14 string = run.Status
-				_, err = templBuffer.WriteString(templ.EscapeString(var_14))
+				var var_12 string = run.Status
+				_, err = templBuffer.WriteString(templ.EscapeString(var_12))
 				if err != nil {
 					return err
 				}
@@ -204,24 +184,35 @@ func PipelineListPage(data PipelineListData) templ.Component {
 	})
 }
 
-type PipelineRunData struct {
+type ProductionBoardData struct {
 	ProjectID   int64
 	ProjectName string
 	RunID       int64
-	Status      string
 	Topic       string
-	Content     []ContentPieceView
+	Plan        string
+	Status      string
+	Pieces      []ContentPieceView
+	NextPieceID int64
 }
 
 type ContentPieceView struct {
-	ID     int64
-	Type   string
-	Title  string
-	Body   string
-	Status string
+	ID              int64
+	Platform        string
+	Format          string
+	Title           string
+	Body            string
+	Status          string
+	SortOrder       int
+	RejectionReason string
+	IsCornerstone   bool
 }
 
-func PipelineRunPage(data PipelineRunData) templ.Component {
+type ContentEditData struct {
+	ProjectID int64
+	Piece     ContentPieceView
+}
+
+func ProductionBoardPage(data ProductionBoardData) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		templBuffer, templIsBuffer := w.(*bytes.Buffer)
 		if !templIsBuffer {
@@ -229,37 +220,56 @@ func PipelineRunPage(data PipelineRunData) templ.Component {
 			defer templ.ReleaseBuffer(templBuffer)
 		}
 		ctx = templ.InitializeContext(ctx)
-		var_15 := templ.GetChildren(ctx)
-		if var_15 == nil {
-			var_15 = templ.NopComponent
+		var_13 := templ.GetChildren(ctx)
+		if var_13 == nil {
+			var_13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var_16 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+		var_14 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 			templBuffer, templIsBuffer := w.(*bytes.Buffer)
 			if !templIsBuffer {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex-between mb-4\"><h1>")
+			_, err = templBuffer.WriteString("<div id=\"production-board\" data-project-id=\"")
 			if err != nil {
 				return err
 			}
-			var_17 := `Pipeline Run #`
-			_, err = templBuffer.WriteString(var_17)
+			_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", data.ProjectID)))
 			if err != nil {
 				return err
 			}
-			var var_18 string = fmt.Sprintf("%d", data.RunID)
-			_, err = templBuffer.WriteString(templ.EscapeString(var_18))
+			_, err = templBuffer.WriteString("\" data-run-id=\"")
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1><div>")
+			_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", data.RunID)))
 			if err != nil {
 				return err
 			}
-			var var_19 = []any{"badge badge-" + data.Status}
-			err = templ.RenderCSSItems(ctx, templBuffer, var_19...)
+			_, err = templBuffer.WriteString("\" data-next-piece-id=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", data.NextPieceID)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\"><div class=\"board-header flex-between mb-4\"><div><h1>")
+			if err != nil {
+				return err
+			}
+			var var_15 string = data.Topic
+			_, err = templBuffer.WriteString(templ.EscapeString(var_15))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</h1>")
+			if err != nil {
+				return err
+			}
+			var var_16 = []any{"badge badge-" + data.Status}
+			err = templ.RenderCSSItems(ctx, templBuffer, var_16...)
 			if err != nil {
 				return err
 			}
@@ -267,7 +277,7 @@ func PipelineRunPage(data PipelineRunData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_19).String()))
+			_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_16).String()))
 			if err != nil {
 				return err
 			}
@@ -275,405 +285,30 @@ func PipelineRunPage(data PipelineRunData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_20 string = data.Status
-			_, err = templBuffer.WriteString(templ.EscapeString(var_20))
+			var var_17 string = data.Status
+			_, err = templBuffer.WriteString(templ.EscapeString(var_17))
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</span><a href=\"")
+			_, err = templBuffer.WriteString("</span></div><div><a href=\"")
 			if err != nil {
 				return err
 			}
-			var var_21 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_21)))
+			var var_18 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_18)))
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\" style=\"margin-left:0.5rem\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
 			if err != nil {
 				return err
 			}
-			var_22 := `Back`
-			_, err = templBuffer.WriteString(var_22)
+			var_19 := `Back`
+			_, err = templBuffer.WriteString(var_19)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div></div> ")
-			if err != nil {
-				return err
-			}
-			if data.Status == "ideating" {
-				_, err = templBuffer.WriteString("<div class=\"card\" x-data=\"streamOutput\"><h3 class=\"mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_23 := `Stage 1: Ideation`
-				_, err = templBuffer.WriteString(var_23)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</h3><p class=\"text-muted mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_24 := `AI will research trends and suggest pillar topics.`
-				_, err = templBuffer.WriteString(var_24)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</p><button class=\"btn mb-2\" @click=\"")
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/ideate')", data.ProjectID, data.RunID)))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("\" x-show=\"!loading\">")
-				if err != nil {
-					return err
-				}
-				var_25 := `Generate Ideas`
-				_, err = templBuffer.WriteString(var_25)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</button><p x-show=\"loading\" class=\"text-muted\">")
-				if err != nil {
-					return err
-				}
-				var_26 := `Generating...`
-				_, err = templBuffer.WriteString(var_26)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</p><div class=\"stream-output\" x-show=\"content\" x-text=\"content\"></div><p x-show=\"error\" style=\"color:red\" x-text=\"error\"></p><form method=\"POST\" action=\"")
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID))))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("\" x-show=\"content &amp;&amp; !loading\" class=\"mt-2\"><input type=\"hidden\" name=\"next_status\" value=\"creating_pillar\"><div class=\"form-group\"><label>")
-				if err != nil {
-					return err
-				}
-				var_27 := `Selected Topic`
-				_, err = templBuffer.WriteString(var_27)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</label><input type=\"text\" name=\"topic\" required placeholder=\"Type or paste the topic you chose\"></div><button type=\"submit\" class=\"btn\">")
-				if err != nil {
-					return err
-				}
-				var_28 := `Select Topic &amp; Continue`
-				_, err = templBuffer.WriteString(var_28)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</button></form></div>")
-				if err != nil {
-					return err
-				}
-			}
-			_, err = templBuffer.WriteString(" ")
-			if err != nil {
-				return err
-			}
-			if data.Status == "creating_pillar" {
-				_, err = templBuffer.WriteString("<div class=\"card\" x-data=\"streamOutput\"><h3 class=\"mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_29 := `Stage 2: Create Pillar`
-				_, err = templBuffer.WriteString(var_29)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</h3><p class=\"text-muted mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_30 := `Topic: `
-				_, err = templBuffer.WriteString(var_30)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("<strong>")
-				if err != nil {
-					return err
-				}
-				var var_31 string = data.Topic
-				_, err = templBuffer.WriteString(templ.EscapeString(var_31))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</strong></p><button class=\"btn mb-2\" @click=\"")
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/pillar')", data.ProjectID, data.RunID)))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("\" x-show=\"!loading\">")
-				if err != nil {
-					return err
-				}
-				var_32 := `Generate Blog Post`
-				_, err = templBuffer.WriteString(var_32)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</button><p x-show=\"loading\" class=\"text-muted\">")
-				if err != nil {
-					return err
-				}
-				var_33 := `Writing...`
-				_, err = templBuffer.WriteString(var_33)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</p><div class=\"stream-output\" x-show=\"content\" x-text=\"content\"></div><p x-show=\"error\" style=\"color:red\" x-text=\"error\"></p><form method=\"POST\" action=\"")
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID))))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("\" x-show=\"content &amp;&amp; !loading\" class=\"mt-2\"><input type=\"hidden\" name=\"next_status\" value=\"waterfalling\"><button type=\"submit\" class=\"btn\">")
-				if err != nil {
-					return err
-				}
-				var_34 := `Approve &amp; Continue to Waterfall`
-				_, err = templBuffer.WriteString(var_34)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</button></form></div>")
-				if err != nil {
-					return err
-				}
-			}
-			_, err = templBuffer.WriteString(" ")
-			if err != nil {
-				return err
-			}
-			if data.Status == "waterfalling" {
-				_, err = templBuffer.WriteString("<div class=\"card\" x-data=\"streamOutput\"><h3 class=\"mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_35 := `Stage 3: Content Waterfall`
-				_, err = templBuffer.WriteString(var_35)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</h3><p class=\"text-muted mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_36 := `Generating social posts from pillar content.`
-				_, err = templBuffer.WriteString(var_36)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</p><button class=\"btn mb-2\" @click=\"")
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("startStream('/projects/%d/pipeline/%d/stream/waterfall')", data.ProjectID, data.RunID)))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("\" x-show=\"!loading\">")
-				if err != nil {
-					return err
-				}
-				var_37 := `Generate Social Posts`
-				_, err = templBuffer.WriteString(var_37)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</button><p x-show=\"loading\" class=\"text-muted\">")
-				if err != nil {
-					return err
-				}
-				var_38 := `Creating...`
-				_, err = templBuffer.WriteString(var_38)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</p><div class=\"stream-output\" x-show=\"content\" x-text=\"content\"></div><p x-show=\"error\" style=\"color:red\" x-text=\"error\"></p><form method=\"POST\" action=\"")
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/advance", data.ProjectID, data.RunID))))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("\" x-show=\"content &amp;&amp; !loading\" class=\"mt-2\"><input type=\"hidden\" name=\"next_status\" value=\"complete\"><button type=\"submit\" class=\"btn\">")
-				if err != nil {
-					return err
-				}
-				var_39 := `Mark Complete`
-				_, err = templBuffer.WriteString(var_39)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</button></form></div>")
-				if err != nil {
-					return err
-				}
-			}
-			_, err = templBuffer.WriteString(" ")
-			if err != nil {
-				return err
-			}
-			if data.Status == "complete" || data.Status == "abandoned" {
-				_, err = templBuffer.WriteString("<div class=\"card\"><h3 class=\"mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_40 := `Pipeline `
-				_, err = templBuffer.WriteString(var_40)
-				if err != nil {
-					return err
-				}
-				var var_41 string = data.Status
-				_, err = templBuffer.WriteString(templ.EscapeString(var_41))
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</h3>")
-				if err != nil {
-					return err
-				}
-				if data.Topic != "" {
-					_, err = templBuffer.WriteString("<p class=\"text-muted mb-2\">")
-					if err != nil {
-						return err
-					}
-					var_42 := `Topic: `
-					_, err = templBuffer.WriteString(var_42)
-					if err != nil {
-						return err
-					}
-					var var_43 string = data.Topic
-					_, err = templBuffer.WriteString(templ.EscapeString(var_43))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</p>")
-					if err != nil {
-						return err
-					}
-				}
-				_, err = templBuffer.WriteString("</div>")
-				if err != nil {
-					return err
-				}
-			}
-			_, err = templBuffer.WriteString(" ")
-			if err != nil {
-				return err
-			}
-			if len(data.Content) > 0 {
-				_, err = templBuffer.WriteString("<h2 class=\"mt-2 mb-2\">")
-				if err != nil {
-					return err
-				}
-				var_44 := `Generated Content`
-				_, err = templBuffer.WriteString(var_44)
-				if err != nil {
-					return err
-				}
-				_, err = templBuffer.WriteString("</h2> ")
-				if err != nil {
-					return err
-				}
-				for _, piece := range data.Content {
-					_, err = templBuffer.WriteString("<div class=\"card\"><div class=\"flex-between mb-1\"><div><span class=\"badge badge-ideating\">")
-					if err != nil {
-						return err
-					}
-					var var_45 string = piece.Type
-					_, err = templBuffer.WriteString(templ.EscapeString(var_45))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</span><strong>")
-					if err != nil {
-						return err
-					}
-					var var_46 string = piece.Title
-					_, err = templBuffer.WriteString(templ.EscapeString(var_46))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</strong></div>")
-					if err != nil {
-						return err
-					}
-					var var_47 = []any{"badge badge-" + piece.Status}
-					err = templ.RenderCSSItems(ctx, templBuffer, var_47...)
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("<span class=\"")
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_47).String()))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("\">")
-					if err != nil {
-						return err
-					}
-					var var_48 string = piece.Status
-					_, err = templBuffer.WriteString(templ.EscapeString(var_48))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</span></div><p style=\"white-space:pre-wrap;max-height:200px;overflow:auto\" class=\"text-muted\">")
-					if err != nil {
-						return err
-					}
-					var var_49 string = piece.Body
-					_, err = templBuffer.WriteString(templ.EscapeString(var_49))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</p><div class=\"mt-2\"><a href=\"")
-					if err != nil {
-						return err
-					}
-					var var_50 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, piece.ID))
-					_, err = templBuffer.WriteString(templ.EscapeString(string(var_50)))
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\" style=\"font-size:0.75rem\">")
-					if err != nil {
-						return err
-					}
-					var_51 := `Edit`
-					_, err = templBuffer.WriteString(var_51)
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</a></div></div>")
-					if err != nil {
-						return err
-					}
-				}
-			}
-			_, err = templBuffer.WriteString(" ")
+			_, err = templBuffer.WriteString("</a>")
 			if err != nil {
 				return err
 			}
@@ -686,12 +321,12 @@ func PipelineRunPage(data PipelineRunData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\" class=\"mt-2\"><button type=\"submit\" class=\"btn btn-danger\">")
+				_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn btn-danger\" style=\"margin-left:0.5rem\">")
 				if err != nil {
 					return err
 				}
-				var_52 := `Abandon Run`
-				_, err = templBuffer.WriteString(var_52)
+				var_20 := `Abandon`
+				_, err = templBuffer.WriteString(var_20)
 				if err != nil {
 					return err
 				}
@@ -700,12 +335,689 @@ func PipelineRunPage(data PipelineRunData) templ.Component {
 					return err
 				}
 			}
+			_, err = templBuffer.WriteString("</div></div>")
+			if err != nil {
+				return err
+			}
+			if data.Status == "planning" {
+				_, err = templBuffer.WriteString("<div class=\"board-card\" id=\"plan-card\"><div class=\"board-card-header\"><h3>")
+				if err != nil {
+					return err
+				}
+				var_21 := `Production Plan`
+				_, err = templBuffer.WriteString(var_21)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</h3><span class=\"badge badge-planning\">")
+				if err != nil {
+					return err
+				}
+				var_22 := `planning`
+				_, err = templBuffer.WriteString(var_22)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</span></div>")
+				if err != nil {
+					return err
+				}
+				if data.Plan != "" {
+					_, err = templBuffer.WriteString("<div class=\"board-card-body\" id=\"plan-body\">")
+					if err != nil {
+						return err
+					}
+					var var_23 string = data.Plan
+					_, err = templBuffer.WriteString(templ.EscapeString(var_23))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</div> <div class=\"board-card-actions\"><form method=\"POST\" action=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/approve-plan", data.ProjectID, data.RunID))))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn\">")
+					if err != nil {
+						return err
+					}
+					var_24 := `Approve Plan`
+					_, err = templBuffer.WriteString(var_24)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button></form><form method=\"POST\" action=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/reject-plan", data.ProjectID, data.RunID))))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\" style=\"display:inline\"><input type=\"text\" name=\"reason\" placeholder=\"Rejection reason (optional)\" style=\"width:auto;display:inline;margin:0\"><button type=\"submit\" class=\"btn btn-secondary\">")
+					if err != nil {
+						return err
+					}
+					var_25 := `Reject &amp; Re-plan`
+					_, err = templBuffer.WriteString(var_25)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button></form></div>")
+					if err != nil {
+						return err
+					}
+				} else {
+					_, err = templBuffer.WriteString("<div class=\"board-card-body\" id=\"plan-body\"><p class=\"text-muted\">")
+					if err != nil {
+						return err
+					}
+					var_26 := `Click Generate to create a production plan.`
+					_, err = templBuffer.WriteString(var_26)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</p></div> <div class=\"board-card-actions\"><button class=\"btn\" id=\"generate-plan-btn\">")
+					if err != nil {
+						return err
+					}
+					var_27 := `Generate Plan`
+					_, err = templBuffer.WriteString(var_27)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button></div>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</div>")
+				if err != nil {
+					return err
+				}
+			}
+			if data.Status == "producing" || data.Status == "complete" || data.Status == "abandoned" {
+				if data.Plan != "" {
+					_, err = templBuffer.WriteString("<div class=\"board-card\"><div class=\"board-card-header\"><h3>")
+					if err != nil {
+						return err
+					}
+					var_28 := `Production Plan`
+					_, err = templBuffer.WriteString(var_28)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</h3>")
+					if err != nil {
+						return err
+					}
+					var var_29 = []any{"badge badge-" + data.Status}
+					err = templ.RenderCSSItems(ctx, templBuffer, var_29...)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("<span class=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_29).String()))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\">")
+					if err != nil {
+						return err
+					}
+					var var_30 string = data.Status
+					_, err = templBuffer.WriteString(templ.EscapeString(var_30))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</span></div><div class=\"board-card-body collapsed\" id=\"plan-body\">")
+					if err != nil {
+						return err
+					}
+					var var_31 string = data.Plan
+					_, err = templBuffer.WriteString(templ.EscapeString(var_31))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</div></div>")
+					if err != nil {
+						return err
+					}
+				}
+			}
+			for _, piece := range data.Pieces {
+				var var_32 = []any{"board-card",
+					templ.KV("board-card-cornerstone", piece.IsCornerstone),
+					templ.KV("board-card-pending", piece.Status == "pending"),
+					templ.KV("board-card-generating", piece.Status == "generating"),
+					templ.KV("board-card-draft", piece.Status == "draft"),
+					templ.KV("board-card-approved", piece.Status == "approved"),
+					templ.KV("board-card-rejected", piece.Status == "rejected"),
+				}
+				err = templ.RenderCSSItems(ctx, templBuffer, var_32...)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("<div class=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_32).String()))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" data-piece-id=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\"><div class=\"board-card-header\"><div><span class=\"badge badge-planning\">")
+				if err != nil {
+					return err
+				}
+				var var_33 string = piece.Platform
+				_, err = templBuffer.WriteString(templ.EscapeString(var_33))
+				if err != nil {
+					return err
+				}
+				var_34 := `/`
+				_, err = templBuffer.WriteString(var_34)
+				if err != nil {
+					return err
+				}
+				var var_35 string = piece.Format
+				_, err = templBuffer.WriteString(templ.EscapeString(var_35))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</span>")
+				if err != nil {
+					return err
+				}
+				if piece.IsCornerstone {
+					_, err = templBuffer.WriteString("<span class=\"badge badge-approved\" style=\"margin-left:0.25rem\">")
+					if err != nil {
+						return err
+					}
+					var_36 := `cornerstone`
+					_, err = templBuffer.WriteString(var_36)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</span>")
+					if err != nil {
+						return err
+					}
+				}
+				if piece.Title != "" {
+					_, err = templBuffer.WriteString("<strong style=\"margin-left:0.5rem\">")
+					if err != nil {
+						return err
+					}
+					var var_37 string = piece.Title
+					_, err = templBuffer.WriteString(templ.EscapeString(var_37))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</strong>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</div>")
+				if err != nil {
+					return err
+				}
+				var var_38 = []any{"badge badge-" + piece.Status}
+				err = templ.RenderCSSItems(ctx, templBuffer, var_38...)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("<span class=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_38).String()))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\">")
+				if err != nil {
+					return err
+				}
+				var var_39 string = piece.Status
+				_, err = templBuffer.WriteString(templ.EscapeString(var_39))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</span></div>")
+				if err != nil {
+					return err
+				}
+				var var_40 = []any{"board-card-body", templ.KV("collapsed", piece.Status == "approved")}
+				err = templ.RenderCSSItems(ctx, templBuffer, var_40...)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("<div class=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_40).String()))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" id=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("piece-body-%d", piece.ID)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\">")
+				if err != nil {
+					return err
+				}
+				if piece.Body != "" {
+					var var_41 string = piece.Body
+					_, err = templBuffer.WriteString(templ.EscapeString(var_41))
+					if err != nil {
+						return err
+					}
+				} else if piece.Status == "pending" {
+					_, err = templBuffer.WriteString("<p class=\"text-muted\">")
+					if err != nil {
+						return err
+					}
+					var_42 := `Waiting to be generated...`
+					_, err = templBuffer.WriteString(var_42)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</p>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</div>")
+				if err != nil {
+					return err
+				}
+				if piece.RejectionReason != "" && piece.Status == "rejected" {
+					_, err = templBuffer.WriteString("<p style=\"color:#dc2626;font-size:0.85rem;margin-bottom:0.5rem\">")
+					if err != nil {
+						return err
+					}
+					var_43 := `Rejected: `
+					_, err = templBuffer.WriteString(var_43)
+					if err != nil {
+						return err
+					}
+					var var_44 string = piece.RejectionReason
+					_, err = templBuffer.WriteString(templ.EscapeString(var_44))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</p>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("<div class=\"board-card-actions\" id=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("piece-actions-%d", piece.ID)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\">")
+				if err != nil {
+					return err
+				}
+				if piece.Status == "pending" || piece.Status == "rejected" {
+					_, err = templBuffer.WriteString("<button class=\"btn piece-generate-btn\" data-piece-id=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\">")
+					if err != nil {
+						return err
+					}
+					var_45 := `Generate`
+					_, err = templBuffer.WriteString(var_45)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button>")
+					if err != nil {
+						return err
+					}
+				}
+				if piece.Status == "draft" {
+					_, err = templBuffer.WriteString("<button class=\"btn piece-approve-btn\" data-piece-id=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\">")
+					if err != nil {
+						return err
+					}
+					var_46 := `Approve`
+					_, err = templBuffer.WriteString(var_46)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button> <button class=\"btn btn-danger piece-reject-btn\" data-piece-id=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\">")
+					if err != nil {
+						return err
+					}
+					var_47 := `Reject`
+					_, err = templBuffer.WriteString(var_47)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary piece-improve-btn\" data-piece-id=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\">")
+					if err != nil {
+						return err
+					}
+					var_48 := `Improve`
+					_, err = templBuffer.WriteString(var_48)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button>")
+					if err != nil {
+						return err
+					}
+				}
+				if piece.Status == "approved" {
+					_, err = templBuffer.WriteString("<button class=\"btn btn-secondary piece-improve-btn\" data-piece-id=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\">")
+					if err != nil {
+						return err
+					}
+					var_49 := `Improve`
+					_, err = templBuffer.WriteString(var_49)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</div><div class=\"improve-chat\" id=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("improve-chat-%d", piece.ID)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" style=\"display:none\"><div class=\"improve-chat-messages\" id=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("improve-messages-%d", piece.ID)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\"></div><form class=\"improve-form\" data-piece-id=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\"><textarea placeholder=\"What should be improved?\" style=\"min-height:60px\" name=\"content\"></textarea><button type=\"submit\" class=\"btn\" style=\"margin-top:0.25rem\">")
+				if err != nil {
+					return err
+				}
+				var_50 := `Send &amp; Rewrite`
+				_, err = templBuffer.WriteString(var_50)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</button></form></div></div>")
+				if err != nil {
+					return err
+				}
+			}
+			_, err = templBuffer.WriteString("</div>")
+			if err != nil {
+				return err
+			}
 			if !templIsBuffer {
 				_, err = io.Copy(w, templBuffer)
 			}
 			return err
 		})
-		err = Layout(fmt.Sprintf("Run #%d", data.RunID)).Render(templ.WithChildren(ctx, var_16), templBuffer)
+		err = Layout(fmt.Sprintf("Pipeline: %s", data.Topic)).Render(templ.WithChildren(ctx, var_14), templBuffer)
+		if err != nil {
+			return err
+		}
+		if !templIsBuffer {
+			_, err = templBuffer.WriteTo(w)
+		}
+		return err
+	})
+}
+
+func ContentEditPage(data ContentEditData) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+		templBuffer, templIsBuffer := w.(*bytes.Buffer)
+		if !templIsBuffer {
+			templBuffer = templ.GetBuffer()
+			defer templ.ReleaseBuffer(templBuffer)
+		}
+		ctx = templ.InitializeContext(ctx)
+		var_51 := templ.GetChildren(ctx)
+		if var_51 == nil {
+			var_51 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		var_52 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+			templBuffer, templIsBuffer := w.(*bytes.Buffer)
+			if !templIsBuffer {
+				templBuffer = templ.GetBuffer()
+				defer templ.ReleaseBuffer(templBuffer)
+			}
+			_, err = templBuffer.WriteString("<div class=\"flex-between mb-4\"><h1>")
+			if err != nil {
+				return err
+			}
+			var_53 := `Edit Content`
+			_, err = templBuffer.WriteString(var_53)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</h1><a href=\"")
+			if err != nil {
+				return err
+			}
+			var var_54 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_54)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
+			if err != nil {
+				return err
+			}
+			var_55 := `Back`
+			_, err = templBuffer.WriteString(var_55)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</a></div> <div class=\"card\"><div class=\"flex-between mb-2\"><span class=\"badge badge-planning\">")
+			if err != nil {
+				return err
+			}
+			var var_56 string = data.Piece.Platform
+			_, err = templBuffer.WriteString(templ.EscapeString(var_56))
+			if err != nil {
+				return err
+			}
+			var_57 := `/`
+			_, err = templBuffer.WriteString(var_57)
+			if err != nil {
+				return err
+			}
+			var var_58 string = data.Piece.Format
+			_, err = templBuffer.WriteString(templ.EscapeString(var_58))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</span>")
+			if err != nil {
+				return err
+			}
+			var var_59 = []any{"badge badge-" + data.Piece.Status}
+			err = templ.RenderCSSItems(ctx, templBuffer, var_59...)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("<span class=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_59).String()))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\">")
+			if err != nil {
+				return err
+			}
+			var var_60 string = data.Piece.Status
+			_, err = templBuffer.WriteString(templ.EscapeString(var_60))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</span></div><form method=\"POST\" action=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, data.Piece.ID))))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\"><div class=\"form-group\"><label>")
+			if err != nil {
+				return err
+			}
+			var_61 := `Title`
+			_, err = templBuffer.WriteString(var_61)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</label><input type=\"text\" name=\"title\" value=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(data.Piece.Title))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\"></div><div class=\"form-group\"><label>")
+			if err != nil {
+				return err
+			}
+			var_62 := `Body`
+			_, err = templBuffer.WriteString(var_62)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</label><textarea name=\"body\" style=\"min-height:400px\">")
+			if err != nil {
+				return err
+			}
+			var var_63 string = data.Piece.Body
+			_, err = templBuffer.WriteString(templ.EscapeString(var_63))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</textarea></div><button type=\"submit\" class=\"btn\">")
+			if err != nil {
+				return err
+			}
+			var_64 := `Save`
+			_, err = templBuffer.WriteString(var_64)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</button>")
+			if err != nil {
+				return err
+			}
+			if data.Piece.Status == "draft" {
+				_, err = templBuffer.WriteString("<button type=\"submit\" name=\"action\" value=\"approve\" class=\"btn\" style=\"margin-left:0.5rem;background:#059669\">")
+				if err != nil {
+					return err
+				}
+				var_65 := `Approve`
+				_, err = templBuffer.WriteString(var_65)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</button>")
+				if err != nil {
+					return err
+				}
+			}
+			_, err = templBuffer.WriteString("</form></div>")
+			if err != nil {
+				return err
+			}
+			if !templIsBuffer {
+				_, err = io.Copy(w, templBuffer)
+			}
+			return err
+		})
+		err = Layout("Edit Content").Render(templ.WithChildren(ctx, var_52), templBuffer)
 		if err != nil {
 			return err
 		}
