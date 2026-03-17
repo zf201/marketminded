@@ -679,23 +679,7 @@ func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, proj
 		language = "English"
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
-	}
-
-	sendEvent := func(v any) {
-		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
-	}
-
-	// Single pass: stream the corrected version
+	// Non-streaming — returns JSON result for the frontend to display
 	correctPrompt := fmt.Sprintf(`You are a proofreader. Fix grammar, spelling, and punctuation in the following content. The content language is %s.
 
 Rules:
@@ -707,23 +691,17 @@ Rules:
 Content to proofread:
 %s`, language, piece.Body)
 
-	sendChunk := func(chunk string) error {
-		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
-		return nil
-	}
-
-	corrected, err := h.aiClient.Stream(r.Context(), h.model(), []types.Message{
+	corrected, err := h.aiClient.Complete(r.Context(), h.model(), []types.Message{
 		{Role: "user", Content: correctPrompt},
-	}, sendChunk)
+	})
 	if err != nil {
-		sendEvent(map[string]string{"type": "error", "error": err.Error()})
+		http.Error(w, "Proofread failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Send the corrected content as a "proofread_result" event for the frontend to offer accept/reject
 	corrected = strings.TrimSpace(corrected)
-	sendEvent(map[string]any{"type": "proofread_result", "corrected": corrected, "piece_id": pieceID})
-	sendEvent(map[string]string{"type": "done"})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"corrected": corrected, "piece_id": pieceID})
 }
 
 func (h *PipelineHandler) saveProofread(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {

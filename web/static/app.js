@@ -1127,10 +1127,12 @@ function initProductionBoard(projectID, runID) {
         }
     });
 
-    // Proofread buttons — stream corrected version in modal, offer accept/reject
+    // Proofread buttons — fetch corrected version, show in modal with accept/reject
     document.querySelectorAll('.proofread-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var pieceId = btn.dataset.pieceId;
+            btn.disabled = true;
+            btn.textContent = 'Proofreading...';
 
             var overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center';
@@ -1142,30 +1144,29 @@ function initProductionBoard(projectID, runID) {
             title.style.marginBottom = '1rem';
             modal.appendChild(title);
 
+            var spinner = document.createElement('div');
+            spinner.className = 'text-muted';
+            spinner.style.cssText = 'text-align:center;padding:2rem';
+            spinner.textContent = 'AI is checking grammar, spelling, and punctuation...';
+            modal.appendChild(spinner);
+
             var output = document.createElement('div');
-            output.style.cssText = 'white-space:pre-wrap;font-size:0.85rem;line-height:1.5;overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:1rem;min-height:200px';
+            output.style.cssText = 'white-space:pre-wrap;font-size:0.85rem;line-height:1.5;overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:1rem;min-height:200px;display:none';
             modal.appendChild(output);
 
             var actions = document.createElement('div');
-            actions.style.cssText = 'display:flex;gap:0.5rem';
-            actions.style.display = 'none';
+            actions.style.cssText = 'display:none;gap:0.5rem';
             modal.appendChild(actions);
 
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
 
-            var correctedContent = '';
-
-            var source = new EventSource(basePath + '/piece/' + pieceId + '/proofread');
-            source.onmessage = function(event) {
-                var d = JSON.parse(event.data);
-                if (d.type === 'chunk') {
-                    output.textContent += d.chunk;
-                    output.scrollTop = output.scrollHeight;
-                } else if (d.type === 'proofread_result') {
-                    correctedContent = d.corrected;
-                } else if (d.type === 'done') {
-                    source.close();
+            fetch(basePath + '/piece/' + pieceId + '/proofread')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    spinner.style.display = 'none';
+                    output.style.display = 'block';
+                    output.textContent = data.corrected;
                     title.textContent = 'Proofread Complete — Accept changes?';
                     actions.style.display = 'flex';
 
@@ -1177,7 +1178,7 @@ function initProductionBoard(projectID, runID) {
                         form.method = 'POST';
                         form.action = basePath + '/piece/' + pieceId + '/save-proofread';
                         var inp = document.createElement('input');
-                        inp.type = 'hidden'; inp.name = 'corrected'; inp.value = correctedContent;
+                        inp.type = 'hidden'; inp.name = 'corrected'; inp.value = data.corrected;
                         form.appendChild(inp);
                         document.body.appendChild(form);
                         form.submit();
@@ -1187,29 +1188,18 @@ function initProductionBoard(projectID, runID) {
                     var rejectBtn = document.createElement('button');
                     rejectBtn.className = 'btn btn-secondary';
                     rejectBtn.textContent = 'Reject';
-                    rejectBtn.onclick = function() { overlay.remove(); };
+                    rejectBtn.onclick = function() { overlay.remove(); btn.disabled = false; btn.textContent = 'Proofread'; };
                     actions.appendChild(rejectBtn);
-                } else if (d.type === 'error') {
-                    source.close();
-                    output.textContent += '\nError: ' + d.error;
+                })
+                .catch(function(err) {
+                    spinner.textContent = 'Error: ' + err.message;
                     var closeBtn = document.createElement('button');
                     closeBtn.className = 'btn btn-secondary';
                     closeBtn.textContent = 'Close';
-                    closeBtn.onclick = function() { overlay.remove(); };
+                    closeBtn.onclick = function() { overlay.remove(); btn.disabled = false; btn.textContent = 'Proofread'; };
                     actions.style.display = 'flex';
                     actions.appendChild(closeBtn);
-                }
-            };
-            source.onerror = function() {
-                source.close();
-                title.textContent = 'Connection lost';
-                var closeBtn = document.createElement('button');
-                closeBtn.className = 'btn btn-secondary';
-                closeBtn.textContent = 'Close';
-                closeBtn.onclick = function() { overlay.remove(); };
-                actions.style.display = 'flex';
-                actions.appendChild(closeBtn);
-            };
+                });
         });
     });
 }
