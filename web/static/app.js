@@ -954,6 +954,233 @@ function renderYoutubeScript(el, data) {
     }
 }
 
+// --- Unified Content Modal (improve + proofread) ---
+
+function openContentModal(opts) {
+    var mode = opts.mode; // 'improve' or 'proofread'
+    var pieceId = opts.pieceId;
+    var platform = opts.platform;
+    var format = opts.format;
+    var basePath = opts.basePath;
+    var controller = new AbortController();
+
+    // Build modal DOM
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center';
+
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:85vh;display:flex;flex-direction:column';
+
+    var titleEl = document.createElement('h3');
+    titleEl.textContent = mode === 'proofread' ? 'Proofreading...' : 'Improve Content';
+    titleEl.style.marginBottom = '1rem';
+    modal.appendChild(titleEl);
+
+    // Chat area (improve only)
+    var chatArea = document.createElement('div');
+    chatArea.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden';
+
+    var messages = document.createElement('div');
+    messages.style.cssText = 'overflow-y:auto;flex:1;margin-bottom:0.75rem;max-height:200px';
+    chatArea.appendChild(messages);
+
+    if (mode === 'improve') {
+        var inputRow = document.createElement('div');
+        inputRow.style.cssText = 'display:flex;gap:0.5rem;margin-bottom:0.75rem';
+        var textarea = document.createElement('textarea');
+        textarea.style.cssText = 'flex:1;min-height:60px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;resize:vertical';
+        textarea.placeholder = 'What should be improved?';
+        var sendBtn = document.createElement('button');
+        sendBtn.className = 'btn';
+        sendBtn.textContent = 'Send';
+        sendBtn.style.alignSelf = 'flex-end';
+        inputRow.appendChild(textarea);
+        inputRow.appendChild(sendBtn);
+        chatArea.appendChild(inputRow);
+        modal.appendChild(chatArea);
+
+        textarea.addEventListener('keydown', function(e) {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); sendBtn.click(); }
+        });
+
+        sendBtn.addEventListener('click', function() {
+            var msg = textarea.value.trim();
+            if (!msg) return;
+            textarea.value = '';
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Rewriting...';
+
+            // Show user message
+            var userDiv = document.createElement('div');
+            userDiv.className = 'chat-msg chat-msg-user';
+            userDiv.style.fontSize = '0.85rem';
+            var roleDiv = document.createElement('div');
+            roleDiv.className = 'chat-msg-role';
+            roleDiv.textContent = 'you';
+            userDiv.appendChild(roleDiv);
+            var bodyDiv = document.createElement('div');
+            bodyDiv.textContent = msg;
+            userDiv.appendChild(bodyDiv);
+            messages.appendChild(userDiv);
+            messages.scrollTop = messages.scrollHeight;
+
+            // Hide preview if showing from previous round
+            previewArea.style.display = 'none';
+            actions.style.display = 'none';
+
+            // Post message then stream rewrite
+            fetch(basePath + '/piece/' + pieceId + '/improve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'content=' + encodeURIComponent(msg)
+            }).then(function() {
+                var source = new EventSource(basePath + '/piece/' + pieceId + '/improve/stream');
+                var accumulated = '';
+                source.onmessage = function(event) {
+                    var d = JSON.parse(event.data);
+                    if (d.type === 'chunk') {
+                        accumulated += d.chunk;
+                    } else if (d.type === 'content_written') {
+                        // AI used write tool — show preview
+                        source.close();
+                        showPreview(JSON.stringify(d.data));
+                        sendBtn.disabled = false;
+                        sendBtn.textContent = 'Send';
+                    } else if (d.type === 'done') {
+                        source.close();
+                        // If we got text but no write tool, show it as chat
+                        if (accumulated && previewArea.style.display === 'none') {
+                            var assistDiv = document.createElement('div');
+                            assistDiv.className = 'chat-msg chat-msg-assistant';
+                            assistDiv.style.fontSize = '0.85rem';
+                            var aRole = document.createElement('div');
+                            aRole.className = 'chat-msg-role';
+                            aRole.textContent = 'assistant';
+                            assistDiv.appendChild(aRole);
+                            var aBody = document.createElement('div');
+                            aBody.style.whiteSpace = 'pre-wrap';
+                            aBody.textContent = accumulated;
+                            assistDiv.appendChild(aBody);
+                            messages.appendChild(assistDiv);
+                            messages.scrollTop = messages.scrollHeight;
+                        }
+                        sendBtn.disabled = false;
+                        sendBtn.textContent = 'Send';
+                    } else if (d.type === 'error') {
+                        source.close();
+                        var errDiv = document.createElement('div');
+                        errDiv.style.cssText = 'color:red;font-size:0.85rem';
+                        errDiv.textContent = 'Error: ' + d.error;
+                        messages.appendChild(errDiv);
+                        sendBtn.disabled = false;
+                        sendBtn.textContent = 'Send';
+                    }
+                };
+                source.onerror = function() {
+                    source.close();
+                    sendBtn.disabled = false;
+                    sendBtn.textContent = 'Send';
+                };
+            });
+        });
+    }
+
+    // Loading spinner (proofread)
+    var spinnerEl = document.createElement('div');
+    spinnerEl.style.cssText = 'text-align:center;padding:2rem;display:none';
+    spinnerEl.innerHTML = '<div class="spinner"></div><p class="text-muted" style="margin-top:1rem">Proofreading content...</p>';
+    modal.appendChild(spinnerEl);
+
+    // Preview area — uses renderContentBody
+    var previewArea = document.createElement('div');
+    previewArea.style.cssText = 'overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:0.75rem;min-height:150px;max-height:400px;display:none';
+    modal.appendChild(previewArea);
+
+    // Actions
+    var actions = document.createElement('div');
+    actions.style.cssText = 'display:none;gap:0.5rem';
+    modal.appendChild(actions);
+
+    // Cancel button
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.marginTop = '0.5rem';
+    cancelBtn.onclick = function() {
+        controller.abort();
+        overlay.remove();
+    };
+    modal.appendChild(cancelBtn);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    var pendingContent = '';
+
+    function showPreview(contentJSON) {
+        previewArea.style.display = 'block';
+        previewArea.textContent = '';
+        renderContentBody(previewArea, platform, format, contentJSON);
+        pendingContent = contentJSON;
+        titleEl.textContent = mode === 'proofread' ? 'Proofread Complete' : 'New Version Ready';
+
+        actions.textContent = '';
+        actions.style.display = 'flex';
+
+        var acceptBtn = document.createElement('button');
+        acceptBtn.className = 'btn';
+        acceptBtn.textContent = 'Accept';
+        acceptBtn.onclick = function() {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = basePath + '/piece/' + pieceId + '/save-proofread';
+            var inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = 'corrected'; inp.value = pendingContent;
+            form.appendChild(inp);
+            document.body.appendChild(form);
+            form.submit();
+        };
+        actions.appendChild(acceptBtn);
+
+        var rejectBtn = document.createElement('button');
+        rejectBtn.className = 'btn btn-secondary';
+        rejectBtn.textContent = mode === 'improve' ? 'Try Again' : 'Reject';
+        rejectBtn.onclick = function() {
+            if (mode === 'improve') {
+                // Back to chat
+                previewArea.style.display = 'none';
+                actions.style.display = 'none';
+                titleEl.textContent = 'Improve Content';
+                textarea.focus();
+            } else {
+                overlay.remove();
+            }
+        };
+        actions.appendChild(rejectBtn);
+
+        cancelBtn.style.display = 'none';
+    }
+
+    // Start proofread immediately
+    if (mode === 'proofread') {
+        spinnerEl.style.display = 'block';
+        fetch(basePath + '/piece/' + pieceId + '/proofread', { signal: controller.signal })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                spinnerEl.style.display = 'none';
+                showPreview(data.corrected);
+            })
+            .catch(function(err) {
+                spinnerEl.style.display = 'none';
+                if (err.name !== 'AbortError') {
+                    previewArea.style.display = 'block';
+                    previewArea.textContent = 'Error: ' + err.message;
+                }
+                cancelBtn.textContent = 'Close';
+            });
+    }
+}
+
 // --- Production board ---
 
 function initProductionBoard(projectID, runID) {
@@ -1065,52 +1292,19 @@ function initProductionBoard(projectID, runID) {
             return;
         }
 
-        // Improve button
+        // Improve button — open content modal in improve mode
         if (btn.classList.contains('piece-improve-btn')) {
             var pieceId = btn.dataset.pieceId;
-            var chatEl = document.getElementById('improve-chat-' + pieceId);
-            chatEl.style.display = chatEl.style.display === 'none' ? 'block' : 'none';
+            var bodyEl = document.getElementById('piece-body-' + pieceId);
+            openContentModal({
+                mode: 'improve',
+                pieceId: pieceId,
+                platform: bodyEl ? bodyEl.dataset.platform : '',
+                format: bodyEl ? bodyEl.dataset.format : '',
+                basePath: basePath
+            });
             return;
         }
-    });
-
-    // Improve form submissions
-    board.addEventListener('submit', function(e) {
-        if (!e.target.classList.contains('improve-form')) return;
-        e.preventDefault();
-        var form = e.target;
-        var pieceId = form.dataset.pieceId;
-        var textarea = form.querySelector('textarea');
-        var content = textarea.value.trim();
-        if (!content) return;
-
-        var submitBtn = form.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Rewriting...';
-
-        // Post message
-        fetch(basePath + '/piece/' + pieceId + '/improve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'content=' + encodeURIComponent(content)
-        }).then(function() {
-            textarea.value = '';
-            // Show user message in chat
-            var messagesEl = document.getElementById('improve-messages-' + pieceId);
-            var userMsg = document.createElement('div');
-            userMsg.className = 'chat-msg chat-msg-user';
-            userMsg.style.fontSize = '0.85rem';
-            userMsg.textContent = content;
-            messagesEl.appendChild(userMsg);
-
-            // Stream rewrite
-            var bodyEl = document.getElementById('piece-body-' + pieceId);
-            streamToElement(basePath + '/piece/' + pieceId + '/improve/stream', bodyEl, function() {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Send & Rewrite';
-                window.location.reload();
-            });
-        });
     });
 
     // Render plan card as human-readable
@@ -1127,92 +1321,18 @@ function initProductionBoard(projectID, runID) {
         }
     });
 
-    // Proofread buttons — fetch corrected version, show in modal with accept/reject
+    // Proofread buttons — open content modal in proofread mode
     document.querySelectorAll('.proofread-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var pieceId = btn.dataset.pieceId;
-            btn.disabled = true;
-            btn.textContent = 'Proofreading...';
-
-            var overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center';
-            var modal = document.createElement('div');
-            modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:80vh;display:flex;flex-direction:column';
-
-            var title = document.createElement('h3');
-            title.textContent = 'Proofreading...';
-            title.style.marginBottom = '1rem';
-            modal.appendChild(title);
-
-            var spinner = document.createElement('div');
-            spinner.style.cssText = 'text-align:center;padding:2rem';
-            spinner.innerHTML = '<div class="spinner"></div><p class="text-muted" style="margin-top:1rem">Proofreading content...</p>';
-            modal.appendChild(spinner);
-
-            var output = document.createElement('div');
-            output.style.cssText = 'white-space:pre-wrap;font-size:0.85rem;line-height:1.5;overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:1rem;min-height:200px;display:none';
-            modal.appendChild(output);
-
-            var actions = document.createElement('div');
-            actions.style.cssText = 'display:none;gap:0.5rem';
-            modal.appendChild(actions);
-
-            var cancelBtn = document.createElement('button');
-            cancelBtn.className = 'btn btn-secondary';
-            cancelBtn.textContent = 'Cancel';
-            cancelBtn.style.marginTop = '1rem';
-            cancelBtn.onclick = function() {
-                if (controller) controller.abort();
-                overlay.remove();
-                btn.disabled = false;
-                btn.textContent = 'Proofread';
-            };
-            modal.appendChild(cancelBtn);
-
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
-
-            var controller = new AbortController();
-            fetch(basePath + '/piece/' + pieceId + '/proofread', { signal: controller.signal })
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    spinner.style.display = 'none';
-                    cancelBtn.style.display = 'none';
-                    output.style.display = 'block';
-                    output.textContent = data.corrected;
-                    title.textContent = 'Proofread Complete — Accept changes?';
-                    actions.style.display = 'flex';
-
-                    var acceptBtn = document.createElement('button');
-                    acceptBtn.className = 'btn';
-                    acceptBtn.textContent = 'Accept';
-                    acceptBtn.onclick = function() {
-                        var form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = basePath + '/piece/' + pieceId + '/save-proofread';
-                        var inp = document.createElement('input');
-                        inp.type = 'hidden'; inp.name = 'corrected'; inp.value = data.corrected;
-                        form.appendChild(inp);
-                        document.body.appendChild(form);
-                        form.submit();
-                    };
-                    actions.appendChild(acceptBtn);
-
-                    var rejectBtn = document.createElement('button');
-                    rejectBtn.className = 'btn btn-secondary';
-                    rejectBtn.textContent = 'Reject';
-                    rejectBtn.onclick = function() { overlay.remove(); btn.disabled = false; btn.textContent = 'Proofread'; };
-                    actions.appendChild(rejectBtn);
-                })
-                .catch(function(err) {
-                    spinner.textContent = 'Error: ' + err.message;
-                    var closeBtn = document.createElement('button');
-                    closeBtn.className = 'btn btn-secondary';
-                    closeBtn.textContent = 'Close';
-                    closeBtn.onclick = function() { overlay.remove(); btn.disabled = false; btn.textContent = 'Proofread'; };
-                    actions.style.display = 'flex';
-                    actions.appendChild(closeBtn);
-                });
+            var bodyEl = document.getElementById('piece-body-' + pieceId);
+            openContentModal({
+                mode: 'proofread',
+                pieceId: pieceId,
+                platform: bodyEl ? bodyEl.dataset.platform : '',
+                format: bodyEl ? bodyEl.dataset.format : '',
+                basePath: basePath
+            });
         });
     });
 }

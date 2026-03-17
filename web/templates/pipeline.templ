@@ -194,13 +194,6 @@ templ ProductionBoardPage(data ProductionBoardData) {
 						}
 					</div>
 
-					<div class="improve-chat" id={ fmt.Sprintf("improve-chat-%d", piece.ID) } style="display:none">
-						<div class="improve-chat-messages" id={ fmt.Sprintf("improve-messages-%d", piece.ID) }></div>
-						<form class="improve-form" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>
-							<textarea placeholder="What should be improved?" style="min-height:60px" name="content"></textarea>
-							<button type="submit" class="btn" style="margin-top:0.25rem">Send &amp; Rewrite</button>
-						</form>
-					</div>
 				</div>
 			}
 		</div>
