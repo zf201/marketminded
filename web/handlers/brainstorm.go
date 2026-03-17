@@ -39,7 +39,7 @@ func (h *BrainstormHandler) Handle(w http.ResponseWriter, r *http.Request, proje
 	case strings.HasSuffix(rest, "/stream"):
 		h.streamResponse(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/push") && r.Method == "POST":
-		h.pushToPipeline(w, r, projectID)
+		h.pushToPipeline(w, r, projectID, rest)
 	default:
 		h.showChat(w, r, projectID, rest)
 	}
@@ -267,8 +267,8 @@ WRITING STYLE:
 	sendEvent(map[string]string{"type": "done"})
 }
 
-func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64) {
-	chatID := h.parseChatID(strings.TrimSuffix(r.URL.Path, "/push"))
+func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	chatID := h.parseChatID(rest)
 	msgs, _ := h.queries.ListBrainstormMessages(chatID)
 
 	var conversation strings.Builder
