@@ -679,16 +679,10 @@ func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, proj
 		language = "English"
 	}
 
-	// Non-streaming — returns JSON result for the frontend to display
-	correctPrompt := fmt.Sprintf(`You are a proofreader. Fix grammar, spelling, and punctuation in the following content. The content language is %s.
+	correctPrompt := fmt.Sprintf(`Language: %s
 
-Rules:
-- Fix errors only. Do not rewrite or change the style/voice.
-- Keep the exact same structure and formatting.
-- If the content is JSON, fix text values only, do not change keys or structure.
-- Return ONLY the corrected content. No explanations, no markdown fences, no commentary.
+Fix grammar, spelling, and punctuation. Lightly improve sentence flow where it reads awkwardly, but do not rewrite or change the meaning, voice, or style. Keep the exact same structure and formatting. If the content is JSON, fix text values only, do not touch keys or structure. Return ONLY the corrected content, nothing else.
 
-Content to proofread:
 %s`, language, piece.Body)
 
 	corrected, err := h.aiClient.Complete(r.Context(), h.model(), []types.Message{
