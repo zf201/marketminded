@@ -116,3 +116,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .slide-card-title { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; }
 .slide-card-body { font-size: 0.85rem; }
 .content-section-label { display: block; font-size: 0.8rem; text-transform: uppercase; color: #374151; margin-bottom: 0.5rem; margin-top: 0.75rem; }
+.markdown-body { font-size: 0.9rem; line-height: 1.7; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.markdown-body h1 { font-size: 1.4rem; }
+.markdown-body h2 { font-size: 1.15rem; }
+.markdown-body h3 { font-size: 1rem; }
+.markdown-body p { margin-bottom: 0.75rem; }
+.markdown-body ul, .markdown-body ol { margin-bottom: 0.75rem; padding-left: 1.5rem; }
+.markdown-body li { margin-bottom: 0.25rem; }
+.markdown-body blockquote { border-left: 3px solid #d1d5db; padding-left: 1rem; color: #4b5563; margin-bottom: 0.75rem; }
+.markdown-body code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+.markdown-body pre { background: #f3f4f6; padding: 0.75rem; border-radius: 4px; overflow-x: auto; margin-bottom: 0.75rem; }
+.markdown-body a { color: #2563eb; }

@@ -631,17 +631,24 @@ function initProfileSectionChat(projectID, sectionName) {
 
 // --- Helpers ---
 
-function renderField(parent, label, value) {
+function renderField(parent, label, value, markdown) {
     if (!value) return;
     var sec = document.createElement('div');
     sec.className = 'script-section';
     var lbl = document.createElement('strong');
     lbl.textContent = label;
     sec.appendChild(lbl);
-    var txt = document.createElement('div');
-    txt.style.whiteSpace = 'pre-wrap';
-    txt.textContent = value;
-    sec.appendChild(txt);
+    if (markdown && typeof marked !== 'undefined') {
+        var md = document.createElement('div');
+        md.className = 'markdown-body';
+        md.innerHTML = marked.parse(value);
+        sec.appendChild(md);
+    } else {
+        var txt = document.createElement('div');
+        txt.style.whiteSpace = 'pre-wrap';
+        txt.textContent = value;
+        sec.appendChild(txt);
+    }
     parent.appendChild(sec);
 }
 
@@ -719,7 +726,7 @@ function renderContentBody(el, platform, format, bodyText) {
 
 function renderBlogPost(el, data) {
     renderField(el, 'Title', data.title);
-    renderField(el, 'Body', data.body);
+    renderField(el, 'Body', data.body, true);
     renderField(el, 'Meta Description', data.meta_description);
 }
 

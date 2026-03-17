@@ -4,7 +4,7 @@ export
 .PHONY: generate build run dev start restart test clean reset
 
 generate:
-	templ generate ./web/templates/
+	~/go/bin/templ generate ./web/templates/
 
 build: generate
 	go build -o server ./cmd/server/

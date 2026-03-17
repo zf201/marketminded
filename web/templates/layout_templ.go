@@ -49,7 +49,7 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
-		_, err = templBuffer.WriteString("</script><script src=\"/static/app.js\" defer>")
+		_, err = templBuffer.WriteString("</script><script src=\"https://cdn.jsdelivr.net/npm/marked/marked.min.js\">")
 		if err != nil {
 			return err
 		}
@@ -58,12 +58,21 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/app.js\" defer>")
+		if err != nil {
+			return err
+		}
+		var_6 := ``
+		_, err = templBuffer.WriteString(var_6)
+		if err != nil {
+			return err
+		}
 		_, err = templBuffer.WriteString("</script></head><body><nav class=\"flex-between\"><a href=\"/\">")
 		if err != nil {
 			return err
 		}
-		var_6 := `MarketMinded`
-		_, err = templBuffer.WriteString(var_6)
+		var_7 := `MarketMinded`
+		_, err = templBuffer.WriteString(var_7)
 		if err != nil {
 			return err
 		}
@@ -71,8 +80,8 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
-		var_7 := `Settings`
-		_, err = templBuffer.WriteString(var_7)
+		var_8 := `Settings`
+		_, err = templBuffer.WriteString(var_8)
 		if err != nil {
 			return err
 		}
