@@ -6,18 +6,14 @@ type ProfilePageData struct {
 	ProjectID   int64
 	ProjectName string
 	Cards       []ProfileCardView
-	Messages    []ProfileMsgView
 }
 
 type ProfileCardView struct {
-	Section string
-	Title   string
-	Content string
-}
-
-type ProfileMsgView struct {
-	Role    string
-	Content string
+	Section  string
+	Title    string
+	Content  string
+	Locked   bool
+	Index    int
 }
 
 templ ProfilePage(data ProfilePageData) {
@@ -27,49 +23,87 @@ templ ProfilePage(data ProfilePageData) {
 			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back to Project</a>
 		</div>
 
-		<div class="profile-layout" id="profile-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) }>
-			<div class="profile-chat">
-				<div class="chat-messages" id="profile-messages">
-					for _, msg := range data.Messages {
-						<div class={ "chat-msg chat-msg-" + msg.Role }>
-							<div class="chat-msg-role">{ msg.Role }</div>
-							<div style="white-space:pre-wrap">{ msg.Content }</div>
-						</div>
+		for _, card := range data.Cards {
+			<div class={ cardClasses(card) } id={ "card-" + card.Section }>
+				<div class="flex-between mb-1">
+					<div>
+						<strong>{ card.Title }</strong>
+						if card.Content != "" {
+							<span class="badge badge-approved" style="margin-left:0.5rem">Done</span>
+						} else if card.Locked {
+							<span class="badge badge-draft" style="margin-left:0.5rem">Locked</span>
+						} else {
+							<span class="badge badge-draft" style="margin-left:0.5rem">Empty</span>
+						}
+					</div>
+					if !card.Locked {
+						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s", data.ProjectID, card.Section)) } class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.75rem">
+							if card.Content != "" {
+								Edit
+							} else {
+								Start
+							}
+						</a>
 					}
 				</div>
-
-				<form id="profile-chat-form" class="mt-2">
-					<div class="form-group">
-						<textarea id="profile-chat-input" placeholder="Tell me about this client — paste a website, brand docs, or just describe what they do..." style="min-height:80px"></textarea>
-					</div>
-					<button type="submit" id="profile-chat-send" class="btn">Send</button>
-				</form>
+				if card.Content != "" {
+					<div style="white-space:pre-wrap;font-size:0.85rem;line-height:1.5;color:#333">{ card.Content }</div>
+				} else if card.Locked {
+					<p class="text-muted" style="font-style:italic">Complete the sections above first</p>
+				} else {
+					<p class="text-muted" style="font-style:italic">Not yet filled</p>
+				}
 			</div>
+		}
+	}
+}
 
-			<div class="profile-cards">
-				for _, card := range data.Cards {
-					<div class={ "profile-card" + cardClass(card.Content) } id={ "card-" + card.Section } data-section={ card.Section }>
-						<div class="profile-card-header">
-							<strong>{ card.Title }</strong>
-							<button class="btn btn-secondary profile-card-edit-btn" style="font-size:0.7rem;padding:0.2rem 0.5rem" data-section={ card.Section }>Edit</button>
-						</div>
-						<div class="profile-card-content">
-							if card.Content != "" {
-								<p style="white-space:pre-wrap">{ card.Content }</p>
-							} else {
-								<p class="text-muted" style="font-style:italic">Not yet filled</p>
-							}
-						</div>
+type ProfileSectionChatData struct {
+	ProjectID   int64
+	ProjectName string
+	Section     string
+	SectionTitle string
+	Messages    []ProfileMsgView
+}
+
+type ProfileMsgView struct {
+	Role    string
+	Content string
+}
+
+templ ProfileSectionChatPage(data ProfileSectionChatData) {
+	@Layout(data.SectionTitle + " - " + data.ProjectName) {
+		<div class="flex-between mb-4">
+			<h1>{ data.SectionTitle }</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", data.ProjectID)) } class="btn btn-secondary">Back to Profile</a>
+		</div>
+
+		<div id="profile-section-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
+			<div class="chat-messages" id="profile-section-messages">
+				for _, msg := range data.Messages {
+					<div class={ "chat-msg chat-msg-" + msg.Role }>
+						<div class="chat-msg-role">{ msg.Role }</div>
+						<div style="white-space:pre-wrap">{ msg.Content }</div>
 					</div>
 				}
 			</div>
+
+			<form id="profile-section-form" class="mt-2">
+				<div class="form-group">
+					<textarea id="profile-section-input" placeholder="Tell the AI about this area, or let it ask you questions..." style="min-height:80px"></textarea>
+				</div>
+				<button type="submit" id="profile-section-send" class="btn">Send</button>
+			</form>
 		</div>
 	}
 }
 
-func cardClass(content string) string {
-	if content == "" {
-		return " profile-card-empty"
+func cardClasses(card ProfileCardView) string {
+	cls := "card mb-2"
+	if card.Locked {
+		cls += " profile-card-locked"
+	} else if card.Content == "" {
+		cls += " profile-card-empty"
 	}
-	return ""
+	return cls
 }

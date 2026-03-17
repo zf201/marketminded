@@ -58,7 +58,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .profile-chat .chat-messages { flex: 1; overflow-y: auto; max-height: calc(100vh - 300px); }
 .profile-cards { flex: 3; overflow-y: auto; max-height: calc(100vh - 150px); }
 .profile-card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; }
-.profile-card-empty { opacity: 0.5; border-style: dashed; }
+.profile-card-empty { opacity: 0.6; border-style: dashed; }
+.profile-card-locked { opacity: 0.35; border-style: dashed; pointer-events: none; }
 .profile-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .profile-card-content { font-size: 0.85rem; line-height: 1.4; }
 .profile-card-content p { margin: 0; }

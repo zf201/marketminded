@@ -85,6 +85,22 @@ func (q *Queries) GetOrCreateProfileChat(projectID int64) (*BrainstormChat, erro
 	return q.CreateBrainstormChat(projectID, "Profile Builder", "profile", nil)
 }
 
+func (q *Queries) GetOrCreateSectionChat(projectID int64, section string) (*BrainstormChat, error) {
+	c := &BrainstormChat{}
+	err := q.db.QueryRow(
+		"SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE project_id = ? AND section = ?",
+		projectID, section,
+	).Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt)
+	if err == nil {
+		return c, nil
+	}
+	return q.CreateBrainstormChat(projectID, sectionChatTitle(section), section, nil)
+}
+
+func sectionChatTitle(section string) string {
+	return "Profile: " + section
+}
+
 func (q *Queries) GetOrCreatePieceChat(projectID, pieceID int64) (*BrainstormChat, error) {
 	c := &BrainstormChat{}
 	err := q.db.QueryRow(

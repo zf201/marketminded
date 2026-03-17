@@ -447,11 +447,11 @@ function initProfileChat(projectID) {
     scrollToBottom();
 }
 
-// Auto-init profile chat if on profile page
+// Auto-init pages
 document.addEventListener('DOMContentLoaded', function() {
-    var el = document.getElementById('profile-page');
-    if (el) {
-        initProfileChat(el.dataset.projectId);
+    var sectionPage = document.getElementById('profile-section-page');
+    if (sectionPage) {
+        initProfileSectionChat(sectionPage.dataset.projectId, sectionPage.dataset.section);
     }
 
     var board = document.getElementById('production-board');
@@ -459,6 +459,175 @@ document.addEventListener('DOMContentLoaded', function() {
         initProductionBoard(board.dataset.projectId, board.dataset.runId);
     }
 });
+
+function initProfileSectionChat(projectID, sectionName) {
+    var form = document.getElementById('profile-section-form');
+    var input = document.getElementById('profile-section-input');
+    var btn = document.getElementById('profile-section-send');
+    var messagesEl = document.getElementById('profile-section-messages');
+    if (!form) return;
+
+    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+    function addMsg(role, text) {
+        var outer = document.createElement('div');
+        outer.className = 'chat-msg chat-msg-' + role;
+        var roleEl = document.createElement('div');
+        roleEl.className = 'chat-msg-role';
+        roleEl.textContent = role;
+        var bodyEl = document.createElement('div');
+        bodyEl.style.whiteSpace = 'pre-wrap';
+        bodyEl.textContent = text;
+        outer.appendChild(roleEl);
+        outer.appendChild(bodyEl);
+        messagesEl.appendChild(outer);
+        return bodyEl;
+    }
+
+    function addChatText(container, text) {
+        var last = container.lastElementChild;
+        if (!last || !last.classList.contains('chat-text')) {
+            last = document.createElement('span');
+            last.className = 'chat-text';
+            container.appendChild(last);
+        }
+        last.textContent += text;
+    }
+
+    input.addEventListener('keydown', function(e) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            form.dispatchEvent(new Event('submit'));
+        }
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var msg = input.value.trim();
+        if (!msg) return;
+
+        input.disabled = true;
+        btn.disabled = true;
+        btn.textContent = 'Thinking...';
+        input.value = '';
+
+        addMsg('user', msg);
+        var aBody = addMsg('assistant', '');
+        aBody.textContent = '';
+        scrollToBottom();
+
+        fetch('/projects/' + projectID + '/profile/' + sectionName + '/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'content=' + encodeURIComponent(msg)
+        }).then(function() {
+            var source = new EventSource('/projects/' + projectID + '/profile/' + sectionName + '/stream');
+            source.onmessage = function(event) {
+                var d = JSON.parse(event.data);
+                switch (d.type) {
+                case 'chunk':
+                    addChatText(aBody, d.chunk);
+                    scrollToBottom();
+                    break;
+                case 'tool_start':
+                    var indicator = document.createElement('div');
+                    indicator.className = 'tool-indicator';
+                    indicator.textContent = d.summary + '...';
+                    aBody.appendChild(indicator);
+                    scrollToBottom();
+                    break;
+                case 'tool_result':
+                    var lastInd = aBody.querySelector('.tool-indicator:last-of-type');
+                    if (lastInd) {
+                        var details = document.createElement('details');
+                        details.className = 'tool-result-block';
+                        var sm = document.createElement('summary');
+                        sm.textContent = d.summary;
+                        details.appendChild(sm);
+                        lastInd.replaceWith(details);
+                    }
+                    break;
+                case 'proposal':
+                    var block = document.createElement('div');
+                    block.className = 'proposal-block';
+                    var hdr = document.createElement('div');
+                    hdr.className = 'proposal-block-header';
+                    hdr.textContent = 'Proposed update: ' + d.section;
+                    block.appendChild(hdr);
+                    var cEl = document.createElement('div');
+                    cEl.className = 'proposal-block-content';
+                    cEl.textContent = d.content;
+                    block.appendChild(cEl);
+                    var acts = document.createElement('div');
+                    acts.className = 'proposal-block-actions';
+                    var accBtn = document.createElement('button');
+                    accBtn.className = 'btn';
+                    accBtn.textContent = 'Accept';
+                    accBtn.style.fontSize = '0.8rem';
+                    accBtn.onclick = function() {
+                        fetch('/projects/' + projectID + '/profile/sections/' + d.section, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: 'content=' + encodeURIComponent(d.content)
+                        }).then(function() {
+                            block.className = 'proposal-block proposal-block-accepted';
+                            acts.remove();
+                            var badge = document.createElement('div');
+                            badge.style.cssText = 'color:#059669;font-size:0.8rem;font-weight:600';
+                            badge.textContent = 'Accepted';
+                            block.appendChild(badge);
+                        });
+                    };
+                    var rejBtn = document.createElement('button');
+                    rejBtn.className = 'btn btn-secondary';
+                    rejBtn.textContent = 'Reject';
+                    rejBtn.style.fontSize = '0.8rem';
+                    rejBtn.onclick = function() {
+                        block.className = 'proposal-block proposal-block-rejected';
+                        acts.remove();
+                        var badge = document.createElement('div');
+                        badge.style.cssText = 'color:#6b7280;font-size:0.8rem;font-weight:600';
+                        badge.textContent = 'Rejected';
+                        block.appendChild(badge);
+                    };
+                    acts.appendChild(accBtn);
+                    acts.appendChild(rejBtn);
+                    block.appendChild(acts);
+                    aBody.appendChild(block);
+                    scrollToBottom();
+                    break;
+                case 'error':
+                    source.close();
+                    addChatText(aBody, '\nError: ' + d.error);
+                    input.disabled = false;
+                    btn.disabled = false;
+                    btn.textContent = 'Send';
+                    break;
+                case 'done':
+                    source.close();
+                    input.disabled = false;
+                    btn.disabled = false;
+                    btn.textContent = 'Send';
+                    scrollToBottom();
+                    break;
+                }
+            };
+            source.onerror = function() {
+                source.close();
+                input.disabled = false;
+                btn.disabled = false;
+                btn.textContent = 'Send';
+            };
+        }).catch(function(err) {
+            addChatText(aBody, 'Error: ' + err.message);
+            input.disabled = false;
+            btn.disabled = false;
+            btn.textContent = 'Send';
+        });
+    });
+
+    scrollToBottom();
+}
 
 function initProductionBoard(projectID, runID) {
     var basePath = '/projects/' + projectID + '/pipeline/' + runID;

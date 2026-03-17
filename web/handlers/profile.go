@@ -21,6 +21,20 @@ var allSections = []string{
 	"content_strategy", "guidelines",
 }
 
+var sectionDescriptions = map[string]string{
+	"product_and_positioning": `What the company does, who they serve, industry, business model. Their unique value proposition, what makes them different from alternatives. Core problems they solve, why existing solutions fail. Key products/services, primary CTA (book a call, sign up, buy), and how aggressively content should sell vs. educate. Key competitors and how they differentiate.`,
+	"audience": `Ideal customer profile: demographics, roles, company type/size (if B2B). Their top pain points in their own language. Where they spend time online, what content they consume. Behavioral insights:
+- Push: frustrations driving them to seek a solution
+- Pull: what attracts them to this specific solution
+- Anxiety: concerns that might stop them from acting
+- Habit: what keeps them stuck with the status quo`,
+	"voice_and_tone": `How the brand communicates: personality traits, vocabulary level, sentence style, formality, humor, warmth. Characteristic phrases to use. How they relate to the audience (peer, mentor, authority). Words/phrases to always use and to never use. Ask for examples of writing they like, use THEIR words, not marketing theory. Include content role models: creators, brands, or accounts they admire and why.`,
+	"content_strategy": `Content goals (traffic, leads, authority, community). Which platforms to post on and why. Content formats per platform (blog, carousel, reel, thread, newsletter). Posting frequency per platform. 3-5 content pillars: recurring topic categories with example post ideas for each. For each pillar, include both "searchable" content (captures existing demand via SEO) and "shareable" content (creates demand through insights, stories, original takes).
+
+IMPORTANT: The core of this strategy is the "content waterfall" approach. One cornerstone piece of content (like a blog post or video) gets repurposed into many smaller pieces across platforms. Define the client's waterfall flows clearly. For example: "Each blog post becomes 2 Instagram posts, 2 reels, 1 LinkedIn post, 1 X post, and 1 X thread." Be specific about what goes where and how many.`,
+	"guidelines": `Content-specific rules: topics that are off-limits, formatting preferences, hashtag strategy, emoji usage, visual style. Anti-patterns: what should content NEVER look or sound like. Any brand-specific dos and don'ts not covered elsewhere.`,
+}
+
 type ProfileHandler struct {
 	queries     *store.Queries
 	aiClient    *ai.Client
@@ -36,12 +50,14 @@ func (h *ProfileHandler) Handle(w http.ResponseWriter, r *http.Request, projectI
 	switch {
 	case rest == "profile" && r.Method == "GET":
 		h.show(w, r, projectID)
-	case rest == "profile/message" && r.Method == "POST":
-		h.saveMessage(w, r, projectID)
-	case rest == "profile/stream" && r.Method == "GET":
-		h.stream(w, r, projectID)
 	case strings.HasPrefix(rest, "profile/sections/") && r.Method == "POST":
 		h.saveSection(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/message") && r.Method == "POST":
+		h.saveSectionMessage(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/stream") && r.Method == "GET":
+		h.streamSection(w, r, projectID, rest)
+	case strings.HasPrefix(rest, "profile/") && r.Method == "GET":
+		h.showSectionChat(w, r, projectID, rest)
 	default:
 		http.NotFound(w, r)
 	}
@@ -54,38 +70,75 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 		return
 	}
 
-	chat, _ := h.queries.GetOrCreateProfileChat(projectID)
-	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
 	sections, _ := h.queries.ListProfileSections(projectID)
-
 	sectionMap := make(map[string]string)
 	for _, s := range sections {
 		sectionMap[s.Section] = s.Content
 	}
 
+	// Determine which sections are locked (previous ones must be filled)
 	cardViews := make([]templates.ProfileCardView, len(allSections))
 	for i, name := range allSections {
+		locked := false
+		if i > 0 {
+			// Check if all previous sections have content
+			for j := 0; j < i; j++ {
+				if sectionMap[allSections[j]] == "" {
+					locked = true
+					break
+				}
+			}
+		}
 		cardViews[i] = templates.ProfileCardView{
 			Section: name,
 			Title:   sectionTitle(name),
 			Content: sectionMap[name],
+			Locked:  locked,
+			Index:   i,
 		}
-	}
-
-	msgViews := make([]templates.ProfileMsgView, len(msgs))
-	for i, m := range msgs {
-		msgViews[i] = templates.ProfileMsgView{Role: m.Role, Content: m.Content}
 	}
 
 	templates.ProfilePage(templates.ProfilePageData{
 		ProjectID:   projectID,
 		ProjectName: project.Name,
 		Cards:       cardViews,
-		Messages:    msgViews,
 	}).Render(r.Context(), w)
 }
 
-func (h *ProfileHandler) saveMessage(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (h *ProfileHandler) showSectionChat(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	// rest = "profile/product_and_positioning" or "profile/audience/message" etc
+	section := strings.TrimPrefix(rest, "profile/")
+	// Remove any trailing sub-paths
+	if idx := strings.Index(section, "/"); idx != -1 {
+		section = section[:idx]
+	}
+
+	project, err := h.queries.GetProject(projectID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Get or create a chat for this section
+	chat, _ := h.queries.GetOrCreateSectionChat(projectID, section)
+	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
+
+	msgViews := make([]templates.ProfileMsgView, len(msgs))
+	for i, m := range msgs {
+		msgViews[i] = templates.ProfileMsgView{Role: m.Role, Content: m.Content}
+	}
+
+	templates.ProfileSectionChatPage(templates.ProfileSectionChatData{
+		ProjectID:    projectID,
+		ProjectName:  project.Name,
+		Section:      section,
+		SectionTitle: sectionTitle(section),
+		Messages:     msgViews,
+	}).Render(r.Context(), w)
+}
+
+func (h *ProfileHandler) saveSectionMessage(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	section := h.parseSectionFromRest(rest)
 	r.ParseForm()
 	content := r.FormValue("content")
 	if content == "" {
@@ -93,14 +146,24 @@ func (h *ProfileHandler) saveMessage(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 
-	chat, _ := h.queries.GetOrCreateProfileChat(projectID)
+	chat, _ := h.queries.GetOrCreateSectionChat(projectID, section)
 	h.queries.AddBrainstormMessage(chat.ID, "user", content)
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *ProfileHandler) stream(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (h *ProfileHandler) parseSectionFromRest(rest string) string {
+	// rest = "profile/product_and_positioning/message" or "profile/audience/stream"
+	section := strings.TrimPrefix(rest, "profile/")
+	if idx := strings.Index(section, "/"); idx != -1 {
+		section = section[:idx]
+	}
+	return section
+}
+
+func (h *ProfileHandler) streamSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	sectionName := h.parseSectionFromRest(rest)
 	project, _ := h.queries.GetProject(projectID)
-	chat, _ := h.queries.GetOrCreateProfileChat(projectID)
+	chat, _ := h.queries.GetOrCreateSectionChat(projectID, sectionName)
 	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
 
 	// Build current profile state for system prompt
@@ -116,60 +179,37 @@ func (h *ProfileHandler) stream(w http.ResponseWriter, r *http.Request, projectI
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
-You are an expert content marketing strategist building a client profile. This profile is the foundation for ALL content creation — blog posts, social media, email, newsletters. Every section must be specific enough that a writer could produce on-brand content without asking further questions.`, time.Now().Format("January 2, 2006")) + fmt.Sprintf(`
+You are an expert content marketing strategist. You are helping build the **%s** section of a client profile for "%s".
 
-## Profile sections (5 total)
-
-Work through these ONE AT A TIME, in order. Do NOT move to the next section until the current one is ACCEPTED.
-
-### 1. Product & Positioning (product_and_positioning)
-What the company does, who they serve, industry, business model. Their unique value proposition — what makes them different from alternatives. Core problems they solve, why existing solutions fail. Key products/services, primary CTA (book a call, sign up, buy), and how aggressively content should sell vs. educate. Key competitors and how they differentiate.
-
-### 2. Audience (audience)
-Ideal customer profile: demographics, roles, company type/size (if B2B). Their top pain points in their own language. Where they spend time online, what content they consume. Behavioral insights:
-- Push: frustrations driving them to seek a solution
-- Pull: what attracts them to this specific solution
-- Anxiety: concerns that might stop them from acting
-- Habit: what keeps them stuck with the status quo
-
-### 3. Voice & Tone (voice_and_tone)
-How the brand communicates: personality traits, vocabulary level, sentence style, formality, humor, warmth. Characteristic phrases to use. How they relate to the audience (peer, mentor, authority). Words/phrases to always use and to never use. Ask for examples of writing they like — use THEIR words, not marketing theory. Include content role models: creators, brands, or accounts they admire and why.
-
-### 4. Content Strategy (content_strategy)
-Content goals (traffic, leads, authority, community). Which platforms to post on and why. Content formats per platform (blog, carousel, reel, thread, newsletter). Posting frequency per platform. 3-5 content pillars: recurring topic categories with example post ideas for each. For each pillar, include both "searchable" content (captures existing demand via SEO) and "shareable" content (creates demand through insights, stories, original takes).
-
-IMPORTANT: The core of this strategy is the "content waterfall" approach. One cornerstone piece of content (like a blog post or video) gets repurposed into many smaller pieces across platforms. Define the client's waterfall flows clearly. For example: "Each blog post becomes 2 Instagram posts, 2 reels, 1 LinkedIn post, 1 X post, and 1 X thread." Or: "Each YouTube video becomes a blog post, 3 shorts, 2 reels, and a LinkedIn post." There may be multiple waterfall patterns depending on the type of cornerstone content. Be specific about what goes where and how many.
-
-### 5. Guidelines (guidelines)
-Content-specific rules: topics that are off-limits, formatting preferences, hashtag strategy, emoji usage, visual style. Anti-patterns: what should content NEVER look or sound like. Any brand-specific dos and don'ts not covered elsewhere.
-
-## Current profile state for "%s"
-
+## What this section needs
 %s
 
-## Your workflow — STRICT
+## Current profile state (for context)
+%s
 
-For each section, follow this exact loop:
-1. **Gather** — Ask questions to understand the client. Be specific. Don't accept vague answers — dig deeper.
-2. **Propose** — When you have enough, call update_section with your writeup. Be thorough and specific to THIS client.
-3. **Wait** — The user will accept or reject. Do NOT continue to the next section.
-4. **If rejected** — Ask what needs changing, revise, and propose again. Stay on this section until it's accepted.
-5. **If accepted** — THEN and only then, move to the next section.
+## Your workflow
+1. Ask questions to understand the client well enough to write a thorough section. Be specific. Dig deeper on vague answers.
+2. When you have enough, call update_section with section "%s" and your writeup.
+3. If the user rejects, ask what needs changing, revise, and propose again.
+4. Focus ONLY on this section. Don't propose updates to other sections.
 
-CRITICAL RULES:
-- NEVER propose a section you haven't gathered enough information for. If you're unsure, ask first.
-- NEVER fabricate or assume details. If you need to guess, say so explicitly: "I'd need to make some assumptions about X — should I draft it or can you tell me more?"
-- NEVER move to the next section before the current one is accepted. If a section is rejected, stay on it.
-- Write specific prose about THIS client. If your writeup could apply to any random company, it's too generic — rewrite it.
-- Use fetch_url when the user shares a link. Use web_search to research competitors or industry context.
-- Be conversational and efficient. Don't repeat what the user said. Don't explain marketing theory.
+## Rules
+- NEVER fabricate or assume details. If you need to guess, ask: "I'd need to make some assumptions about X — should I draft it or can you tell me more?"
+- Write specific prose about THIS client. If it could apply to any company, it's too generic.
+- Use fetch_url when the user shares a link. Use web_search to research competitors or context.
+- Be conversational and efficient. Don't repeat what the user said.
 
-WRITING STYLE — THIS APPLIES TO EVERYTHING YOU WRITE INCLUDING SECTION PROPOSALS:
+## Writing style
 - Write like a human. NEVER sound like AI-generated content.
-- NEVER use em dashes (—). Use commas, periods, or restructure the sentence instead.
-- NEVER overuse emojis. Zero emojis in profile sections. In chat, one max per message if it fits naturally.
-- Avoid AI clichés: "dive into", "leverage", "elevate", "streamline", "at the end of the day", "it's worth noting", "game-changer", "unlock", "harness the power of".
-- Use short, direct sentences. Vary sentence length. Sound like a person talking, not a press release.`, project.Name, profileState.String())
+- NEVER use em dashes. Use commas, periods, or restructure.
+- Zero emojis in section proposals. One max per chat message.
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "at the end of the day", "it's worth noting".
+- Short, direct sentences. Vary length. Sound like a person, not a press release.`,
+		time.Now().Format("January 2, 2006"),
+		sectionTitle(sectionName), project.Name,
+		sectionDescriptions[sectionName],
+		profileState.String(),
+		sectionName)
 
 	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
