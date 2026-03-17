@@ -58,23 +58,9 @@ templ BrainstormChatPage(data BrainstormChatData) {
 			<h1>{ data.ChatTitle }</h1>
 			<div>
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)) } class="btn btn-secondary">Back</a>
-				<button class="btn" id="push-pipeline-btn">Push to Pipeline</button>
-			</div>
-			<!-- Push to Pipeline modal -->
-			<div id="push-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:center;justify-content:center">
-				<div style="background:white;border-radius:8px;padding:1.5rem;max-width:500px;width:90%">
-					<h3 style="margin-bottom:1rem">Push to Pipeline</h3>
-					<p id="push-status" class="text-muted mb-2">Generating topic from conversation...</p>
-					<textarea id="push-topic" style="width:100%;min-height:60px;margin-bottom:1rem;display:none" placeholder="Topic will appear here..."></textarea>
-					<div style="display:flex;gap:0.5rem">
-						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID)) } id="push-form" style="display:none">
-							<input type="hidden" name="topic" id="push-topic-hidden"/>
-							<input type="hidden" name="conversation" id="push-conversation-hidden"/>
-							<button type="submit" class="btn">Create Pipeline Run</button>
-						</form>
-						<button class="btn btn-secondary" id="push-cancel">Cancel</button>
-					</div>
-				</div>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID)) } style="display:inline">
+					<button type="submit" class="btn">Push to Pipeline</button>
+				</form>
 			</div>
 		</div>
 		<div class="chat-messages" id="chat-messages">
@@ -198,45 +184,6 @@ templ BrainstormChatPage(data BrainstormChatData) {
 				});
 
 				scrollToBottom();
-
-				// Push to Pipeline modal
-				var pushBtn = document.getElementById('push-pipeline-btn');
-				var pushModal = document.getElementById('push-modal');
-				var pushStatus = document.getElementById('push-status');
-				var pushTopic = document.getElementById('push-topic');
-				var pushTopicHidden = document.getElementById('push-topic-hidden');
-				var pushForm = document.getElementById('push-form');
-				var pushCancel = document.getElementById('push-cancel');
-
-				if (pushBtn) {
-					pushBtn.addEventListener('click', function() {
-						pushModal.style.display = 'flex';
-						pushStatus.style.display = 'block';
-						pushStatus.textContent = 'Generating topic from conversation...';
-						pushTopic.style.display = 'none';
-						pushForm.style.display = 'none';
-
-						fetch('/projects/' + projectID + '/brainstorm/' + chatID + '/generate-topic')
-							.then(function(res) { return res.json(); })
-							.then(function(data) {
-								pushStatus.style.display = 'none';
-								pushTopic.style.display = 'block';
-								pushTopic.value = data.topic;
-								pushForm.style.display = 'inline';
-								pushTopic.addEventListener('input', function() {
-									pushTopicHidden.value = pushTopic.value;
-								});
-								pushTopicHidden.value = data.topic;
-								document.getElementById('push-conversation-hidden').value = data.conversation || '';
-							})
-							.catch(function(err) {
-								pushStatus.textContent = 'Error: ' + err.message;
-							});
-					});
-					pushCancel.addEventListener('click', function() {
-						pushModal.style.display = 'none';
-					});
-				}
 			})();
 		</script>
 	}
