@@ -1,4 +1,4 @@
-.PHONY: generate build run dev test clean reset
+.PHONY: generate build run dev start restart test clean reset
 
 generate:
 	templ generate ./web/templates/
@@ -13,6 +13,18 @@ dev: build
 	@echo "Starting MarketMinded on :8080..."
 	@./server
 
+start: build
+	@pkill -f './server' 2>/dev/null || true
+	@sleep 1
+	@echo "Starting MarketMinded on :8080..."
+	@./server &
+
+restart: build
+	@pkill -f './server' 2>/dev/null || true
+	@sleep 1
+	@echo "Restarting MarketMinded on :8080..."
+	@./server &
+
 test:
 	go test ./...
 
@@ -21,4 +33,4 @@ clean:
 
 reset: clean
 	rm -f marketminded.db
-	@echo "DB reset. Run 'make dev' to start fresh."
+	@echo "DB reset. Run 'make start' to start fresh."
