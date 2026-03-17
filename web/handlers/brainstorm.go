@@ -175,6 +175,8 @@ Bad brainstorm output: "Here's a full LinkedIn post: [500 words of copy]"
 - Ask which pillar or area they want to explore if it's unclear
 - Keep ideas grounded in their actual business, audience, and goals
 - If the profile is incomplete, work with what's there
+- NEVER make up facts, statistics, or claims. If you don't know something, say so.
+- Use web_search to verify trends or find real data instead of guessing.
 
 WRITING STYLE:
 - Write like a human. Never sound like AI-generated content.
@@ -253,7 +255,8 @@ WRITING STYLE:
 		return nil
 	}
 
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, nil)
+	temp := 0.5
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
 	if err != nil {
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
