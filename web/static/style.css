@@ -98,3 +98,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .board-plan-list { font-size: 0.9rem; line-height: 1.6; }
 .improve-chat { background: #f9fafb; border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; }
 .improve-chat-messages { max-height: 200px; overflow-y: auto; margin-bottom: 0.5rem; }
+
+/* Content type renderers */
+.content-caption { white-space: pre-wrap; line-height: 1.5; }
+.content-hashtags { margin-top: 0.5rem; color: #3b82f6; font-size: 0.85rem; }
+.content-instructions { margin-top: 0.5rem; font-style: italic; }
+.content-meta { margin-top: 0.5rem; padding: 0.5rem; background: #f9fafb; border-radius: 4px; }
+.content-title { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.content-items { display: flex; flex-direction: column; gap: 0.5rem; }
+.content-item { padding: 0.5rem 0.75rem; background: #f9fafb; border-radius: 4px; border-left: 3px solid #3b82f6; font-size: 0.85rem; }
+.content-item-num { font-weight: 600; color: #3b82f6; margin-right: 0.5rem; }
+.content-script { display: flex; flex-direction: column; gap: 0.5rem; }
+.script-section { padding: 0.5rem 0.75rem; border-left: 3px solid #e5e5e5; }
+.script-section strong { color: #374151; font-size: 0.8rem; text-transform: uppercase; display: block; margin-bottom: 0.25rem; }
+.content-slides .slide-card { padding: 0.5rem 0.75rem; background: #f9fafb; border-radius: 4px; margin-bottom: 0.5rem; }
+.slide-card { padding: 0.5rem 0.75rem; background: #f9fafb; border-radius: 4px; margin-bottom: 0.5rem; }
+.slide-card-title { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; }
+.slide-card-body { font-size: 0.85rem; }

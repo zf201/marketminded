@@ -154,7 +154,7 @@ templ ProductionBoardPage(data ProductionBoardData) {
 						<span class={ "badge badge-" + piece.Status }>{ piece.Status }</span>
 					</div>
 
-					<div class={ "board-card-body", templ.KV("collapsed", piece.Status == "approved") } id={ fmt.Sprintf("piece-body-%d", piece.ID) }>
+					<div class={ "board-card-body", templ.KV("collapsed", piece.Status == "approved") } id={ fmt.Sprintf("piece-body-%d", piece.ID) } data-platform={ piece.Platform } data-format={ piece.Format }>
 						if piece.Body != "" {
 							{ piece.Body }
 						} else if piece.Status == "pending" {

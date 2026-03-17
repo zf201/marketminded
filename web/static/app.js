@@ -629,6 +629,135 @@ function initProfileSectionChat(projectID, sectionName) {
     scrollToBottom();
 }
 
+// --- Content type renderers ---
+
+function renderContentBody(el, platform, format, bodyText) {
+    var data;
+    try {
+        data = JSON.parse(bodyText);
+    } catch (e) {
+        // Fallback: plain text
+        el.textContent = bodyText;
+        return;
+    }
+
+    el.textContent = '';
+    var key = platform + '_' + format;
+
+    switch (key) {
+    case 'blog_post':
+        renderBlogPost(el, data); break;
+    case 'linkedin_post':
+    case 'instagram_post':
+    case 'facebook_post':
+        renderSimplePost(el, data); break;
+    case 'x_post':
+        renderXPost(el, data); break;
+    case 'x_thread':
+        renderXThread(el, data); break;
+    case 'linkedin_carousel':
+        renderLinkedinCarousel(el, data); break;
+    case 'instagram_carousel':
+        renderInstagramCarousel(el, data); break;
+    case 'instagram_reel':
+    case 'youtube_short':
+    case 'tiktok_video':
+        renderScript(el, data); break;
+    case 'youtube_script':
+        renderYoutubeScript(el, data); break;
+    default:
+        el.textContent = bodyText;
+    }
+}
+
+function renderBlogPost(el, data) {
+    if (data.title) { var h = document.createElement('h3'); h.className = 'content-title'; h.textContent = data.title; el.appendChild(h); }
+    if (data.body) { var b = document.createElement('div'); b.className = 'content-caption'; b.textContent = data.body; el.appendChild(b); }
+    if (data.meta_description) { var m = document.createElement('div'); m.className = 'content-meta text-muted'; m.textContent = 'Meta: ' + data.meta_description; el.appendChild(m); }
+}
+
+function renderSimplePost(el, data) {
+    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.textContent = data.caption; el.appendChild(c); }
+    if (data.hashtags) { var h = document.createElement('div'); h.className = 'content-hashtags'; h.textContent = data.hashtags; el.appendChild(h); }
+    if (data.image_instructions) { var i = document.createElement('div'); i.className = 'content-instructions text-muted'; i.textContent = 'Image: ' + data.image_instructions; el.appendChild(i); }
+}
+
+function renderXPost(el, data) {
+    if (data.text) { var t = document.createElement('div'); t.className = 'content-caption'; t.textContent = data.text; el.appendChild(t); }
+}
+
+function renderXThread(el, data) {
+    if (!data.tweets) return;
+    var items = document.createElement('div'); items.className = 'content-items';
+    data.tweets.forEach(function(tweet, i) {
+        var item = document.createElement('div'); item.className = 'content-item';
+        var num = document.createElement('span'); num.className = 'content-item-num'; num.textContent = (i + 1) + '.';
+        item.appendChild(num);
+        item.appendChild(document.createTextNode(' ' + tweet));
+        items.appendChild(item);
+    });
+    el.appendChild(items);
+}
+
+function renderLinkedinCarousel(el, data) {
+    if (data.slides) {
+        data.slides.forEach(function(slide, i) {
+            var card = document.createElement('div'); card.className = 'slide-card';
+            var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1) + ': ' + (slide.title || '');
+            var body = document.createElement('div'); body.className = 'slide-card-body'; body.textContent = slide.body || '';
+            card.appendChild(title); card.appendChild(body); el.appendChild(card);
+        });
+    }
+    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.style.marginTop = '0.5rem'; c.textContent = data.caption; el.appendChild(c); }
+}
+
+function renderInstagramCarousel(el, data) {
+    if (data.slides) {
+        var items = document.createElement('div'); items.className = 'content-items';
+        data.slides.forEach(function(slide, i) {
+            var item = document.createElement('div'); item.className = 'content-item';
+            item.textContent = 'Slide ' + (i + 1) + ': ' + (slide.text || '');
+            items.appendChild(item);
+        });
+        el.appendChild(items);
+    }
+    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.style.marginTop = '0.5rem'; c.textContent = data.caption; el.appendChild(c); }
+    if (data.hashtags) { var h = document.createElement('div'); h.className = 'content-hashtags'; h.textContent = data.hashtags; el.appendChild(h); }
+}
+
+function renderScript(el, data) {
+    var script = document.createElement('div'); script.className = 'content-script';
+    var fields = ['hook', 'setup', 'value', 'content', 'cta'];
+    fields.forEach(function(field) {
+        if (data[field]) {
+            var sec = document.createElement('div'); sec.className = 'script-section';
+            var label = document.createElement('strong'); label.textContent = field.charAt(0).toUpperCase() + field.slice(1);
+            sec.appendChild(label);
+            sec.appendChild(document.createTextNode(data[field]));
+            script.appendChild(sec);
+        }
+    });
+    el.appendChild(script);
+    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.style.marginTop = '0.5rem'; c.textContent = data.caption; el.appendChild(c); }
+}
+
+function renderYoutubeScript(el, data) {
+    if (data.title) { var h = document.createElement('h3'); h.className = 'content-title'; h.textContent = data.title; el.appendChild(h); }
+    if (data.sections) {
+        data.sections.forEach(function(sec) {
+            var div = document.createElement('div'); div.className = 'script-section';
+            var heading = document.createElement('strong');
+            heading.textContent = (sec.timestamp ? '[' + sec.timestamp + '] ' : '') + sec.heading;
+            div.appendChild(heading);
+            div.appendChild(document.createTextNode(sec.content));
+            if (sec.notes) { var n = document.createElement('p'); n.className = 'text-muted'; n.textContent = '[' + sec.notes + ']'; div.appendChild(n); }
+            el.appendChild(div);
+        });
+    }
+}
+
+// --- Production board ---
+
 function initProductionBoard(projectID, runID) {
     var basePath = '/projects/' + projectID + '/pipeline/' + runID;
     var board = document.getElementById('production-board');
@@ -645,6 +774,8 @@ function initProductionBoard(projectID, runID) {
                 el.scrollTop = el.scrollHeight;
             } else if (d.type === 'tool_start') {
                 el.textContent += '\n[' + d.summary + '...]\n';
+            } else if (d.type === 'content_written') {
+                renderContentBody(el, d.platform, d.format, JSON.stringify(d.data));
             } else if (d.type === 'done') {
                 source.close();
                 if (onDone) onDone();
@@ -782,6 +913,14 @@ function initProductionBoard(projectID, runID) {
                 window.location.reload();
             });
         });
+    });
+
+    // Render existing content bodies with type-specific renderers
+    document.querySelectorAll('.board-card-body').forEach(function(el) {
+        var text = el.textContent.trim();
+        if (text && el.dataset.platform) {
+            renderContentBody(el, el.dataset.platform, el.dataset.format, text);
+        }
     });
 
     // Auto-start plan generation if plan is empty and status is planning

@@ -624,6 +624,22 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 				if err != nil {
 					return err
 				}
+				_, err = templBuffer.WriteString("\" data-platform=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(piece.Platform))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" data-format=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(piece.Format))
+				if err != nil {
+					return err
+				}
 				_, err = templBuffer.WriteString("\">")
 				if err != nil {
 					return err
