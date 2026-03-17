@@ -6,7 +6,7 @@ func TestBrainstormChatFlow(t *testing.T) {
 	q := testDB(t)
 	p, _ := q.CreateProject("Test", "test")
 
-	chat, err := q.CreateBrainstormChat(p.ID, "Ideas for blog", "")
+	chat, err := q.CreateBrainstormChat(p.ID, "Ideas for blog", "", nil)
 	if err != nil {
 		t.Fatalf("create chat: %v", err)
 	}

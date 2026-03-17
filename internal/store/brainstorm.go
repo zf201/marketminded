@@ -3,11 +3,12 @@ package store
 import "time"
 
 type BrainstormChat struct {
-	ID        int64
-	ProjectID int64
-	Title     string
-	Section   string
-	CreatedAt time.Time
+	ID             int64
+	ProjectID      int64
+	Title          string
+	Section        string
+	ContentPieceID *int64
+	CreatedAt      time.Time
 }
 
 type BrainstormMessage struct {
@@ -18,31 +19,31 @@ type BrainstormMessage struct {
 	CreatedAt time.Time
 }
 
-func (q *Queries) CreateBrainstormChat(projectID int64, title string, section string) (*BrainstormChat, error) {
+func (q *Queries) CreateBrainstormChat(projectID int64, title, section string, contentPieceID *int64) (*BrainstormChat, error) {
 	var sectionVal any
 	if section != "" {
 		sectionVal = section
 	}
-	res, err := q.db.Exec("INSERT INTO brainstorm_chats (project_id, title, section) VALUES (?, ?, ?)", projectID, title, sectionVal)
+	res, err := q.db.Exec("INSERT INTO brainstorm_chats (project_id, title, section, content_piece_id) VALUES (?, ?, ?, ?)", projectID, title, sectionVal, contentPieceID)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	c := &BrainstormChat{}
-	err = q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE id = ?", id).
-		Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt)
+	err = q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE id = ?", id).
+		Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt)
 	return c, err
 }
 
 func (q *Queries) GetBrainstormChat(id int64) (*BrainstormChat, error) {
 	c := &BrainstormChat{}
-	err := q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE id = ?", id).
-		Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt)
+	err := q.db.QueryRow("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE id = ?", id).
+		Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt)
 	return c, err
 }
 
 func (q *Queries) ListBrainstormChats(projectID int64) ([]BrainstormChat, error) {
-	rows, err := q.db.Query("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE project_id = ? ORDER BY created_at DESC", projectID)
+	rows, err := q.db.Query("SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE project_id = ? ORDER BY created_at DESC", projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func (q *Queries) ListBrainstormChats(projectID int64) ([]BrainstormChat, error)
 	var chats []BrainstormChat
 	for rows.Next() {
 		var c BrainstormChat
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		chats = append(chats, c)
@@ -74,14 +75,26 @@ func (q *Queries) AddBrainstormMessage(chatID int64, role, content string) (*Bra
 func (q *Queries) GetOrCreateProfileChat(projectID int64) (*BrainstormChat, error) {
 	c := &BrainstormChat{}
 	err := q.db.QueryRow(
-		"SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), created_at FROM brainstorm_chats WHERE project_id = ? AND section = 'profile'",
+		"SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE project_id = ? AND section = 'profile'",
 		projectID,
-	).Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.CreatedAt)
+	).Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt)
 	if err == nil {
 		return c, nil
 	}
 	// Not found, create it
-	return q.CreateBrainstormChat(projectID, "Profile Builder", "profile")
+	return q.CreateBrainstormChat(projectID, "Profile Builder", "profile", nil)
+}
+
+func (q *Queries) GetOrCreatePieceChat(projectID, pieceID int64) (*BrainstormChat, error) {
+	c := &BrainstormChat{}
+	err := q.db.QueryRow(
+		"SELECT id, project_id, COALESCE(title,''), COALESCE(section,''), content_piece_id, created_at FROM brainstorm_chats WHERE project_id = ? AND content_piece_id = ?",
+		projectID, pieceID,
+	).Scan(&c.ID, &c.ProjectID, &c.Title, &c.Section, &c.ContentPieceID, &c.CreatedAt)
+	if err == nil {
+		return c, nil
+	}
+	return q.CreateBrainstormChat(projectID, "Improve Piece", "", &pieceID)
 }
 
 func (q *Queries) ListBrainstormMessages(chatID int64) ([]BrainstormMessage, error) {

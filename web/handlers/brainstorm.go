@@ -67,7 +67,7 @@ func (h *BrainstormHandler) createChat(w http.ResponseWriter, r *http.Request, p
 	if title == "" {
 		title = "Untitled Chat"
 	}
-	chat, err := h.queries.CreateBrainstormChat(projectID, title, "")
+	chat, err := h.queries.CreateBrainstormChat(projectID, title, "", nil)
 	if err != nil {
 		http.Error(w, "Failed to create chat", http.StatusInternalServerError)
 		return
@@ -255,13 +255,11 @@ func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	run, err := h.queries.CreatePipelineRun(projectID)
+	run, err := h.queries.CreatePipelineRun(projectID, topic)
 	if err != nil {
 		http.Error(w, "Failed to create run", http.StatusInternalServerError)
 		return
 	}
-	h.queries.SetPipelineTopic(run.ID, topic)
-	h.queries.AdvancePipelineRun(run.ID, "creating_pillar")
 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, run.ID), http.StatusSeeOther)
 }

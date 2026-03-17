@@ -2,42 +2,76 @@ package store
 
 import "testing"
 
-func TestContentPieceLifecycle(t *testing.T) {
+func TestContentPieceCRUD(t *testing.T) {
 	q := testDB(t)
 	p, _ := q.CreateProject("Test", "test")
+	run, _ := q.CreatePipelineRun(p.ID, "test topic")
 
-	piece, err := q.CreateContentPiece(p.ID, nil, "blog", "My Post", "Post body here", nil)
+	piece, err := q.CreateContentPiece(p.ID, run.ID, "blog", "post", "My Blog Post", 0, nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if piece.Status != "draft" {
-		t.Errorf("expected draft, got %s", piece.Status)
+	if piece.Status != "pending" {
+		t.Errorf("expected pending, got %s", piece.Status)
 	}
-
-	err = q.ApproveContentPiece(piece.ID)
-	if err != nil {
-		t.Fatalf("approve: %v", err)
-	}
-
-	got, _ := q.GetContentPiece(piece.ID)
-	if got.Status != "approved" {
-		t.Errorf("expected approved, got %s", got.Status)
+	if piece.Platform != "blog" {
+		t.Errorf("expected blog, got %s", piece.Platform)
 	}
 }
 
-func TestContentLogSummaries(t *testing.T) {
+func TestTrySetGenerating(t *testing.T) {
 	q := testDB(t)
 	p, _ := q.CreateProject("Test", "test")
+	run, _ := q.CreatePipelineRun(p.ID, "test topic")
+	piece, _ := q.CreateContentPiece(p.ID, run.ID, "blog", "post", "", 0, nil)
 
-	q.CreateContentPiece(p.ID, nil, "blog", "Draft Post", "not approved", nil)
-	piece, _ := q.CreateContentPiece(p.ID, nil, "blog", "Good Post", "approved body", nil)
-	q.ApproveContentPiece(piece.ID)
-
-	summaries, err := q.ContentLogSummaries(p.ID, 10)
-	if err != nil {
-		t.Fatalf("summaries: %v", err)
+	ok, _ := q.TrySetGenerating(piece.ID)
+	if !ok {
+		t.Error("expected first TrySetGenerating to succeed")
 	}
-	if len(summaries) != 1 {
-		t.Errorf("expected 1 approved, got %d", len(summaries))
+
+	ok2, _ := q.TrySetGenerating(piece.ID)
+	if ok2 {
+		t.Error("expected second TrySetGenerating to fail (already generating)")
+	}
+}
+
+func TestListContentByPipelineRunOrder(t *testing.T) {
+	q := testDB(t)
+	p, _ := q.CreateProject("Test", "test")
+	run, _ := q.CreatePipelineRun(p.ID, "test topic")
+
+	q.CreateContentPiece(p.ID, run.ID, "blog", "post", "Cornerstone", 0, nil)
+	q.CreateContentPiece(p.ID, run.ID, "linkedin", "post", "LinkedIn", 2, nil)
+	q.CreateContentPiece(p.ID, run.ID, "instagram", "post", "Insta", 1, nil)
+
+	pieces, _ := q.ListContentByPipelineRun(run.ID)
+	if len(pieces) != 3 {
+		t.Fatalf("expected 3, got %d", len(pieces))
+	}
+	if pieces[0].Title != "Cornerstone" {
+		t.Errorf("expected Cornerstone first, got %s", pieces[0].Title)
+	}
+	if pieces[1].Title != "Insta" {
+		t.Errorf("expected Insta second, got %s", pieces[1].Title)
+	}
+}
+
+func TestAllPiecesApproved(t *testing.T) {
+	q := testDB(t)
+	p, _ := q.CreateProject("Test", "test")
+	run, _ := q.CreatePipelineRun(p.ID, "test topic")
+
+	piece, _ := q.CreateContentPiece(p.ID, run.ID, "blog", "post", "", 0, nil)
+
+	done, _ := q.AllPiecesApproved(run.ID)
+	if done {
+		t.Error("should not be done with pending pieces")
+	}
+
+	q.SetContentPieceStatus(piece.ID, "approved")
+	done, _ = q.AllPiecesApproved(run.ID)
+	if !done {
+		t.Error("should be done when all approved")
 	}
 }
