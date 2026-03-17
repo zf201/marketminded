@@ -26,10 +26,15 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8
 .badge-approved { background: #d1fae5; color: #065f46; }
 .badge-published { background: #dbeafe; color: #1e40af; }
 .badge-ideating { background: #e0e7ff; color: #3730a3; }
+.badge-planning { background: #e0e7ff; color: #3730a3; }
+.badge-producing { background: #fce7f3; color: #9d174d; }
 .badge-creating_pillar { background: #fce7f3; color: #9d174d; }
 .badge-waterfalling { background: #cffafe; color: #155e75; }
 .badge-complete { background: #d1fae5; color: #065f46; }
 .badge-abandoned { background: #f3f4f6; color: #6b7280; }
+.badge-pending { background: #f3f4f6; color: #6b7280; }
+.badge-generating { background: #fef3c7; color: #92400e; }
+.badge-rejected { background: #fee2e2; color: #991b1b; }
 .chat-messages { max-height: 500px; overflow-y: auto; margin-bottom: 1rem; }
 .chat-msg { padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 8px; }
 .chat-msg-user { background: #e0e7ff; }
@@ -75,3 +80,21 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .tool-result-block { margin: 0.25rem 0; }
 .tool-result-block summary { font-size: 0.8rem; color: #6b7280; cursor: pointer; }
 .tool-result-block summary:hover { color: #374151; }
+
+/* Production board */
+.board-header { margin-bottom: 1.5rem; }
+.board-card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+.board-card-cornerstone { border-left: 4px solid #3b82f6; }
+.board-card-pending { opacity: 0.5; border-style: dashed; }
+.board-card-generating { border-color: #f59e0b; animation: pulse 2s infinite; }
+.board-card-draft { border-color: #3b82f6; }
+.board-card-approved { border-color: #059669; }
+.board-card-rejected { border-color: #dc2626; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+.board-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.board-card-body { white-space: pre-wrap; font-size: 0.85rem; max-height: 300px; overflow-y: auto; margin-bottom: 0.75rem; }
+.board-card-body.collapsed { max-height: 100px; overflow: hidden; }
+.board-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.board-plan-list { font-size: 0.9rem; line-height: 1.6; }
+.improve-chat { background: #f9fafb; border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; }
+.improve-chat-messages { max-height: 200px; overflow-y: auto; margin-bottom: 0.5rem; }

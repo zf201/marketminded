@@ -453,4 +453,171 @@ document.addEventListener('DOMContentLoaded', function() {
     if (el) {
         initProfileChat(el.dataset.projectId);
     }
+
+    var board = document.getElementById('production-board');
+    if (board) {
+        initProductionBoard(board.dataset.projectId, board.dataset.runId);
+    }
 });
+
+function initProductionBoard(projectID, runID) {
+    var basePath = '/projects/' + projectID + '/pipeline/' + runID;
+    var board = document.getElementById('production-board');
+    var nextPieceID = parseInt(board.dataset.nextPieceId) || 0;
+
+    // Helper: connect SSE stream to an element
+    function streamToElement(url, el, onDone) {
+        el.textContent = '';
+        var source = new EventSource(url);
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            if (d.type === 'chunk') {
+                el.textContent += d.chunk;
+                el.scrollTop = el.scrollHeight;
+            } else if (d.type === 'tool_start') {
+                el.textContent += '\n[' + d.summary + '...]\n';
+            } else if (d.type === 'done') {
+                source.close();
+                if (onDone) onDone();
+            } else if (d.type === 'error') {
+                source.close();
+                el.textContent += '\nError: ' + d.error;
+            }
+        };
+        source.onerror = function() {
+            source.close();
+        };
+        return source;
+    }
+
+    // Plan generation
+    var genPlanBtn = document.getElementById('generate-plan-btn');
+    if (genPlanBtn) {
+        genPlanBtn.addEventListener('click', function() {
+            genPlanBtn.disabled = true;
+            genPlanBtn.textContent = 'Generating...';
+            var planBody = document.getElementById('plan-body');
+            streamToElement(basePath + '/stream/plan', planBody, function() {
+                window.location.reload();
+            });
+        });
+    }
+
+    // Piece generation
+    function streamPiece(pieceId) {
+        var bodyEl = document.getElementById('piece-body-' + pieceId);
+        var card = bodyEl.closest('.board-card');
+        card.className = card.className.replace(/board-card-(pending|rejected)/g, '') + ' board-card-generating';
+        bodyEl.classList.remove('collapsed');
+
+        streamToElement(basePath + '/stream/piece/' + pieceId, bodyEl, function() {
+            window.location.reload();
+        });
+    }
+
+    // Event delegation for piece buttons
+    board.addEventListener('click', function(e) {
+        var btn = e.target;
+
+        // Generate button
+        if (btn.classList.contains('piece-generate-btn')) {
+            var pieceId = btn.dataset.pieceId;
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            streamPiece(pieceId);
+            return;
+        }
+
+        // Approve button
+        if (btn.classList.contains('piece-approve-btn')) {
+            var pieceId = btn.dataset.pieceId;
+            btn.disabled = true;
+            fetch(basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.complete) {
+                        window.location.reload();
+                    } else if (data.next_piece_id) {
+                        // Update card status visually
+                        var card = btn.closest('.board-card');
+                        card.className = card.className.replace(/board-card-(draft)/g, '') + ' board-card-approved';
+                        var actionsEl = document.getElementById('piece-actions-' + pieceId);
+                        actionsEl.innerHTML = '<span class="badge badge-approved">approved</span>';
+                        // Auto-generate next piece
+                        streamPiece(data.next_piece_id);
+                    } else {
+                        window.location.reload();
+                    }
+                });
+            return;
+        }
+
+        // Reject button
+        if (btn.classList.contains('piece-reject-btn')) {
+            var pieceId = btn.dataset.pieceId;
+            var reason = prompt('Why should this be rejected?');
+            if (reason === null) return;
+            fetch(basePath + '/piece/' + pieceId + '/reject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'reason=' + encodeURIComponent(reason)
+            }).then(function() {
+                window.location.reload();
+            });
+            return;
+        }
+
+        // Improve button
+        if (btn.classList.contains('piece-improve-btn')) {
+            var pieceId = btn.dataset.pieceId;
+            var chatEl = document.getElementById('improve-chat-' + pieceId);
+            chatEl.style.display = chatEl.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+    });
+
+    // Improve form submissions
+    board.addEventListener('submit', function(e) {
+        if (!e.target.classList.contains('improve-form')) return;
+        e.preventDefault();
+        var form = e.target;
+        var pieceId = form.dataset.pieceId;
+        var textarea = form.querySelector('textarea');
+        var content = textarea.value.trim();
+        if (!content) return;
+
+        var submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Rewriting...';
+
+        // Post message
+        fetch(basePath + '/piece/' + pieceId + '/improve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'content=' + encodeURIComponent(content)
+        }).then(function() {
+            textarea.value = '';
+            // Show user message in chat
+            var messagesEl = document.getElementById('improve-messages-' + pieceId);
+            var userMsg = document.createElement('div');
+            userMsg.className = 'chat-msg chat-msg-user';
+            userMsg.style.fontSize = '0.85rem';
+            userMsg.textContent = content;
+            messagesEl.appendChild(userMsg);
+
+            // Stream rewrite
+            var bodyEl = document.getElementById('piece-body-' + pieceId);
+            streamToElement(basePath + '/piece/' + pieceId + '/improve/stream', bodyEl, function() {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send & Rewrite';
+                window.location.reload();
+            });
+        });
+    });
+
+    // Auto-start plan generation if plan is empty and status is planning
+    // (checked via presence of generate-plan-btn)
+
+    // Auto-generate first pending piece if we just entered producing state
+    // The next piece ID is set in the template data attribute
+}
