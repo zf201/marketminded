@@ -62,14 +62,17 @@ func ExecuteFetch(ctx context.Context, argsJSON string) (string, error) {
 	// Extract title
 	title := strings.TrimSpace(doc.Find("title").First().Text())
 
-	// Remove noise elements
-	doc.Find("script, style, nav, footer, header, aside, iframe, noscript").Remove()
+	// Remove scripts and styles only — keep structure and links
+	doc.Find("script, style, noscript, iframe").Remove()
 
-	// Get text content
-	text := strings.TrimSpace(doc.Find("body").Text())
+	// Get HTML content of body with links preserved
+	bodyHTML, err := doc.Find("body").Html()
+	if err != nil {
+		bodyHTML = doc.Find("body").Text()
+	}
 
-	// Collapse whitespace
-	lines := strings.Split(text, "\n")
+	// Clean up excessive whitespace but preserve structure
+	lines := strings.Split(bodyHTML, "\n")
 	var cleaned []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -77,14 +80,14 @@ func ExecuteFetch(ctx context.Context, argsJSON string) (string, error) {
 			cleaned = append(cleaned, line)
 		}
 	}
-	text = strings.Join(cleaned, "\n")
+	html := strings.Join(cleaned, "\n")
 
 	// Truncate
-	if len(text) > 4000 {
-		text = text[:4000] + "..."
+	if len(html) > 8000 {
+		html = html[:8000] + "..."
 	}
 
-	return fmt.Sprintf("Title: %s\n\n%s", title, text), nil
+	return fmt.Sprintf("Title: %s\n\n%s", title, html), nil
 }
 
 // FetchSummary returns a human-readable summary for the frontend indicator

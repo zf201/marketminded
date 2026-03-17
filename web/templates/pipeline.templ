@@ -179,9 +179,15 @@ templ ProductionBoardPage(data ProductionBoardData) {
 							<button class="btn piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>
 							<button class="btn btn-danger piece-reject-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Reject</button>
 							<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/proofread", data.ProjectID, data.RunID, piece.ID)) } style="display:inline">
+								<button type="submit" class="btn btn-secondary">Proofread</button>
+							</form>
 						}
 						if piece.Status == "approved" {
 							<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/proofread", data.ProjectID, data.RunID, piece.ID)) } style="display:inline">
+								<button type="submit" class="btn btn-secondary">Proofread</button>
+							</form>
 						}
 					</div>
 

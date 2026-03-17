@@ -73,6 +73,8 @@ func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, project
 		h.streamImprove(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/improve") && r.Method == "POST":
 		h.saveImproveMessage(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/proofread") && r.Method == "POST":
+		h.proofread(w, r, projectID, rest)
 	default:
 		// pipeline/{id}
 		h.show(w, r, projectID, rest)
@@ -653,6 +655,46 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID in
 			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
 		}
 	}
+}
+
+func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	pieceID := h.parsePieceID(rest)
+	piece, err := h.queries.GetContentPiece(pieceID)
+	if err != nil {
+		http.Error(w, "Piece not found", http.StatusNotFound)
+		return
+	}
+
+	// Get language from project settings
+	language, _ := h.queries.GetProjectSetting(projectID, "language")
+	if language == "" {
+		language = "English"
+	}
+
+	prompt := fmt.Sprintf(`You are a proofreader. Fix grammar, spelling, and punctuation in the following content. The content language is %s.
+
+Rules:
+- Fix errors only. Do not rewrite or change the style/voice.
+- Keep the exact same structure and formatting.
+- If the content is JSON, fix text values only — do not change keys or structure.
+- Return the corrected content and nothing else. No explanations.
+
+Content to proofread:
+%s`, language, piece.Body)
+
+	corrected, err := h.aiClient.Complete(r.Context(), h.model(), []types.Message{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		http.Error(w, "Proofread failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	corrected = strings.TrimSpace(corrected)
+	h.queries.UpdateContentPieceBody(pieceID, piece.Title, corrected)
+
+	runID := h.parseRunID(rest)
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
 }
 
 func (h *PipelineHandler) parseRunID(rest string) int64 {

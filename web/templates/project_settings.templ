@@ -1,0 +1,75 @@
+package templates
+
+import "fmt"
+
+type ProjectSettingsData struct {
+	ProjectID      int64
+	ProjectName    string
+	Language       string
+	CompanyWebsite string
+	WebsiteNotes   string
+	CompanyPricing string
+	PricingNotes   string
+	CompanyBlog    string
+	BlogNotes      string
+	Saved          bool
+}
+
+templ ProjectSettingsPage(data ProjectSettingsData) {
+	@Layout(data.ProjectName + " - Settings") {
+		<div class="flex-between mb-4">
+			<h1>Project Settings</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+		</div>
+
+		if data.Saved {
+			<div class="card" style="background:#d1fae5;border-color:#059669;margin-bottom:1rem">
+				<p style="color:#065f46">Settings saved.</p>
+			</div>
+		}
+
+		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", data.ProjectID)) }>
+			<div class="card mb-2">
+				<h3 style="margin-bottom:1rem">Language</h3>
+				<div class="form-group">
+					<label>Content Language</label>
+					<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..."/>
+					<p class="text-muted" style="font-size:0.75rem">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
+				</div>
+			</div>
+
+			<div class="card mb-2">
+				<h3 style="margin-bottom:1rem">Company URLs</h3>
+
+				<div class="form-group">
+					<label>Company Website</label>
+					<input type="url" name="company_website" value={ data.CompanyWebsite } placeholder="https://example.com"/>
+				</div>
+				<div class="form-group">
+					<label>Website Usage Notes</label>
+					<textarea name="website_notes" placeholder="How should AI use this? e.g. Link to homepage in blog CTAs, reference for brand info...">{ data.WebsiteNotes }</textarea>
+				</div>
+
+				<div class="form-group">
+					<label>Pricing Page</label>
+					<input type="url" name="company_pricing" value={ data.CompanyPricing } placeholder="https://example.com/pricing"/>
+				</div>
+				<div class="form-group">
+					<label>Pricing Usage Notes</label>
+					<textarea name="pricing_notes" placeholder="e.g. Link to pricing in conversion-focused content, mention free tier...">{ data.PricingNotes }</textarea>
+				</div>
+
+				<div class="form-group">
+					<label>Blog URL</label>
+					<input type="url" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog"/>
+				</div>
+				<div class="form-group">
+					<label>Blog Usage Notes</label>
+					<textarea name="blog_notes" placeholder="e.g. Link to blog from social posts, reference existing posts for internal linking...">{ data.BlogNotes }</textarea>
+				</div>
+			</div>
+
+			<button type="submit" class="btn">Save Settings</button>
+		</form>
+	}
+}
