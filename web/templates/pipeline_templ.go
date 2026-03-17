@@ -836,7 +836,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn btn-secondary\">")
+					_, err = templBuffer.WriteString("\" style=\"display:inline\" onsubmit=\"this.querySelector(&#39;button&#39;).disabled=true;this.querySelector(&#39;button&#39;).textContent=&#39;Proofreading...&#39;\"><button type=\"submit\" class=\"btn btn-secondary\">")
 					if err != nil {
 						return err
 					}
@@ -876,7 +876,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn btn-secondary\">")
+					_, err = templBuffer.WriteString("\" style=\"display:inline\" onsubmit=\"this.querySelector(&#39;button&#39;).disabled=true;this.querySelector(&#39;button&#39;).textContent=&#39;Proofreading...&#39;\"><button type=\"submit\" class=\"btn btn-secondary\">")
 					if err != nil {
 						return err
 					}
