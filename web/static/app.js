@@ -644,7 +644,7 @@ function renderSection(parent, label, content, opts) {
     if (opts.markdown && typeof marked !== 'undefined' && content) {
         var md = document.createElement('div');
         md.className = 'markdown-body';
-        md.innerHTML = marked.parse(content);
+        md.innerHTML = marked.parse(content, { breaks: false, gfm: true });
         sec.appendChild(md);
     } else if (opts.badges && content) {
         var badges = document.createElement('div');
@@ -742,6 +742,11 @@ function renderContentBody(el, platform, format, bodyText) {
     default:
         el.textContent = bodyText;
     }
+
+    // Always render instructions if present (available on all types)
+    if (data && data.instructions) {
+        renderSection(el, 'Production Notes', data.instructions, { minor: true });
+    }
 }
 
 function renderBlogPost(el, data) {
@@ -753,7 +758,6 @@ function renderBlogPost(el, data) {
 function renderSimplePost(el, data) {
     renderSection(el, 'Caption', data.caption);
     if (data.hashtags) renderSection(el, 'Hashtags', data.hashtags, { badges: true, minor: true });
-    if (data.image_instructions) renderSection(el, 'Image Instructions', data.image_instructions, { minor: true });
 }
 
 function renderXPost(el, data) {

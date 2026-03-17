@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/zanfridau/marketminded/internal/ai"
 )
@@ -58,6 +59,10 @@ func init() {
 }
 
 func register(platform, format, displayName, promptFile, toolName, paramsJSON string) {
+	// Inject "instructions" field into every tool's properties
+	paramsJSON = strings.Replace(paramsJSON, `},"required"`,
+		`,"instructions":{"type":"string","description":"Production notes: image/visual guidance, design direction, or any instructions for the person creating this piece."}},"required"`, 1)
+
 	key := platform + "_" + format
 	Registry[key] = ContentType{
 		Platform:    platform,
@@ -69,7 +74,7 @@ func register(platform, format, displayName, promptFile, toolName, paramsJSON st
 			Type: "function",
 			Function: ai.ToolFunction{
 				Name:        toolName,
-				Description: "Write a " + displayName + ". Provide the structured content.",
+				Description: "Write a " + displayName + ". Provide the structured content. Include instructions field with production notes (image guidance, visual direction, etc.).",
 				Parameters:  json.RawMessage(paramsJSON),
 			},
 		},
