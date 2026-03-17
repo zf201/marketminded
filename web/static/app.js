@@ -644,7 +644,9 @@ function renderSection(parent, label, content, opts) {
     if (opts.markdown && typeof marked !== 'undefined' && content) {
         var md = document.createElement('div');
         md.className = 'markdown-body';
-        md.innerHTML = marked.parse(content, { breaks: false, gfm: true });
+        // Collapse multiple blank lines to single before parsing
+        var cleaned = content.replace(/\n{3,}/g, '\n\n');
+        md.innerHTML = marked.parse(cleaned, { breaks: false, gfm: true });
         sec.appendChild(md);
     } else if (opts.badges && content) {
         var badges = document.createElement('div');
