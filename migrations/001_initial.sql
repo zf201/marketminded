@@ -31,9 +31,10 @@ CREATE TABLE templates (
 CREATE TABLE pipeline_runs (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'ideating'
-        CHECK(status IN ('ideating','creating_pillar','waterfalling','complete','abandoned')),
-    selected_topic TEXT,
+    topic TEXT NOT NULL,
+    plan TEXT,
+    status TEXT NOT NULL DEFAULT 'planning'
+        CHECK(status IN ('planning','producing','complete','abandoned')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -41,13 +42,18 @@ CREATE TABLE pipeline_runs (
 CREATE TABLE content_pieces (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    pipeline_run_id INTEGER REFERENCES pipeline_runs(id),
-    type TEXT NOT NULL CHECK(type IN ('blog','social_instagram','social_facebook','social_linkedin')),
+    pipeline_run_id INTEGER NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL DEFAULT '',
+    format TEXT NOT NULL DEFAULT '',
     title TEXT,
-    body TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','published')),
+    body TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','generating','draft','approved','rejected')),
     parent_id INTEGER REFERENCES content_pieces(id),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    rejection_reason TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE agent_runs (
@@ -66,6 +72,7 @@ CREATE TABLE brainstorm_chats (
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     title TEXT,
     section TEXT,
+    content_piece_id INTEGER REFERENCES content_pieces(id),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
