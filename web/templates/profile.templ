@@ -102,8 +102,6 @@ func cardClasses(card ProfileCardView) string {
 	cls := "card mb-2"
 	if card.Locked {
 		cls += " profile-card-locked"
-	} else if card.Content == "" {
-		cls += " profile-card-empty"
 	}
 	return cls
 }
