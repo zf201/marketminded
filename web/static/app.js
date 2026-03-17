@@ -971,10 +971,22 @@ function openContentModal(opts) {
     var modal = document.createElement('div');
     modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:85vh;display:flex;flex-direction:column';
 
+    var headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem';
     var titleEl = document.createElement('h3');
     titleEl.textContent = mode === 'proofread' ? 'Proofreading...' : 'Improve Content';
-    titleEl.style.marginBottom = '1rem';
-    modal.appendChild(titleEl);
+    titleEl.style.margin = '0';
+    headerRow.appendChild(titleEl);
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.fontSize = '0.8rem';
+    cancelBtn.onclick = function() {
+        controller.abort();
+        overlay.remove();
+    };
+    headerRow.appendChild(cancelBtn);
+    modal.appendChild(headerRow);
 
     // Chat area (improve only)
     var chatArea = document.createElement('div');
@@ -985,18 +997,14 @@ function openContentModal(opts) {
     chatArea.appendChild(messages);
 
     if (mode === 'improve') {
-        var inputRow = document.createElement('div');
-        inputRow.style.cssText = 'display:flex;gap:0.5rem;margin-bottom:0.75rem';
         var textarea = document.createElement('textarea');
-        textarea.style.cssText = 'flex:1;min-height:60px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;resize:vertical';
+        textarea.style.cssText = 'width:100%;min-height:60px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;resize:vertical;margin-bottom:0.5rem';
         textarea.placeholder = 'What should be improved?';
+        chatArea.appendChild(textarea);
         var sendBtn = document.createElement('button');
         sendBtn.className = 'btn';
         sendBtn.textContent = 'Send';
-        sendBtn.style.alignSelf = 'flex-end';
-        inputRow.appendChild(textarea);
-        inputRow.appendChild(sendBtn);
-        chatArea.appendChild(inputRow);
+        chatArea.appendChild(sendBtn);
         modal.appendChild(chatArea);
 
         textarea.addEventListener('keydown', function(e) {
@@ -1101,16 +1109,7 @@ function openContentModal(opts) {
     actions.style.cssText = 'display:none;gap:0.5rem';
     modal.appendChild(actions);
 
-    // Cancel button
-    var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-secondary';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.marginTop = '0.5rem';
-    cancelBtn.onclick = function() {
-        controller.abort();
-        overlay.remove();
-    };
-    modal.appendChild(cancelBtn);
+    // Cancel button is in the header row
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
