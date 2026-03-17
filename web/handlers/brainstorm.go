@@ -38,6 +38,8 @@ func (h *BrainstormHandler) Handle(w http.ResponseWriter, r *http.Request, proje
 		h.saveMessage(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/stream"):
 		h.streamResponse(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/generate-topic") && r.Method == "GET":
+		h.generateTopic(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/push") && r.Method == "POST":
 		h.pushToPipeline(w, r, projectID)
 	default:
@@ -256,6 +258,44 @@ WRITING STYLE:
 
 	// Signal done
 	sendEvent(map[string]string{"type": "done"})
+}
+
+func (h *BrainstormHandler) generateTopic(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	chatID := h.parseChatID(rest)
+	msgs, _ := h.queries.ListBrainstormMessages(chatID)
+
+	var conversation strings.Builder
+	for _, m := range msgs {
+		fmt.Fprintf(&conversation, "%s: %s\n\n", m.Role, m.Content)
+	}
+
+	aiMsgs := []types.Message{
+		{
+			Role: "system",
+			Content: `You are distilling a brainstorming conversation into a single, specific content topic for a production pipeline.
+
+Read the conversation and propose ONE specific topic/title that would make a great cornerstone content piece (blog post, video, etc).
+
+Rules:
+- Be specific. Not "content marketing tips" but "5 SEO mistakes that cost e-commerce brands $10K/month"
+- The topic should be the strongest idea from the conversation
+- Return ONLY the topic text, nothing else. No quotes, no explanation.`,
+		},
+		{
+			Role:    "user",
+			Content: fmt.Sprintf("Here is the brainstorming conversation:\n\n%s\n\nWhat's the best single topic for a content pipeline from this conversation?", conversation.String()),
+		},
+	}
+
+	topic, err := h.aiClient.Complete(r.Context(), h.model(), aiMsgs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	topic = strings.TrimSpace(topic)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"topic": topic})
 }
 
 func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Request, projectID int64) {

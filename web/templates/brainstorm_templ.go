@@ -227,15 +227,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a><form method=\"POST\" action=\"")
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID))))
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("\" style=\"display:inline\"><input type=\"text\" name=\"topic\" placeholder=\"Topic to push...\" style=\"width:200px;display:inline\"><button type=\"submit\" class=\"btn\">")
+			_, err = templBuffer.WriteString("</a><button class=\"btn\" id=\"push-pipeline-btn\">")
 			if err != nil {
 				return err
 			}
@@ -244,13 +236,66 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</button></form></div></div> <div class=\"chat-messages\" id=\"chat-messages\">")
+			_, err = templBuffer.WriteString("</button></div><!--")
+			if err != nil {
+				return err
+			}
+			var_17 := ` Push to Pipeline modal `
+			_, err = templBuffer.WriteString(var_17)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("--><div id=\"push-modal\" style=\"display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:center;justify-content:center\"><div style=\"background:white;border-radius:8px;padding:1.5rem;max-width:500px;width:90%\"><h3 style=\"margin-bottom:1rem\">")
+			if err != nil {
+				return err
+			}
+			var_18 := `Push to Pipeline`
+			_, err = templBuffer.WriteString(var_18)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</h3><p id=\"push-status\" class=\"text-muted mb-2\">")
+			if err != nil {
+				return err
+			}
+			var_19 := `Generating topic from conversation...`
+			_, err = templBuffer.WriteString(var_19)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</p><textarea id=\"push-topic\" style=\"width:100%;min-height:60px;margin-bottom:1rem;display:none\" placeholder=\"Topic will appear here...\"></textarea><div style=\"display:flex;gap:0.5rem\"><form method=\"POST\" action=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID))))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" id=\"push-form\" style=\"display:none\"><input type=\"hidden\" name=\"topic\" id=\"push-topic-hidden\"><button type=\"submit\" class=\"btn\">")
+			if err != nil {
+				return err
+			}
+			var_20 := `Create Pipeline Run`
+			_, err = templBuffer.WriteString(var_20)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</button></form><button class=\"btn btn-secondary\" id=\"push-cancel\">")
+			if err != nil {
+				return err
+			}
+			var_21 := `Cancel`
+			_, err = templBuffer.WriteString(var_21)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</button></div></div></div></div> <div class=\"chat-messages\" id=\"chat-messages\">")
 			if err != nil {
 				return err
 			}
 			for _, msg := range data.Messages {
-				var var_17 = []any{"chat-msg chat-msg-" + msg.Role}
-				err = templ.RenderCSSItems(ctx, templBuffer, var_17...)
+				var var_22 = []any{"chat-msg chat-msg-" + msg.Role}
+				err = templ.RenderCSSItems(ctx, templBuffer, var_22...)
 				if err != nil {
 					return err
 				}
@@ -258,7 +303,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_17).String()))
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_22).String()))
 				if err != nil {
 					return err
 				}
@@ -266,8 +311,8 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_18 string = msg.Role
-				_, err = templBuffer.WriteString(templ.EscapeString(var_18))
+				var var_23 string = msg.Role
+				_, err = templBuffer.WriteString(templ.EscapeString(var_23))
 				if err != nil {
 					return err
 				}
@@ -275,8 +320,8 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_19 string = msg.Content
-				_, err = templBuffer.WriteString(templ.EscapeString(var_19))
+				var var_24 string = msg.Content
+				_, err = templBuffer.WriteString(templ.EscapeString(var_24))
 				if err != nil {
 					return err
 				}
@@ -289,8 +334,8 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_20 := `Send`
-			_, err = templBuffer.WriteString(var_20)
+			var_25 := `Send`
+			_, err = templBuffer.WriteString(var_25)
 			if err != nil {
 				return err
 			}
@@ -298,7 +343,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_21 := `
+			var_26 := `
 			(function() {
 				var form = document.getElementById('chat-form');
 				var input = document.getElementById('chat-input');
@@ -405,9 +450,47 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				});
 
 				scrollToBottom();
+
+				// Push to Pipeline modal
+				var pushBtn = document.getElementById('push-pipeline-btn');
+				var pushModal = document.getElementById('push-modal');
+				var pushStatus = document.getElementById('push-status');
+				var pushTopic = document.getElementById('push-topic');
+				var pushTopicHidden = document.getElementById('push-topic-hidden');
+				var pushForm = document.getElementById('push-form');
+				var pushCancel = document.getElementById('push-cancel');
+
+				if (pushBtn) {
+					pushBtn.addEventListener('click', function() {
+						pushModal.style.display = 'flex';
+						pushStatus.style.display = 'block';
+						pushStatus.textContent = 'Generating topic from conversation...';
+						pushTopic.style.display = 'none';
+						pushForm.style.display = 'none';
+
+						fetch('/projects/' + projectID + '/brainstorm/' + chatID + '/generate-topic')
+							.then(function(res) { return res.json(); })
+							.then(function(data) {
+								pushStatus.style.display = 'none';
+								pushTopic.style.display = 'block';
+								pushTopic.value = data.topic;
+								pushForm.style.display = 'inline';
+								pushTopic.addEventListener('input', function() {
+									pushTopicHidden.value = pushTopic.value;
+								});
+								pushTopicHidden.value = data.topic;
+							})
+							.catch(function(err) {
+								pushStatus.textContent = 'Error: ' + err.message;
+							});
+					});
+					pushCancel.addEventListener('click', function() {
+						pushModal.style.display = 'none';
+					});
+				}
 			})();
 		`
-			_, err = templBuffer.WriteString(var_21)
+			_, err = templBuffer.WriteString(var_26)
 			if err != nil {
 				return err
 			}
