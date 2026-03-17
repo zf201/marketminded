@@ -1,27 +1,55 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/zanfridau/marketminded/internal/agents"
-	"github.com/zanfridau/marketminded/internal/pipeline"
+	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
+	"github.com/zanfridau/marketminded/internal/tools"
+	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
-type PipelineHandler struct {
-	queries      *store.Queries
-	pipeline     *pipeline.Pipeline
-	ideaAgent    *agents.IdeaAgent
-	contentAgent *agents.ContentAgent
+var platformGuidance = map[string]map[string]string{
+	"linkedin": {
+		"post": "Professional but personal. Hook in the first line. Use line breaks for readability. 1300 char max. End with a question or CTA. No hashtags in body, 3-5 at the end if guidelines allow.",
+	},
+	"instagram": {
+		"post": "Visual-first caption. Hook in first line. Short paragraphs. Hashtags at the end (up to 15 relevant ones). Under 2200 chars. Engage with a question.",
+		"reel": "Script for a 30-60 second video. Hook in first 3 seconds. One clear point. End with CTA. Conversational, not scripted-sounding.",
+	},
+	"x": {
+		"post":   "Single tweet, under 280 chars. Punchy, opinionated, or surprising. No filler words.",
+		"thread": "5-8 tweets. First tweet is the hook. Each tweet stands alone but builds on the previous. Last tweet is CTA. Number them.",
+	},
+	"blog": {
+		"post": "Long-form markdown. 1200-2000 words. SEO-friendly headers. Intro with hook, clear sections, actionable takeaways, strong conclusion.",
+	},
+	"youtube": {
+		"script": "Video script with timestamps. Hook in first 15 seconds. Clear sections. Conversational delivery notes in [brackets].",
+		"short":  "Script for under 60 seconds. One point. Hook immediately. Fast-paced. End with follow CTA.",
+	},
+	"facebook": {
+		"post": "Conversational. Hook first line. Encourage comments. 500 chars ideal. One CTA.",
+	},
 }
 
-func NewPipelineHandler(q *store.Queries, p *pipeline.Pipeline, ia *agents.IdeaAgent, ca *agents.ContentAgent) *PipelineHandler {
-	return &PipelineHandler{queries: q, pipeline: p, ideaAgent: ia, contentAgent: ca}
+type PipelineHandler struct {
+	queries     *store.Queries
+	aiClient    *ai.Client
+	braveClient *search.BraveClient
+	model       func() string
+}
+
+func NewPipelineHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *PipelineHandler {
+	return &PipelineHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
 }
 
 func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -32,10 +60,22 @@ func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, project
 		h.create(w, r, projectID)
 	case strings.HasSuffix(rest, "/abandon") && r.Method == "POST":
 		h.abandon(w, r, projectID, rest)
-	case strings.HasSuffix(rest, "/advance") && r.Method == "POST":
-		h.advance(w, r, projectID, rest)
-	case strings.Contains(rest, "/stream/"):
-		h.stream(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/approve-plan") && r.Method == "POST":
+		h.approvePlan(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/reject-plan") && r.Method == "POST":
+		h.rejectPlan(w, r, projectID, rest)
+	case strings.Contains(rest, "/stream/plan"):
+		h.streamPlan(w, r, projectID, rest)
+	case strings.Contains(rest, "/stream/piece/"):
+		h.streamPiece(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/approve") && r.Method == "POST":
+		h.approvePiece(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/reject") && r.Method == "POST":
+		h.rejectPiece(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/improve/stream"):
+		h.streamImprove(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/improve") && r.Method == "POST":
+		h.saveImproveMessage(w, r, projectID, rest)
 	default:
 		// pipeline/{id}
 		h.show(w, r, projectID, rest)
@@ -52,14 +92,10 @@ func (h *PipelineHandler) list(w http.ResponseWriter, r *http.Request, projectID
 	runs, _ := h.queries.ListPipelineRuns(projectID)
 	views := make([]templates.PipelineRunView, len(runs))
 	for i, run := range runs {
-		topic := ""
-		if run.SelectedTopic != nil {
-			topic = *run.SelectedTopic
-		}
 		views[i] = templates.PipelineRunView{
 			ID:     run.ID,
 			Status: run.Status,
-			Topic:  topic,
+			Topic:  run.Topic,
 		}
 	}
 
@@ -71,7 +107,13 @@ func (h *PipelineHandler) list(w http.ResponseWriter, r *http.Request, projectID
 }
 
 func (h *PipelineHandler) create(w http.ResponseWriter, r *http.Request, projectID int64) {
-	run, err := h.queries.CreatePipelineRun(projectID)
+	r.ParseForm()
+	topic := r.FormValue("topic")
+	if topic == "" {
+		http.Error(w, "Topic required", http.StatusBadRequest)
+		return
+	}
+	run, err := h.queries.CreatePipelineRun(projectID, topic)
 	if err != nil {
 		http.Error(w, "Failed to create run", http.StatusInternalServerError)
 		return
@@ -80,9 +122,8 @@ func (h *PipelineHandler) create(w http.ResponseWriter, r *http.Request, project
 }
 
 func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	runIDStr := strings.TrimPrefix(rest, "pipeline/")
-	runID, err := strconv.ParseInt(runIDStr, 10, 64)
-	if err != nil {
+	runID := h.parseRunID(rest)
+	if runID == 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -98,85 +139,438 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 	contentViews := make([]templates.ContentPieceView, len(pieces))
 	for i, p := range pieces {
 		contentViews[i] = templates.ContentPieceView{
-			ID:     p.ID,
-			Type:   p.Type,
-			Title:  p.Title,
-			Body:   p.Body,
-			Status: p.Status,
+			ID:              p.ID,
+			Platform:        p.Platform,
+			Format:          p.Format,
+			Title:           p.Title,
+			Body:            p.Body,
+			Status:          p.Status,
+			SortOrder:       p.SortOrder,
+			RejectionReason: p.RejectionReason,
+			IsCornerstone:   p.ParentID == nil,
 		}
 	}
 
-	topic := ""
-	if run.SelectedTopic != nil {
-		topic = *run.SelectedTopic
+	// Find next pending piece
+	var nextPieceID int64
+	next, err := h.queries.NextPendingPiece(runID)
+	if err == nil {
+		nextPieceID = next.ID
 	}
 
-	templates.PipelineRunPage(templates.PipelineRunData{
+	templates.ProductionBoardPage(templates.ProductionBoardData{
 		ProjectID:   projectID,
 		ProjectName: project.Name,
 		RunID:       runID,
+		Topic:       run.Topic,
+		Plan:        run.Plan,
 		Status:      run.Status,
-		Topic:       topic,
-		Content:     contentViews,
+		Pieces:      contentViews,
+		NextPieceID: nextPieceID,
 	}).Render(r.Context(), w)
 }
 
-func (h *PipelineHandler) advance(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	// rest = "pipeline/123/advance"
-	parts := strings.Split(rest, "/")
-	if len(parts) < 3 {
-		http.NotFound(w, r)
-		return
-	}
-	runID, _ := strconv.ParseInt(parts[1], 10, 64)
-
-	r.ParseForm()
-	nextStatus := r.FormValue("next_status")
-	topic := r.FormValue("topic")
-
-	if topic != "" {
-		h.pipeline.SetTopic(r.Context(), runID, topic)
-	}
-
-	if err := h.pipeline.Advance(r.Context(), runID, nextStatus); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
-}
-
 func (h *PipelineHandler) abandon(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	parts := strings.Split(rest, "/")
-	if len(parts) < 3 {
-		http.NotFound(w, r)
-		return
-	}
-	runID, _ := strconv.ParseInt(parts[1], 10, 64)
-
-	h.pipeline.Advance(r.Context(), runID, "abandoned")
+	runID := h.parseRunID(rest)
+	h.queries.UpdatePipelineStatus(runID, "abandoned")
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
 }
 
-func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	// rest = "pipeline/123/stream/ideate" or "pipeline/123/stream/pillar" or "pipeline/123/stream/waterfall"
-	parts := strings.Split(rest, "/")
-	if len(parts) < 4 {
-		http.NotFound(w, r)
-		return
-	}
-	runID, _ := strconv.ParseInt(parts[1], 10, 64)
-	stage := parts[3]
+// --- Plan generation ---
 
+func (h *PipelineHandler) streamPlan(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
 	run, err := h.queries.GetPipelineRun(runID)
 	if err != nil {
 		http.Error(w, "Run not found", http.StatusNotFound)
 		return
 	}
 
-	project, _ := h.queries.GetProject(projectID)
+	profile, _ := h.queries.BuildProfileString(projectID)
 
-	// Set SSE headers
+	systemPrompt := fmt.Sprintf(`Today's date: %s
+
+You are a content production planner. Given a topic and the client's content strategy, create a production plan.
+
+Client profile:
+%s
+
+Topic: %s
+
+Based on the content strategy and waterfall flows defined in the profile, propose:
+1. The cornerstone content type (blog post, video script, etc.)
+2. The waterfall pieces that will be produced from it, with platform and format for each
+
+Be specific. Reference the waterfall patterns from the content strategy section. If the strategy doesn't define waterfalls, propose reasonable defaults based on the platforms listed.
+
+You MUST respond with ONLY a JSON object in this exact format, no other text:
+{
+  "cornerstone": {"platform": "blog", "format": "post", "title": "Working title here"},
+  "waterfall": [
+    {"platform": "instagram", "format": "post", "count": 2},
+    {"platform": "linkedin", "format": "post", "count": 1}
+  ]
+}
+
+Valid platforms: blog, linkedin, instagram, x, youtube, facebook
+Valid formats: post, thread, reel, script, short
+
+WRITING RULES:
+- Write like a human. Never sound AI-generated.
+- Never use em dashes. Use commas, periods, or restructure.
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".`, time.Now().Format("January 2, 2006"), profile, run.Topic)
+
+	// If there's already a plan (re-plan after rejection), include rejection context
+	var userMsg string
+	if run.Plan != "" {
+		userMsg = fmt.Sprintf("The previous plan was rejected. Here was the previous plan:\n%s\n\nPlease create a better plan.", run.Plan)
+	} else {
+		userMsg = "Create the production plan for this topic."
+	}
+
+	aiMsgs := []types.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userMsg},
+	}
+
+	flusher, sendEvent, sendChunk, sendDone, sendError := h.setupSSE(w)
+	if flusher == nil {
+		return
+	}
+
+	toolList, executor := h.buildTools()
+	onToolEvent := h.buildToolEventCallback(sendEvent)
+
+	temp := 0.3
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	if err != nil {
+		sendError(err.Error())
+		return
+	}
+
+	// Save plan
+	h.queries.UpdatePipelinePlan(runID, fullResponse)
+	sendDone()
+}
+
+func (h *PipelineHandler) approvePlan(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	run, err := h.queries.GetPipelineRun(runID)
+	if err != nil {
+		http.Error(w, "Run not found", http.StatusNotFound)
+		return
+	}
+
+	// Parse JSON plan
+	var plan struct {
+		Cornerstone struct {
+			Platform string `json:"platform"`
+			Format   string `json:"format"`
+			Title    string `json:"title"`
+		} `json:"cornerstone"`
+		Waterfall []struct {
+			Platform string `json:"platform"`
+			Format   string `json:"format"`
+			Count    int    `json:"count"`
+		} `json:"waterfall"`
+	}
+
+	// Try to extract JSON from the plan text (it might have markdown code fences)
+	planText := run.Plan
+	planText = strings.TrimSpace(planText)
+	if idx := strings.Index(planText, "{"); idx >= 0 {
+		planText = planText[idx:]
+	}
+	if idx := strings.LastIndex(planText, "}"); idx >= 0 {
+		planText = planText[:idx+1]
+	}
+
+	if err := json.Unmarshal([]byte(planText), &plan); err != nil {
+		http.Error(w, "Failed to parse plan JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create cornerstone piece (sort_order 0)
+	cornerstone, err := h.queries.CreateContentPiece(projectID, runID, plan.Cornerstone.Platform, plan.Cornerstone.Format, plan.Cornerstone.Title, 0, nil)
+	if err != nil {
+		http.Error(w, "Failed to create cornerstone", http.StatusInternalServerError)
+		return
+	}
+
+	// Create waterfall pieces, expanding count
+	sortOrder := 1
+	for _, w := range plan.Waterfall {
+		count := w.Count
+		if count < 1 {
+			count = 1
+		}
+		for i := 0; i < count; i++ {
+			title := fmt.Sprintf("%s %s", w.Platform, w.Format)
+			if count > 1 {
+				title = fmt.Sprintf("%s %s #%d", w.Platform, w.Format, i+1)
+			}
+			h.queries.CreateContentPiece(projectID, runID, w.Platform, w.Format, title, sortOrder, &cornerstone.ID)
+			sortOrder++
+		}
+	}
+
+	// Update run status
+	h.queries.UpdatePipelineStatus(runID, "producing")
+
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
+}
+
+func (h *PipelineHandler) rejectPlan(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	r.ParseForm()
+	reason := r.FormValue("reason")
+	if reason != "" {
+		// Append rejection reason to plan so it's available for re-generation
+		run, _ := h.queries.GetPipelineRun(runID)
+		h.queries.UpdatePipelinePlan(runID, run.Plan+"\n\nREJECTED: "+reason)
+	}
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
+}
+
+// --- Piece generation ---
+
+func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	pieceID := h.parsePieceID(rest)
+
+	// Guard
+	ok, err := h.queries.TrySetGenerating(pieceID)
+	if err != nil || !ok {
+		http.Error(w, "Piece already generating or done", http.StatusConflict)
+		return
+	}
+
+	piece, _ := h.queries.GetContentPiece(pieceID)
+	run, _ := h.queries.GetPipelineRun(runID)
+	profile, _ := h.queries.BuildProfileString(projectID)
+
+	var systemPrompt string
+	if piece.ParentID == nil {
+		// Cornerstone
+		systemPrompt = h.cornerstonePrompt(run.Topic, piece.Platform, piece.Format, profile, piece.RejectionReason)
+	} else {
+		// Waterfall - get cornerstone body
+		cornerstone, _ := h.queries.GetContentPiece(*piece.ParentID)
+		systemPrompt = h.waterfallPrompt(piece.Platform, piece.Format, profile, cornerstone.Body, piece.RejectionReason)
+	}
+
+	aiMsgs := []types.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: fmt.Sprintf("Write the %s %s now.", piece.Platform, piece.Format)},
+	}
+
+	flusher, sendEvent, sendChunk, sendDone, sendError := h.setupSSE(w)
+	if flusher == nil {
+		return
+	}
+
+	toolList, executor := h.buildTools()
+	onToolEvent := h.buildToolEventCallback(sendEvent)
+
+	temp := 0.3
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	if err != nil {
+		sendError(err.Error())
+		return
+	}
+
+	// Save body and set to draft
+	h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
+	h.queries.SetContentPieceStatus(pieceID, "draft")
+	sendDone()
+}
+
+func (h *PipelineHandler) approvePiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	pieceID := h.parsePieceID(rest)
+
+	h.queries.SetContentPieceStatus(pieceID, "approved")
+
+	// Check if all done
+	allDone, _ := h.queries.AllPiecesApproved(runID)
+	if allDone {
+		h.queries.UpdatePipelineStatus(runID, "complete")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"complete": true})
+		return
+	}
+
+	// Find next pending piece
+	next, err := h.queries.NextPendingPiece(runID)
+	if err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"next_piece_id": next.ID})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"complete": false})
+}
+
+func (h *PipelineHandler) rejectPiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	pieceID := h.parsePieceID(rest)
+	r.ParseForm()
+	reason := r.FormValue("reason")
+	h.queries.SetContentPieceRejection(pieceID, reason)
+	w.WriteHeader(http.StatusOK)
+}
+
+// --- Improve ---
+
+func (h *PipelineHandler) saveImproveMessage(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	pieceID := h.parsePieceID(rest)
+	r.ParseForm()
+	content := r.FormValue("content")
+	if content == "" {
+		http.Error(w, "Content required", http.StatusBadRequest)
+		return
+	}
+
+	chat, _ := h.queries.GetOrCreatePieceChat(projectID, pieceID)
+	h.queries.AddBrainstormMessage(chat.ID, "user", content)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *PipelineHandler) streamImprove(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	pieceID := h.parsePieceID(rest)
+	piece, err := h.queries.GetContentPiece(pieceID)
+	if err != nil {
+		http.Error(w, "Piece not found", http.StatusNotFound)
+		return
+	}
+
+	profile, _ := h.queries.BuildProfileString(projectID)
+	chat, _ := h.queries.GetOrCreatePieceChat(projectID, pieceID)
+	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
+
+	systemPrompt := fmt.Sprintf(`Today's date: %s
+
+You are improving a content piece. Here is the current version:
+
+%s
+
+Platform: %s, Format: %s
+
+Client profile:
+%s
+
+The user wants to improve this piece. Respond to their feedback and provide a complete rewritten version. Don't explain what you changed, just provide the improved content.
+
+WRITING RULES:
+- Write like a human. Never sound AI-generated.
+- Never use em dashes. Use commas, periods, or restructure.
+- No emoji in blog posts or scripts.
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".
+- Short, direct sentences. Vary length. Sound like a real person.`, time.Now().Format("January 2, 2006"), piece.Body, piece.Platform, piece.Format, profile)
+
+	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
+	for _, m := range msgs {
+		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
+	}
+
+	flusher, sendEvent, sendChunk, sendDone, sendError := h.setupSSE(w)
+	if flusher == nil {
+		return
+	}
+
+	toolList, executor := h.buildTools()
+	onToolEvent := h.buildToolEventCallback(sendEvent)
+
+	temp := 0.3
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	if err != nil {
+		sendError(err.Error())
+		return
+	}
+
+	// Save assistant message
+	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
+
+	// Update piece body and reset to draft
+	h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
+	h.queries.SetContentPieceStatus(pieceID, "draft")
+
+	sendDone()
+}
+
+// --- Helpers ---
+
+func (h *PipelineHandler) cornerstonePrompt(topic, platform, format, profile, rejectionReason string) string {
+	prompt := fmt.Sprintf(`Today's date: %s
+
+You are a content writer. Write the cornerstone piece for this production run.
+
+Client profile:
+%s
+
+Topic: %s
+Format: %s %s
+
+Write the complete piece in markdown. Follow the client's voice and tone exactly. Reference their content pillars where relevant. The piece should be thorough, specific to this client's expertise, and valuable to their target audience.`,
+		time.Now().Format("January 2, 2006"), profile, topic, platform, format)
+
+	if rejectionReason != "" {
+		prompt += fmt.Sprintf("\n\nPrevious version was rejected. Feedback: %s. Address this in your rewrite.", rejectionReason)
+	}
+
+	prompt += `
+
+WRITING RULES:
+- Write like a human. Never sound AI-generated.
+- Never use em dashes. Use commas, periods, or restructure.
+- No emoji in blog posts or scripts.
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".
+- Short, direct sentences. Vary length. Sound like a real person.`
+
+	return prompt
+}
+
+func (h *PipelineHandler) waterfallPrompt(platform, format, profile, cornerstoneBody, rejectionReason string) string {
+	guidance := ""
+	if pg, ok := platformGuidance[platform]; ok {
+		if g, ok := pg[format]; ok {
+			guidance = g
+		}
+	}
+
+	prompt := fmt.Sprintf(`Today's date: %s
+
+You are a content repurposer. Adapt the cornerstone content into a %s %s.
+
+Client profile:
+%s
+
+Cornerstone content:
+%s
+
+Target: %s %s
+%s
+
+Adapt the cornerstone into this format. Don't just summarize. Reshape the content to work natively on this platform. Match the client's voice and tone.`,
+		time.Now().Format("January 2, 2006"), platform, format, profile, cornerstoneBody, platform, format, guidance)
+
+	if rejectionReason != "" {
+		prompt += fmt.Sprintf("\n\nPrevious version was rejected. Feedback: %s. Address this in your rewrite.", rejectionReason)
+	}
+
+	prompt += `
+
+WRITING RULES:
+- Write like a human. Never sound AI-generated.
+- Never use em dashes. Use commas, periods, or restructure.
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness".
+- Short, direct sentences. Vary length. Sound like a real person.
+- Adapt emoji/hashtag usage to platform norms only where the client's guidelines allow it.`
+
+	return prompt
+}
+
+func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(any), func(string) error, func(), func(string)) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -184,7 +578,7 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
+		return nil, nil, nil, nil, nil
 	}
 
 	sendEvent := func(v any) {
@@ -206,96 +600,69 @@ func (h *PipelineHandler) stream(w http.ResponseWriter, r *http.Request, project
 		sendEvent(map[string]string{"type": "error", "error": errMsg})
 	}
 
-	// Build context
-	profile, _ := h.queries.BuildProfileString(projectID)
+	return flusher, sendEvent, sendChunk, sendDone, sendError
+}
 
-	summaries, _ := h.queries.ContentLogSummaries(projectID, 20)
-	var contentLog []string
-	for _, s := range summaries {
-		contentLog = append(contentLog, fmt.Sprintf("%s: %s", s.Title, s.Body))
+func (h *PipelineHandler) buildTools() ([]ai.Tool, ai.ToolExecutor) {
+	toolList := []ai.Tool{
+		tools.NewFetchTool(),
+		tools.NewSearchTool(),
 	}
 
-	ctx := r.Context()
+	searchExec := tools.NewSearchExecutor(h.braveClient)
 
-	switch stage {
-	case "ideate":
-		result, err := h.ideaAgent.GenerateStream(ctx, agents.IdeaInput{
-			Niche:      project.Description,
-			ContentLog: contentLog,
-			Profile:    profile,
-		}, sendChunk)
-		if err != nil {
-			sendError(err.Error())
-			return
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		switch name {
+		case "fetch_url":
+			return tools.ExecuteFetch(ctx, args)
+		case "web_search":
+			return searchExec(ctx, args)
+		default:
+			return "", fmt.Errorf("unknown tool: %s", name)
 		}
-		// Save agent run
-		h.queries.CreateAgentRun(projectID, &run.ID, "idea", "Generate pillar ideas", result, nil)
-		sendDone()
+	}
 
-	case "pillar":
-		topic := ""
-		if run.SelectedTopic != nil {
-			topic = *run.SelectedTopic
-		}
-		result, err := h.contentAgent.WritePillarStream(ctx, agents.PillarInput{
-			Topic:      topic,
-			Profile:    profile,
-			ContentLog: contentLog,
-		}, sendChunk)
-		if err != nil {
-			sendError(err.Error())
-			return
-		}
-		// Save content piece
-		piece, _ := h.queries.CreateContentPiece(projectID, &run.ID, "blog", topic, result, nil)
-		h.queries.CreateAgentRun(projectID, &run.ID, "content", "Write pillar blog post", result, &piece.ID)
-		sendDone()
+	return toolList, executor
+}
 
-	case "waterfall":
-		// Find the pillar blog post from this run
-		pieces, _ := h.queries.ListContentByPipelineRun(runID)
-		var pillarBody string
-		var pillarID int64
-		for _, p := range pieces {
-			if p.Type == "blog" {
-				pillarBody = p.Body
-				pillarID = p.ID
-				break
+func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any)) ai.ToolEventFn {
+	return func(event ai.ToolEvent) {
+		switch event.Type {
+		case "tool_start":
+			summary := ""
+			switch event.Tool {
+			case "fetch_url":
+				summary = tools.FetchSummary(event.Args)
+			case "web_search":
+				summary = tools.SearchSummary(event.Args)
 			}
+			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
+		case "tool_result":
+			summary := event.Summary
+			if len(summary) > 200 {
+				summary = summary[:200] + "..."
+			}
+			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
 		}
-
-		// Generate LinkedIn post
-		result, err := h.contentAgent.WriteSocialPostStream(ctx, agents.SocialInput{
-			PillarContent: pillarBody,
-			Platform:      "linkedin",
-			Profile:       profile,
-		}, sendChunk)
-		if err != nil {
-			sendError(err.Error())
-			return
-		}
-		piece, _ := h.queries.CreateContentPiece(projectID, &run.ID, "social_linkedin", "LinkedIn Post", result, &pillarID)
-		h.queries.CreateAgentRun(projectID, &run.ID, "content", "Write LinkedIn post", result, &piece.ID)
-
-		// Separator
-		sendChunk("\n\n---\n\n")
-
-		// Generate Instagram post
-		result2, err := h.contentAgent.WriteSocialPostStream(ctx, agents.SocialInput{
-			PillarContent: pillarBody,
-			Platform:      "instagram",
-			Profile:       profile,
-		}, sendChunk)
-		if err != nil {
-			sendError(err.Error())
-			return
-		}
-		piece2, _ := h.queries.CreateContentPiece(projectID, &run.ID, "social_instagram", "Instagram Post", result2, &pillarID)
-		h.queries.CreateAgentRun(projectID, &run.ID, "content", "Write Instagram post", result2, &piece2.ID)
-
-		sendDone()
-
-	default:
-		sendError("Unknown stage: " + stage)
 	}
 }
+
+func (h *PipelineHandler) parseRunID(rest string) int64 {
+	// rest = "pipeline/123" or "pipeline/123/..."
+	parts := strings.Split(strings.TrimPrefix(rest, "pipeline/"), "/")
+	id, _ := strconv.ParseInt(parts[0], 10, 64)
+	return id
+}
+
+func (h *PipelineHandler) parsePieceID(rest string) int64 {
+	// Look for "piece/123" in the rest string
+	parts := strings.Split(rest, "/")
+	for i, p := range parts {
+		if p == "piece" && i+1 < len(parts) {
+			id, _ := strconv.ParseInt(parts[i+1], 10, 64)
+			return id
+		}
+	}
+	return 0
+}
+

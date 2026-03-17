@@ -44,11 +44,12 @@ func (h *ContentHandler) edit(w http.ResponseWriter, r *http.Request, projectID,
 	templates.ContentEditPage(templates.ContentEditData{
 		ProjectID: projectID,
 		Piece: templates.ContentPieceView{
-			ID:     piece.ID,
-			Type:   piece.Type,
-			Title:  piece.Title,
-			Body:   piece.Body,
-			Status: piece.Status,
+			ID:       piece.ID,
+			Platform: piece.Platform,
+			Format:   piece.Format,
+			Title:    piece.Title,
+			Body:     piece.Body,
+			Status:   piece.Status,
 		},
 	}).Render(r.Context(), w)
 }
@@ -59,10 +60,10 @@ func (h *ContentHandler) update(w http.ResponseWriter, r *http.Request, projectI
 	body := r.FormValue("body")
 	action := r.FormValue("action")
 
-	h.queries.UpdateContentPiece(pieceID, title, body)
+	h.queries.UpdateContentPieceBody(pieceID, title, body)
 
 	if action == "approve" {
-		h.queries.ApproveContentPiece(pieceID)
+		h.queries.SetContentPieceStatus(pieceID, "approved")
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/content/%d", projectID, pieceID), http.StatusSeeOther)

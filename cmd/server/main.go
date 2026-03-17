@@ -6,10 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/zanfridau/marketminded/internal/agents"
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/config"
-	"github.com/zanfridau/marketminded/internal/pipeline"
 	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/web/handlers"
@@ -47,17 +45,10 @@ func main() {
 		return cfg.ModelIdeation
 	}
 
-	// Agents
-	ideaAgent := agents.NewIdeaAgent(aiClient, braveClient, ideationModel)
-	contentAgent := agents.NewContentAgent(aiClient, contentModel)
-	// Pipeline
-	pipelineStore := &pipelineStoreAdapter{queries: queries}
-	pip := pipeline.New(pipelineStore)
-
 	// Handlers
 	dashboardHandler := handlers.NewDashboardHandler(queries)
 	projectHandler := handlers.NewProjectHandler(queries)
-	pipelineHandler := handlers.NewPipelineHandler(queries, pip, ideaAgent, contentAgent)
+	pipelineHandler := handlers.NewPipelineHandler(queries, aiClient, braveClient, contentModel)
 	contentHandler := handlers.NewContentHandler(queries)
 	templateHandler := handlers.NewTemplateHandler(queries)
 	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
@@ -109,30 +100,4 @@ func main() {
 
 	log.Printf("Starting MarketMinded on :%s", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
-}
-
-// pipelineStoreAdapter adapts store.Queries to pipeline.Store interface
-type pipelineStoreAdapter struct {
-	queries *store.Queries
-}
-
-func (a *pipelineStoreAdapter) GetPipelineRun(id int64) (*pipeline.Run, error) {
-	run, err := a.queries.GetPipelineRun(id)
-	if err != nil {
-		return nil, err
-	}
-	return &pipeline.Run{
-		ID:            run.ID,
-		ProjectID:     run.ProjectID,
-		Status:        run.Status,
-		SelectedTopic: run.SelectedTopic,
-	}, nil
-}
-
-func (a *pipelineStoreAdapter) AdvancePipelineRun(id int64, status string) error {
-	return a.queries.AdvancePipelineRun(id, status)
-}
-
-func (a *pipelineStoreAdapter) SetPipelineTopic(id int64, topic string) error {
-	return a.queries.SetPipelineTopic(id, topic)
 }

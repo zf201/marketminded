@@ -81,19 +81,17 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	pieces, _ := h.queries.ListContentPieces(id)
 	runs, _ := h.queries.ListPipelineRuns(id)
 
 	sections, _ := h.queries.ListProfileSections(id)
 	hasProfile := len(sections) > 0
 
 	detail := templates.ProjectDetail{
-		ID:           project.ID,
-		Name:         project.Name,
-		Description:  project.Description,
-		HasProfile:   hasProfile,
-		ContentCount: len(pieces),
-		RunCount:     len(runs),
+		ID:          project.ID,
+		Name:        project.Name,
+		Description: project.Description,
+		HasProfile:  hasProfile,
+		RunCount:    len(runs),
 	}
 
 	templates.ProjectOverview(detail).Render(r.Context(), w)
