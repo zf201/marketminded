@@ -629,27 +629,47 @@ function initProfileSectionChat(projectID, sectionName) {
     scrollToBottom();
 }
 
-// --- Helpers ---
+// --- Render helpers ---
 
-function renderField(parent, label, value, markdown) {
-    if (!value) return;
+function renderSection(parent, label, content, opts) {
+    opts = opts || {};
+    if (!content && !opts.force) return;
     var sec = document.createElement('div');
-    sec.className = 'script-section';
-    var lbl = document.createElement('strong');
+    sec.className = 'content-field';
+    if (opts.minor) sec.className += ' content-field-minor';
+    var lbl = document.createElement('div');
+    lbl.className = opts.minor ? 'content-field-label-minor' : 'content-field-label';
     lbl.textContent = label;
     sec.appendChild(lbl);
-    if (markdown && typeof marked !== 'undefined') {
+    if (opts.markdown && typeof marked !== 'undefined' && content) {
         var md = document.createElement('div');
         md.className = 'markdown-body';
-        md.innerHTML = marked.parse(value);
+        md.innerHTML = marked.parse(content);
         sec.appendChild(md);
-    } else {
+    } else if (opts.badges && content) {
+        var badges = document.createElement('div');
+        badges.className = 'content-badges';
+        content.split(/\s+/).forEach(function(tag) {
+            if (!tag) return;
+            var b = document.createElement('span');
+            b.className = 'content-badge';
+            b.textContent = tag;
+            badges.appendChild(b);
+        });
+        sec.appendChild(badges);
+    } else if (content) {
         var txt = document.createElement('div');
-        txt.style.whiteSpace = 'pre-wrap';
-        txt.textContent = value;
+        txt.className = 'content-field-value';
+        txt.textContent = content;
         sec.appendChild(txt);
     }
     parent.appendChild(sec);
+    return sec;
+}
+
+// backward compat alias
+function renderField(parent, label, value, markdown) {
+    renderSection(parent, label, value, { markdown: markdown });
 }
 
 function renderPlan(el) {
@@ -725,24 +745,24 @@ function renderContentBody(el, platform, format, bodyText) {
 }
 
 function renderBlogPost(el, data) {
-    renderField(el, 'Title', data.title);
-    renderField(el, 'Body', data.body, true);
-    renderField(el, 'Meta Description', data.meta_description);
+    renderSection(el, 'Title', data.title);
+    renderSection(el, 'Body', data.body, { markdown: true });
+    renderSection(el, 'Meta Description', data.meta_description, { minor: true });
 }
 
 function renderSimplePost(el, data) {
-    renderField(el, 'Caption', data.caption);
-    if (data.hashtags) { var h = document.createElement('div'); h.className = 'content-hashtags'; h.textContent = data.hashtags; el.appendChild(h); }
-    if (data.image_instructions) { renderField(el, 'Image Instructions', data.image_instructions); }
+    renderSection(el, 'Caption', data.caption);
+    if (data.hashtags) renderSection(el, 'Hashtags', data.hashtags, { badges: true, minor: true });
+    if (data.image_instructions) renderSection(el, 'Image Instructions', data.image_instructions, { minor: true });
 }
 
 function renderXPost(el, data) {
-    renderField(el, 'Tweet', data.text);
+    renderSection(el, 'Tweet', data.text);
 }
 
 function renderXThread(el, data) {
     if (!data.tweets) return;
-    var lbl = document.createElement('strong'); lbl.className = 'content-section-label'; lbl.textContent = 'Tweets'; el.appendChild(lbl);
+    var sec = renderSection(el, 'Tweets (' + data.tweets.length + ')', null, { force: true });
     var items = document.createElement('div'); items.className = 'content-items';
     data.tweets.forEach(function(tweet, i) {
         var item = document.createElement('div'); item.className = 'content-item';
@@ -751,63 +771,64 @@ function renderXThread(el, data) {
         item.appendChild(document.createTextNode(' ' + tweet));
         items.appendChild(item);
     });
-    el.appendChild(items);
+    sec.appendChild(items);
 }
 
 function renderLinkedinCarousel(el, data) {
     if (data.slides) {
-        var lbl = document.createElement('strong'); lbl.className = 'content-section-label'; lbl.textContent = 'Slides'; el.appendChild(lbl);
+        var sec = renderSection(el, 'Slides (' + data.slides.length + ')', null, { force: true });
         data.slides.forEach(function(slide, i) {
             var card = document.createElement('div'); card.className = 'slide-card';
-            var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1) + ': ' + (slide.title || '');
+            var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1) + (slide.title ? ': ' + slide.title : '');
             var body = document.createElement('div'); body.className = 'slide-card-body'; body.textContent = slide.body || '';
-            card.appendChild(title); card.appendChild(body); el.appendChild(card);
+            card.appendChild(title); card.appendChild(body); sec.appendChild(card);
         });
     }
-    renderField(el, 'Caption', data.caption);
+    renderSection(el, 'Caption', data.caption);
 }
 
 function renderInstagramCarousel(el, data) {
     if (data.slides) {
-        var lbl = document.createElement('strong'); lbl.className = 'content-section-label'; lbl.textContent = 'Slides'; el.appendChild(lbl);
+        var sec = renderSection(el, 'Slides (' + data.slides.length + ')', null, { force: true });
         data.slides.forEach(function(slide, i) {
             var card = document.createElement('div'); card.className = 'slide-card';
             var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1);
             var body = document.createElement('div'); body.className = 'slide-card-body'; body.textContent = slide.text || '';
-            card.appendChild(title); card.appendChild(body); el.appendChild(card);
+            card.appendChild(title); card.appendChild(body); sec.appendChild(card);
         });
     }
-    renderField(el, 'Caption', data.caption);
-    if (data.hashtags) { renderField(el, 'Hashtags', data.hashtags); }
+    renderSection(el, 'Caption', data.caption);
+    if (data.hashtags) renderSection(el, 'Hashtags', data.hashtags, { badges: true, minor: true });
 }
 
 function renderScript(el, data) {
-    var script = document.createElement('div'); script.className = 'content-script';
-    var fields = ['hook', 'setup', 'value', 'content', 'cta'];
-    fields.forEach(function(field) {
-        if (data[field]) {
-            var sec = document.createElement('div'); sec.className = 'script-section';
-            var label = document.createElement('strong'); label.textContent = field.charAt(0).toUpperCase() + field.slice(1);
-            sec.appendChild(label);
-            sec.appendChild(document.createTextNode(data[field]));
-            script.appendChild(sec);
-        }
+    var scriptFields = [
+        ['hook', 'Hook'],
+        ['setup', 'Setup'],
+        ['value', 'Value'],
+        ['content', 'Content'],
+        ['cta', 'CTA']
+    ];
+    scriptFields.forEach(function(pair) {
+        if (data[pair[0]]) renderSection(el, pair[1], data[pair[0]]);
     });
-    el.appendChild(script);
-    if (data.caption) { var c = document.createElement('div'); c.className = 'content-caption'; c.style.marginTop = '0.5rem'; c.textContent = data.caption; el.appendChild(c); }
+    if (data.caption) renderSection(el, 'Caption', data.caption, { minor: true });
 }
 
 function renderYoutubeScript(el, data) {
-    if (data.title) { var h = document.createElement('h3'); h.className = 'content-title'; h.textContent = data.title; el.appendChild(h); }
+    renderSection(el, 'Title', data.title);
     if (data.sections) {
-        data.sections.forEach(function(sec) {
-            var div = document.createElement('div'); div.className = 'script-section';
-            var heading = document.createElement('strong');
-            heading.textContent = (sec.timestamp ? '[' + sec.timestamp + '] ' : '') + sec.heading;
+        var sec = renderSection(el, 'Script Sections', null, { force: true });
+        data.sections.forEach(function(s) {
+            var div = document.createElement('div'); div.className = 'content-field';
+            var heading = document.createElement('div'); heading.className = 'content-field-label-minor';
+            heading.textContent = (s.timestamp ? '[' + s.timestamp + '] ' : '') + s.heading;
             div.appendChild(heading);
-            div.appendChild(document.createTextNode(sec.content));
-            if (sec.notes) { var n = document.createElement('p'); n.className = 'text-muted'; n.textContent = '[' + sec.notes + ']'; div.appendChild(n); }
-            el.appendChild(div);
+            var content = document.createElement('div'); content.className = 'content-field-value';
+            content.textContent = s.content;
+            div.appendChild(content);
+            if (s.notes) { var n = document.createElement('div'); n.className = 'text-muted'; n.style.fontSize = '0.8rem'; n.textContent = '[' + s.notes + ']'; div.appendChild(n); }
+            sec.appendChild(div);
         });
     }
 }
