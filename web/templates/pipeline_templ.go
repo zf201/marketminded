@@ -373,7 +373,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn btn-danger\" style=\"margin-left:0.5rem\">")
+				_, err = templBuffer.WriteString("\" style=\"display:inline\" onsubmit=\"return confirm(&#39;Delete this pipeline run and all its content? This cannot be undone.&#39;)\"><button type=\"submit\" class=\"btn btn-danger\" style=\"margin-left:0.5rem\">")
 				if err != nil {
 					return err
 				}

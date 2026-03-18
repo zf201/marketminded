@@ -94,7 +94,7 @@ templ ProductionBoardPage(data ProductionBoardData) {
 						</form>
 					}
 					if data.Status == "abandoned" {
-						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/delete", data.ProjectID, data.RunID)) } style="display:inline">
+						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/delete", data.ProjectID, data.RunID)) } style="display:inline" onsubmit="return confirm('Delete this pipeline run and all its content? This cannot be undone.')">
 							<button type="submit" class="btn btn-danger" style="margin-left:0.5rem">Delete</button>
 						</form>
 					}
