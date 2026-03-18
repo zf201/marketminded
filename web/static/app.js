@@ -869,6 +869,19 @@ function renderContentBody(el, platform, format, bodyText) {
 function renderBlogPost(el, data) {
     renderSection(el, 'Title', data.title);
     renderSection(el, 'Body', data.body, { markdown: true });
+    if (data.body) {
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'btn btn-secondary';
+        copyBtn.textContent = 'Copy Markdown';
+        copyBtn.style.cssText = 'font-size:0.75rem;padding:0.2rem 0.5rem;margin-top:0.25rem';
+        copyBtn.onclick = function() {
+            navigator.clipboard.writeText(data.body).then(function() {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(function() { copyBtn.textContent = 'Copy Markdown'; }, 2000);
+            });
+        };
+        el.appendChild(copyBtn);
+    }
     renderSection(el, 'Meta Description', data.meta_description, { minor: true });
 }
 
