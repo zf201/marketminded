@@ -55,6 +55,8 @@ func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, project
 		h.create(w, r, projectID)
 	case strings.HasSuffix(rest, "/abandon") && r.Method == "POST":
 		h.abandon(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/delete") && r.Method == "POST":
+		h.deleteRun(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/approve-plan") && r.Method == "POST":
 		h.approvePlan(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/reject-plan") && r.Method == "POST":
@@ -176,6 +178,12 @@ func (h *PipelineHandler) abandon(w http.ResponseWriter, r *http.Request, projec
 	runID := h.parseRunID(rest)
 	h.queries.UpdatePipelineStatus(runID, "abandoned")
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
+}
+
+func (h *PipelineHandler) deleteRun(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	h.queries.DeletePipelineRun(runID)
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline", projectID), http.StatusSeeOther)
 }
 
 // --- Plan generation ---

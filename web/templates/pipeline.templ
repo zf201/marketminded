@@ -93,6 +93,11 @@ templ ProductionBoardPage(data ProductionBoardData) {
 							<button type="submit" class="btn btn-danger" style="margin-left:0.5rem">Abandon</button>
 						</form>
 					}
+					if data.Status == "abandoned" {
+						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/delete", data.ProjectID, data.RunID)) } style="display:inline">
+							<button type="submit" class="btn btn-danger" style="margin-left:0.5rem">Delete</button>
+						</form>
+					}
 				</div>
 			</div>
 

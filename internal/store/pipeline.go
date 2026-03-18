@@ -46,6 +46,11 @@ func (q *Queries) UpdatePipelineStatus(id int64, status string) error {
 	return err
 }
 
+func (q *Queries) DeletePipelineRun(id int64) error {
+	_, err := q.db.Exec("DELETE FROM pipeline_runs WHERE id = ?", id)
+	return err
+}
+
 func (q *Queries) ListPipelineRuns(projectID int64) ([]PipelineRun, error) {
 	rows, err := q.db.Query(
 		"SELECT id, project_id, topic, COALESCE(brief,''), COALESCE(plan,''), status, created_at, updated_at FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC", projectID,
