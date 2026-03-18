@@ -1252,27 +1252,14 @@ function initProductionBoard(projectID, runID) {
             return;
         }
 
-        // Approve button
+        // Approve button — POST then reload
         if (btn.classList.contains('piece-approve-btn')) {
             var pieceId = btn.dataset.pieceId;
             btn.disabled = true;
+            btn.textContent = 'Approving...';
             fetch(basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    if (data.complete) {
-                        window.location.reload();
-                    } else if (data.next_piece_id) {
-                        // Update card status visually
-                        var card = btn.closest('.board-card');
-                        card.className = card.className.replace(/board-card-(draft)/g, '') + ' board-card-approved';
-                        var actionsEl = document.getElementById('piece-actions-' + pieceId);
-                        actionsEl.innerHTML = '<span class="badge badge-approved">approved</span>';
-                        // Auto-generate next piece
-                        streamPiece(data.next_piece_id);
-                    } else {
-                        window.location.reload();
-                    }
-                });
+                .then(function() { window.location.reload(); })
+                .catch(function() { window.location.reload(); });
             return;
         }
 
