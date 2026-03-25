@@ -253,7 +253,7 @@ WRITING RULES:
 	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -425,7 +425,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -546,7 +546,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return

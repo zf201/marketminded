@@ -30,6 +30,7 @@ func TestStreamWithTools_NoToolCalls(t *testing.T) {
 		func(ctx context.Context, name, args string) (string, error) { return "", nil },
 		func(event ToolEvent) {},
 		func(chunk string) error { chunks = append(chunks, chunk); return nil },
+		func(chunk string) error { return nil }, // onReasoning
 		nil,
 	)
 	if err != nil {
@@ -73,6 +74,7 @@ func TestStreamWithTools_WithToolCall(t *testing.T) {
 		},
 		func(event ToolEvent) { events = append(events, event) },
 		func(chunk string) error { return nil },
+		func(chunk string) error { return nil }, // onReasoning
 		nil,
 	)
 	if err != nil {

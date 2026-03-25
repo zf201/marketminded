@@ -60,8 +60,13 @@ type streamChoice struct {
 }
 
 type streamDelta struct {
-	Role      string `json:"role,omitempty"`
-	Content   string `json:"content,omitempty"`
+	Role             string `json:"role,omitempty"`
+	Content          string `json:"content,omitempty"`
+	Reasoning        string `json:"reasoning,omitempty"`
+	ReasoningDetails []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"reasoning_details,omitempty"`
 	ToolCalls []struct {
 		Index    int              `json:"index"`
 		ID       string           `json:"id,omitempty"`
@@ -99,6 +104,7 @@ func (c *Client) StreamWithTools(
 	executor ToolExecutor,
 	onToolEvent ToolEventFn,
 	onChunk types.StreamFunc,
+	onReasoning types.StreamFunc,
 	temperature *float64,
 ) (string, error) {
 	// Convert types.Message to ChatMessage
@@ -110,7 +116,7 @@ func (c *Client) StreamWithTools(
 	var fullText strings.Builder
 
 	for iteration := 0; iteration < 10; iteration++ {
-		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, temperature)
+		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature)
 		if err != nil {
 			return fullText.String(), err
 		}
@@ -174,6 +180,7 @@ func (c *Client) streamOneTurn(
 	messages []ChatMessage,
 	tools []Tool,
 	onChunk types.StreamFunc,
+	onReasoning types.StreamFunc,
 	temperature *float64,
 ) (string, []ToolCall, error) {
 	body, _ := json.Marshal(toolChatRequest{
@@ -230,6 +237,16 @@ func (c *Client) streamOneTurn(
 			textContent.WriteString(choice.Delta.Content)
 			if err := onChunk(choice.Delta.Content); err != nil {
 				return textContent.String(), nil, err
+			}
+		}
+
+		// Handle reasoning — support both field formats
+		if choice.Delta.Reasoning != "" {
+			onReasoning(choice.Delta.Reasoning)
+		}
+		for _, rd := range choice.Delta.ReasoningDetails {
+			if rd.Type == "reasoning.text" && rd.Text != "" {
+				onReasoning(rd.Text)
 			}
 		}
 

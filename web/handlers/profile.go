@@ -295,7 +295,7 @@ You are an expert content marketing strategist. You are helping build the **%s**
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
 	if err != nil {
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
