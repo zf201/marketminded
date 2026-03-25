@@ -10,8 +10,11 @@ func TestPipelineRunCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if run.Topic != "5 pricing mistakes" {
-		t.Errorf("expected topic, got %s", run.Topic)
+	if run.Topic == "" {
+		t.Error("expected topic to be auto-generated, got empty")
+	}
+	if run.Brief != "5 pricing mistakes" {
+		t.Errorf("expected brief '5 pricing mistakes', got %s", run.Brief)
 	}
 	if run.Status != "planning" {
 		t.Errorf("expected planning, got %s", run.Status)
