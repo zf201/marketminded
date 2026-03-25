@@ -15,8 +15,8 @@ Replace the "Settings" button in the top-right header with a card in the grid. A
 
 ### Settings Card
 
-- Shows current language + count of configured URLs as quick summary
-- Badge: "Configured" if any settings exist, "Not set" otherwise
+- Shows current language as quick summary (e.g., "Language: English")
+- Badge: "Configured" if any setting has a non-empty value, "Not set" otherwise
 - Links to existing `/projects/{id}/settings` page (no changes to that page)
 
 ### Storytelling Framework Card
@@ -46,7 +46,7 @@ Replace the "Settings" button in the top-right header with a card in the grid. A
 - Click a card or its radio button to select it
 - POST form saves choice as `storytelling_framework` in `project_settings` table
 - Redirect back with `?saved=1` success indicator
-- "None" option to clear the selection
+- "None" option to clear the selection (sets value to empty string in `project_settings`)
 
 ### Framework Data
 
@@ -105,20 +105,30 @@ Structure this content following these beats:
 
 ### Lookup
 
-`buildPiecePrompt` receives projectID via the pipeline run. Add a `GetProjectSetting(projectID, "storytelling_framework")` call. If set, look up the framework struct by key and format the prompt section. If not set, skip — pipeline works exactly as today.
+`buildPiecePrompt` currently takes `(piece, run, profile)`. Add `projectID` as a fourth parameter (available from the caller in `streamPiece`). Call `GetProjectSetting(projectID, "storytelling_framework")`. If the value is non-empty and matches a known framework key, inject the framework prompt section. If empty, absent, or unrecognized — skip silently. Pipeline works exactly as today.
+
+The storytelling section is inserted between the `## Client profile` block and the conditional `## Topic brief` / `## Cornerstone content` block, before `antiAIRules` (which stays at the end).
 
 ## Storage
 
 Reuses existing `project_settings` table. No new migrations needed.
 
 - Key: `storytelling_framework`
-- Value: framework key string (e.g., `"storybrand"`, `"pixar"`) or empty/absent for none
+- Value: framework key string (e.g., `"storybrand"`, `"pixar"`) or empty string for none
+
+## Struct & Handler Changes
+
+- `ProjectDetail` struct in `web/templates/project.templ` needs new fields: `Language string`, `FrameworkName string` (display name of selected framework, or empty)
+- `ShowProject` handler in `web/handlers/project.go` needs to query `AllProjectSettings` and look up framework to populate these fields
+- Route: add `case strings.HasPrefix(rest, "storytelling"):` in the project sub-router switch in `cmd/server/main.go`, wiring a new `StorytellingHandler` with `*store.Queries`
+- Grid CSS: verify 6-card layout works with existing `.grid` class; adjust if needed (likely 2-col or 3-col)
 
 ## Files to Create/Modify
 
 - `internal/content/frameworks.go` — new file, framework struct definitions and registry
-- `web/templates/project.templ` — replace settings button with settings card, add storytelling card
+- `web/templates/project.templ` — add fields to `ProjectDetail`, replace settings button with settings card, add storytelling card
 - `web/templates/storytelling.templ` — new template for framework selection page
 - `web/handlers/storytelling.go` — new handler for GET/POST on `/projects/{id}/storytelling`
-- `web/handlers/pipeline.go` — modify `buildPiecePrompt` to inject framework
-- `cmd/server/main.go` — register storytelling route
+- `web/handlers/project.go` — populate new `ProjectDetail` fields from settings
+- `web/handlers/pipeline.go` — add `projectID` param to `buildPiecePrompt`, inject framework for cornerstone pieces
+- `cmd/server/main.go` — register storytelling route in project sub-router switch
