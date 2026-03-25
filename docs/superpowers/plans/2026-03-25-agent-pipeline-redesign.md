@@ -101,6 +101,7 @@ CREATE TABLE pipeline_runs_new (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     topic TEXT NOT NULL,
+    brief TEXT,
     plan TEXT,
     status TEXT NOT NULL DEFAULT 'planning'
         CHECK(status IN ('planning','producing','complete','abandoned')),
@@ -108,8 +109,8 @@ CREATE TABLE pipeline_runs_new (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO pipeline_runs_new (id, project_id, topic, plan, status, created_at, updated_at)
-    SELECT id, project_id, topic, plan, status, created_at, updated_at
+INSERT INTO pipeline_runs_new (id, project_id, topic, brief, plan, status, created_at, updated_at)
+    SELECT id, project_id, topic, brief, plan, status, created_at, updated_at
     FROM pipeline_runs;
 
 DROP TABLE pipeline_runs;
@@ -733,6 +734,15 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 ## Topic
 %s
 `, fcResult.EnrichedBrief, sourcesList.String(), run.Brief)
+
+	// Check for rejected cornerstone piece — include rejection reason for re-runs
+	pieces, _ := h.queries.ListContentByPipelineRun(run.ID)
+	for _, p := range pieces {
+		if p.ParentID == nil && p.Status == "rejected" && p.RejectionReason != "" {
+			systemPrompt += fmt.Sprintf("\n## Previous version was rejected\nFeedback: %s\nAddress this feedback in your rewrite.\n", p.RejectionReason)
+			break
+		}
+	}
 
 	systemPrompt += antiAIRules
 
