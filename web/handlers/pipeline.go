@@ -244,7 +244,7 @@ WRITING RULES:
 		{Role: "user", Content: userMsg},
 	}
 
-	flusher, sendEvent, sendChunk, sendDone, sendError := h.setupSSE(w)
+	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
 	if flusher == nil {
 		return
 	}
@@ -253,7 +253,7 @@ WRITING RULES:
 	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -410,7 +410,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 		{Role: "user", Content: fmt.Sprintf("Write the %s %s now.", piece.Platform, piece.Format)},
 	}
 
-	flusher, sendEvent, sendChunk, sendDone, sendError := h.setupSSE(w)
+	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
 	if flusher == nil {
 		return
 	}
@@ -425,7 +425,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -525,7 +525,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
 	}
 
-	flusher, sendEvent, sendChunk, sendDone, sendError := h.setupSSE(w)
+	flusher, sendEvent, sendChunk, _, sendDone, sendError := h.setupSSE(w)
 	if flusher == nil {
 		return
 	}
@@ -576,7 +576,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 
 // --- Helpers ---
 
-func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(any), func(string) error, func(), func(string)) {
+func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(any), func(string) error, func(string) error, func(), func(string)) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -584,7 +584,7 @@ func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(an
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil
 	}
 
 	sendEvent := func(v any) {
@@ -598,6 +598,11 @@ func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(an
 		return nil
 	}
 
+	sendThinking := func(chunk string) error {
+		sendEvent(map[string]string{"type": "thinking", "chunk": chunk})
+		return nil
+	}
+
 	sendDone := func() {
 		sendEvent(map[string]string{"type": "done"})
 	}
@@ -606,7 +611,7 @@ func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(an
 		sendEvent(map[string]string{"type": "error", "error": errMsg})
 	}
 
-	return flusher, sendEvent, sendChunk, sendDone, sendError
+	return flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError
 }
 
 func (h *PipelineHandler) buildTools(pieceID int64) ([]ai.Tool, ai.ToolExecutor) {
