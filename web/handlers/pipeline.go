@@ -214,14 +214,7 @@ Read the topic brief carefully. If it contains a brainstorm conversation, extrac
 
 Be specific. Reference the waterfall patterns from the content strategy section. If the strategy doesn't define waterfalls, propose reasonable defaults based on the platforms listed.
 
-You MUST respond with ONLY a JSON object in this exact format, no other text:
-{
-  "cornerstone": {"platform": "blog", "format": "post", "title": "Working title here"},
-  "waterfall": [
-    {"platform": "instagram", "format": "post", "count": 2},
-    {"platform": "linkedin", "format": "post", "count": 1}
-  ]
-}
+You MUST call the submit_production_plan tool with your plan. Do not return the plan as text.
 
 Valid platforms: blog, linkedin, instagram, x, youtube, facebook, tiktok
 Valid formats: post, thread, reel, carousel, script, short, video
@@ -249,18 +242,68 @@ WRITING RULES:
 		return
 	}
 
-	toolList, executor := h.buildTools(0)
+	toolList, baseExecutor := h.buildTools(0)
+
+	// Add the plan submission tool
+	planTool := ai.Tool{
+		Type: "function",
+		Function: ai.ToolFunction{
+			Name:        "submit_production_plan",
+			Description: "Submit the production plan with cornerstone and waterfall pieces.",
+			Parameters: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"cornerstone": {
+						"type": "object",
+						"properties": {
+							"platform": {"type": "string", "description": "Platform: blog, linkedin, instagram, x, youtube, facebook, tiktok"},
+							"format": {"type": "string", "description": "Format: post, thread, reel, carousel, script, short, video"},
+							"title": {"type": "string", "description": "Working title for the cornerstone piece"}
+						},
+						"required": ["platform", "format", "title"]
+					},
+					"waterfall": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"platform": {"type": "string"},
+								"format": {"type": "string"},
+								"count": {"type": "integer", "description": "Number of pieces of this type"}
+							},
+							"required": ["platform", "format", "count"]
+						}
+					}
+				},
+				"required": ["cornerstone", "waterfall"]
+			}`),
+		},
+	}
+	toolList = append(toolList, planTool)
+
+	var savedPlan string
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		if name == "submit_production_plan" {
+			savedPlan = args
+			h.queries.UpdatePipelinePlan(runID, args)
+			return "Plan saved successfully.", nil
+		}
+		return baseExecutor(ctx, name, args)
+	}
 	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
 	}
 
-	// Save plan
-	h.queries.UpdatePipelinePlan(runID, fullResponse)
+	// Fallback: if model didn't use the tool, try to save the raw response
+	if savedPlan == "" {
+		sendError("Model did not submit a plan via tool call. Try again.")
+		return
+	}
 	sendDone()
 }
 
@@ -646,8 +689,8 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID in
 	return func(event ai.ToolEvent) {
 		switch event.Type {
 		case "tool_start":
-			if content.IsWriteTool(event.Tool) {
-				// Don't show a tool indicator for write tools
+			if content.IsWriteTool(event.Tool) || event.Tool == "submit_production_plan" {
+				// Don't show a tool indicator for write/plan tools
 				return
 			}
 			summary := ""
