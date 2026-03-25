@@ -51,6 +51,8 @@ document.addEventListener('alpine:init', () => {
         input: '',
         pendingMessage: '',
         streamContent: '',
+        thinkingContent: '',
+        thinkingDone: false,
         streaming: false,
         error: '',
         source: null,
@@ -70,6 +72,8 @@ document.addEventListener('alpine:init', () => {
             this.input = '';
             this.pendingMessage = msg;
             this.streamContent = '';
+            this.thinkingContent = '';
+            this.thinkingDone = false;
             this.error = '';
             this.streaming = true;
             this.scrollToBottom();
@@ -110,7 +114,14 @@ document.addEventListener('alpine:init', () => {
                         this.streaming = false;
                         return;
                     }
+                    if (data.type === 'thinking') {
+                        this.thinkingContent += data.chunk;
+                        this.scrollToBottom();
+                    }
                     if (data.type === 'chunk') {
+                        if (!this.thinkingDone && this.thinkingContent) {
+                            this.thinkingDone = true;
+                        }
                         this.streamContent += data.chunk;
                         this.scrollToBottom();
                     }

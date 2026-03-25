@@ -253,8 +253,13 @@ WRITING STYLE:
 		return nil
 	}
 
+	sendThinking := func(chunk string) error {
+		sendEvent(map[string]string{"type": "thinking", "chunk": chunk})
+		return nil
+	}
+
 	temp := 0.5
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil {
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return

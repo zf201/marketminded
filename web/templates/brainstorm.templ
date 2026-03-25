@@ -140,6 +140,9 @@ templ BrainstormChatPage(data BrainstormChatData) {
 
 						var source = new EventSource('/projects/' + projectID + '/brainstorm/' + chatID + '/stream');
 						var accumulated = '';
+						var thinkingEl = null;
+						var thinkingPre = null;
+						var contentStarted = false;
 						source.onmessage = function(event) {
 							var d = JSON.parse(event.data);
 							if (d.type === 'done') {
@@ -155,16 +158,45 @@ templ BrainstormChatPage(data BrainstormChatData) {
 								btn.textContent = 'Send';
 								return;
 							}
+							if (d.type === 'thinking') {
+								if (!thinkingEl) {
+									if (indicator.parentNode) indicator.remove();
+									thinkingEl = document.createElement('details');
+									thinkingEl.className = 'thinking-details';
+									thinkingEl.setAttribute('open', '');
+									var summary = document.createElement('summary');
+									summary.textContent = 'Thinking...';
+									thinkingEl.appendChild(summary);
+									thinkingPre = document.createElement('pre');
+									thinkingEl.appendChild(thinkingPre);
+									bodyEl.appendChild(thinkingEl);
+								}
+								thinkingPre.textContent += d.chunk;
+								thinkingPre.scrollTop = thinkingPre.scrollHeight;
+								scrollToBottom();
+							}
 							if (d.type === 'chunk') {
+								if (!contentStarted && thinkingEl) {
+									thinkingEl.removeAttribute('open');
+									thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
+									contentStarted = true;
+								}
 								accumulated += d.chunk;
 								bodyEl.textContent = accumulated;
 								bodyEl.appendChild(indicator);
+								if (thinkingEl) bodyEl.insertBefore(thinkingEl, bodyEl.firstChild);
 								scrollToBottom();
 							}
 							if (d.type === 'tool_start') {
+								if (!contentStarted && thinkingEl) {
+									thinkingEl.removeAttribute('open');
+									thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
+									contentStarted = true;
+								}
 								accumulated += '\n[' + d.summary + '...]\n';
 								bodyEl.textContent = accumulated;
 								bodyEl.appendChild(indicator);
+								if (thinkingEl) bodyEl.insertBefore(thinkingEl, bodyEl.firstChild);
 								scrollToBottom();
 							}
 						};
