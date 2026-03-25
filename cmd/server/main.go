@@ -56,6 +56,7 @@ func main() {
 	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
 	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
 	projectSettingsHandler := handlers.NewProjectSettingsHandler(queries)
+	storytellingHandler := handlers.NewStorytellingHandler(queries)
 
 	mux := http.NewServeMux()
 
@@ -97,6 +98,8 @@ func main() {
 			profileHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "context"):
 			contextHandler.Handle(w, r, projectID, rest)
+		case strings.HasPrefix(rest, "storytelling"):
+			storytellingHandler.Handle(w, r, projectID, rest)
 		case rest == "settings" || rest == "settings/":
 			projectSettingsHandler.Handle(w, r, projectID, rest)
 		default:

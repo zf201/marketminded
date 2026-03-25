@@ -1,0 +1,79 @@
+package templates
+
+import (
+	"fmt"
+	"github.com/zanfridau/marketminded/internal/content"
+)
+
+type StorytellingData struct {
+	ProjectID    int64
+	ProjectName  string
+	Frameworks   []content.Framework
+	SelectedKey  string
+	Saved        bool
+}
+
+templ StorytellingPage(data StorytellingData) {
+	@Layout(data.ProjectName + " - Storytelling Framework") {
+		<div class="flex-between mb-4">
+			<h1>Storytelling Framework</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+		</div>
+
+		if data.Saved {
+			<div class="card" style="background:#d1fae5;border-color:#059669;margin-bottom:1rem">
+				<p style="color:#065f46">Framework saved.</p>
+			</div>
+		}
+
+		<p class="text-muted mb-2">Choose a storytelling framework to structure your cornerstone content (blog posts, video scripts). This guides how the AI structures the narrative.</p>
+
+		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/storytelling", data.ProjectID)) }>
+			<!-- None option -->
+			<div class={ "card mb-1", templ.KV("card-selected", data.SelectedKey == "") }>
+				<label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer;margin-bottom:0">
+					if data.SelectedKey == "" {
+						<input type="radio" name="storytelling_framework" value="" checked/>
+					} else {
+						<input type="radio" name="storytelling_framework" value=""/>
+					}
+					<div>
+						<strong>None</strong>
+						<span class="text-muted" style="margin-left:0.5rem">— No framework applied. AI uses its default structure.</span>
+					</div>
+				</label>
+			</div>
+
+			for _, fw := range data.Frameworks {
+				<div class={ "card mb-1", templ.KV("card-selected", data.SelectedKey == fw.Key) }>
+					<label style="display:flex;align-items:start;gap:0.75rem;cursor:pointer;margin-bottom:0">
+						if data.SelectedKey == fw.Key {
+							<input type="radio" name="storytelling_framework" value={ fw.Key } checked style="margin-top:0.25rem"/>
+						} else {
+							<input type="radio" name="storytelling_framework" value={ fw.Key } style="margin-top:0.25rem"/>
+						}
+						<div style="flex:1">
+							<div class="flex-between">
+								<div>
+									<strong>{ fw.Name }</strong>
+									<span class="text-muted" style="margin-left:0.5rem">— { fw.Attribution }</span>
+								</div>
+								<span class="badge badge-draft">{ fw.BestFor }</span>
+							</div>
+							<p class="text-muted" style="margin:0.5rem 0 0.25rem 0;font-size:0.875rem">{ fw.ShortDescription }</p>
+							<details style="margin-top:0.25rem">
+								<summary class="btn btn-secondary" style="font-size:0.75rem;padding:0.15rem 0.5rem">Show details</summary>
+								<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #e5e5e5">
+									<p style="font-size:0.875rem"><strong>Beats:</strong> { fw.Beats }</p>
+									<p style="font-size:0.875rem;margin-top:0.5rem"><strong>Example:</strong> { fw.Example }</p>
+								</div>
+							</details>
+						</div>
+					</label>
+				</div>
+			}
+
+			<button type="submit" class="btn mt-2">Save Framework</button>
+		</form>
+	}
+}

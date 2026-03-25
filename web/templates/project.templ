@@ -9,6 +9,8 @@ type ProjectDetail struct {
 	HasProfile     bool
 	RunCount       int
 	ContextItems   []ContextItemView
+	Language       string // from project settings
+	FrameworkName  string // display name of selected storytelling framework, empty if none
 }
 
 type ContextItemView struct {
@@ -22,8 +24,7 @@ templ ProjectOverview(p ProjectDetail) {
 		<div class="flex-between mb-4">
 			<h1>{ p.Name }</h1>
 			<div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-secondary">Settings</a>
-				<a href="/" class="btn btn-secondary" style="margin-left:0.5rem">Back</a>
+				<a href="/" class="btn btn-secondary">Back</a>
 			</div>
 		</div>
 		<p class="text-muted mb-4">{ p.Description }</p>
@@ -40,6 +41,30 @@ templ ProjectOverview(p ProjectDetail) {
 					}
 				</p>
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", p.ID)) } class="btn btn-secondary">Manage Profile</a>
+			</div>
+
+			<div class="card">
+				<h3>Settings</h3>
+				<p class="mb-2">
+					if p.Language != "" {
+						Language: <strong>{ p.Language }</strong>
+					} else {
+						<span class="badge badge-draft">Not set</span>
+					}
+				</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-secondary">Manage Settings</a>
+			</div>
+
+			<div class="card">
+				<h3>Storytelling Framework</h3>
+				<p class="mb-2">
+					if p.FrameworkName != "" {
+						<span class="badge badge-approved">{ p.FrameworkName }</span>
+					} else {
+						<span class="badge badge-draft">Not set</span>
+					}
+				</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/storytelling", p.ID)) } class="btn btn-secondary">Choose Framework</a>
 			</div>
 
 			<div class="card">

@@ -350,7 +350,7 @@ func (h *PipelineHandler) rejectPlan(w http.ResponseWriter, r *http.Request, pro
 
 // --- Piece generation ---
 
-func (h *PipelineHandler) buildPiecePrompt(piece *store.ContentPiece, run *store.PipelineRun, profile string) string {
+func (h *PipelineHandler) buildPiecePrompt(projectID int64, piece *store.ContentPiece, run *store.PipelineRun, profile string) string {
 	ct, ok := content.LookupType(piece.Platform, piece.Format)
 
 	var promptText string
@@ -366,7 +366,12 @@ func (h *PipelineHandler) buildPiecePrompt(piece *store.ContentPiece, run *store
 		time.Now().Format("January 2, 2006"), promptText, profile)
 
 	if piece.ParentID == nil {
-		// Cornerstone
+		// Cornerstone — inject storytelling framework if set
+		if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
+			if fw := content.FrameworkByKey(fwKey); fw != nil {
+				prompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\n", fw.Name, fw.Attribution, fw.PromptInstruction)
+			}
+		}
 		prompt += fmt.Sprintf("\n## Topic brief\n%s\n", run.Brief)
 	} else {
 		// Waterfall — inject cornerstone
@@ -398,7 +403,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	run, _ := h.queries.GetPipelineRun(runID)
 	profile, _ := h.queries.BuildProfileString(projectID)
 
-	systemPrompt := h.buildPiecePrompt(piece, run, profile)
+	systemPrompt := h.buildPiecePrompt(projectID, piece, run, profile)
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt},
