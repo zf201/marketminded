@@ -48,8 +48,9 @@ type BrainstormChatData struct {
 }
 
 type BrainstormMsgView struct {
-	Role    string
-	Content string
+	Role     string
+	Content  string
+	Thinking string
 }
 
 templ BrainstormChatPage(data BrainstormChatData) {
@@ -67,7 +68,15 @@ templ BrainstormChatPage(data BrainstormChatData) {
 			for _, msg := range data.Messages {
 				<div class={ "chat-msg chat-msg-" + msg.Role }>
 					<div class="chat-msg-role">{ msg.Role }</div>
-					<div style="white-space:pre-wrap">{ msg.Content }</div>
+					<div style="white-space:pre-wrap">
+						if msg.Thinking != "" {
+							<details class="thinking-details">
+								<summary>Thinking (done)</summary>
+								<pre>{ msg.Thinking }</pre>
+							</details>
+						}
+						{ msg.Content }
+					</div>
 				</div>
 			}
 		</div>
@@ -139,10 +148,13 @@ templ BrainstormChatPage(data BrainstormChatData) {
 						if (!res.ok) throw new Error('Failed to send');
 
 						var source = new EventSource('/projects/' + projectID + '/brainstorm/' + chatID + '/stream');
-						var accumulated = '';
 						var thinkingEl = null;
 						var thinkingPre = null;
 						var contentStarted = false;
+						var contentNode = document.createTextNode('');
+						bodyEl.textContent = '';
+						bodyEl.appendChild(contentNode);
+						bodyEl.appendChild(indicator);
 						source.onmessage = function(event) {
 							var d = JSON.parse(event.data);
 							if (d.type === 'done') {
@@ -152,7 +164,8 @@ templ BrainstormChatPage(data BrainstormChatData) {
 							}
 							if (d.type === 'error') {
 								source.close();
-								bodyEl.textContent = accumulated + '\nError: ' + d.error;
+								contentNode.textContent += '\nError: ' + d.error;
+								if (indicator.parentNode) indicator.remove();
 								input.disabled = false;
 								btn.disabled = false;
 								btn.textContent = 'Send';
@@ -169,7 +182,7 @@ templ BrainstormChatPage(data BrainstormChatData) {
 									thinkingEl.appendChild(summary);
 									thinkingPre = document.createElement('pre');
 									thinkingEl.appendChild(thinkingPre);
-									bodyEl.appendChild(thinkingEl);
+									bodyEl.insertBefore(thinkingEl, contentNode);
 								}
 								thinkingPre.textContent += d.chunk;
 								thinkingPre.scrollTop = thinkingPre.scrollHeight;
@@ -181,10 +194,8 @@ templ BrainstormChatPage(data BrainstormChatData) {
 									thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
 									contentStarted = true;
 								}
-								accumulated += d.chunk;
-								bodyEl.textContent = accumulated;
-								bodyEl.appendChild(indicator);
-								if (thinkingEl) bodyEl.insertBefore(thinkingEl, bodyEl.firstChild);
+								if (!contentStarted) { if (indicator.parentNode) indicator.remove(); contentStarted = true; }
+								contentNode.textContent += d.chunk;
 								scrollToBottom();
 							}
 							if (d.type === 'tool_start') {
@@ -193,10 +204,7 @@ templ BrainstormChatPage(data BrainstormChatData) {
 									thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
 									contentStarted = true;
 								}
-								accumulated += '\n[' + d.summary + '...]\n';
-								bodyEl.textContent = accumulated;
-								bodyEl.appendChild(indicator);
-								if (thinkingEl) bodyEl.insertBefore(thinkingEl, bodyEl.firstChild);
+								contentNode.textContent += '\n[' + d.summary + '...]\n';
 								scrollToBottom();
 							}
 						};

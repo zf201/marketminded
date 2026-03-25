@@ -92,7 +92,7 @@ func (h *ContextHandler) saveMessage(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 	chat, _ := h.queries.GetOrCreateContextChat(projectID, itemID)
-	h.queries.AddBrainstormMessage(chat.ID, "user", content)
+	h.queries.AddBrainstormMessage(chat.ID, "user", content, "")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -160,7 +160,7 @@ Be concise. Don't lecture. Help them turn raw info into something useful.`, time
 		return
 	}
 
-	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
+	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse, "")
 	sendEvent(map[string]string{"type": "done"})
 }
 

@@ -103,7 +103,7 @@ func (h *BrainstormHandler) showChat(w http.ResponseWriter, r *http.Request, pro
 	msgs, _ := h.queries.ListBrainstormMessages(chatID)
 	views := make([]templates.BrainstormMsgView, len(msgs))
 	for i, m := range msgs {
-		views[i] = templates.BrainstormMsgView{Role: m.Role, Content: m.Content}
+		views[i] = templates.BrainstormMsgView{Role: m.Role, Content: m.Content, Thinking: m.Thinking}
 	}
 
 	templates.BrainstormChatPage(templates.BrainstormChatData{
@@ -125,7 +125,7 @@ func (h *BrainstormHandler) saveMessage(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	_, err := h.queries.AddBrainstormMessage(chatID, "user", content)
+	_, err := h.queries.AddBrainstormMessage(chatID, "user", content, "")
 	if err != nil {
 		http.Error(w, "Failed to save message", http.StatusInternalServerError)
 		return
@@ -253,7 +253,9 @@ WRITING STYLE:
 		return nil
 	}
 
+	var thinkingAccum strings.Builder
 	sendThinking := func(chunk string) error {
+		thinkingAccum.WriteString(chunk)
 		sendEvent(map[string]string{"type": "thinking", "chunk": chunk})
 		return nil
 	}
@@ -265,8 +267,8 @@ WRITING STYLE:
 		return
 	}
 
-	// Save assistant message to DB
-	h.queries.AddBrainstormMessage(chatID, "assistant", fullResponse)
+	// Save assistant message to DB (with thinking chain)
+	h.queries.AddBrainstormMessage(chatID, "assistant", fullResponse, thinkingAccum.String())
 
 	// Signal done
 	sendEvent(map[string]string{"type": "done"})

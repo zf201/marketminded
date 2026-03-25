@@ -11,11 +11,11 @@ func TestBrainstormChatFlow(t *testing.T) {
 		t.Fatalf("create chat: %v", err)
 	}
 
-	_, err = q.AddBrainstormMessage(chat.ID, "user", "What about AI trends?")
+	_, err = q.AddBrainstormMessage(chat.ID, "user", "What about AI trends?", "")
 	if err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	_, err = q.AddBrainstormMessage(chat.ID, "assistant", "Great idea! Here are some angles...")
+	_, err = q.AddBrainstormMessage(chat.ID, "assistant", "Great idea! Here are some angles...", "")
 	if err != nil {
 		t.Fatalf("add message: %v", err)
 	}

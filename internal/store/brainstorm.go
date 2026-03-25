@@ -19,6 +19,7 @@ type BrainstormMessage struct {
 	ChatID    int64
 	Role      string
 	Content   string
+	Thinking  string
 	CreatedAt time.Time
 }
 
@@ -63,15 +64,15 @@ func (q *Queries) ListBrainstormChats(projectID int64) ([]BrainstormChat, error)
 	return chats, rows.Err()
 }
 
-func (q *Queries) AddBrainstormMessage(chatID int64, role, content string) (*BrainstormMessage, error) {
-	res, err := q.db.Exec("INSERT INTO brainstorm_messages (chat_id, role, content) VALUES (?, ?, ?)", chatID, role, content)
+func (q *Queries) AddBrainstormMessage(chatID int64, role, content, thinking string) (*BrainstormMessage, error) {
+	res, err := q.db.Exec("INSERT INTO brainstorm_messages (chat_id, role, content, thinking) VALUES (?, ?, ?, ?)", chatID, role, content, thinking)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	m := &BrainstormMessage{}
-	err = q.db.QueryRow("SELECT id, chat_id, role, content, created_at FROM brainstorm_messages WHERE id = ?", id).
-		Scan(&m.ID, &m.ChatID, &m.Role, &m.Content, &m.CreatedAt)
+	err = q.db.QueryRow("SELECT id, chat_id, role, content, COALESCE(thinking,''), created_at FROM brainstorm_messages WHERE id = ?", id).
+		Scan(&m.ID, &m.ChatID, &m.Role, &m.Content, &m.Thinking, &m.CreatedAt)
 	return m, err
 }
 
@@ -129,7 +130,7 @@ func (q *Queries) GetOrCreatePieceChat(projectID, pieceID int64) (*BrainstormCha
 }
 
 func (q *Queries) ListBrainstormMessages(chatID int64) ([]BrainstormMessage, error) {
-	rows, err := q.db.Query("SELECT id, chat_id, role, content, created_at FROM brainstorm_messages WHERE chat_id = ? ORDER BY created_at ASC", chatID)
+	rows, err := q.db.Query("SELECT id, chat_id, role, content, COALESCE(thinking,''), created_at FROM brainstorm_messages WHERE chat_id = ? ORDER BY created_at ASC", chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +139,7 @@ func (q *Queries) ListBrainstormMessages(chatID int64) ([]BrainstormMessage, err
 	var msgs []BrainstormMessage
 	for rows.Next() {
 		var m BrainstormMessage
-		if err := rows.Scan(&m.ID, &m.ChatID, &m.Role, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChatID, &m.Role, &m.Content, &m.Thinking, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)

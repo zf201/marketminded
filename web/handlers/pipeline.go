@@ -496,7 +496,7 @@ func (h *PipelineHandler) saveImproveMessage(w http.ResponseWriter, r *http.Requ
 	}
 
 	chat, _ := h.queries.GetOrCreatePieceChat(projectID, pieceID)
-	h.queries.AddBrainstormMessage(chat.ID, "user", msgContent)
+	h.queries.AddBrainstormMessage(chat.ID, "user", msgContent, "")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -553,7 +553,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 	}
 
 	// Save assistant message
-	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
+	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse, "")
 
 	// If the AI used a write tool, the body was already saved and content_written was sent.
 	// If not (fallback), save the text response and send content_written.

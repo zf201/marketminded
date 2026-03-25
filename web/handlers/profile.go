@@ -147,7 +147,7 @@ func (h *ProfileHandler) saveSectionMessage(w http.ResponseWriter, r *http.Reque
 	}
 
 	chat, _ := h.queries.GetOrCreateSectionChat(projectID, section)
-	h.queries.AddBrainstormMessage(chat.ID, "user", content)
+	h.queries.AddBrainstormMessage(chat.ID, "user", content, "")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -301,7 +301,7 @@ You are an expert content marketing strategist. You are helping build the **%s**
 		return
 	}
 
-	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse)
+	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse, "")
 
 	sendEvent(map[string]string{"type": "done"})
 }

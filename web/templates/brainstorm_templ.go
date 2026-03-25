@@ -177,8 +177,9 @@ type BrainstormChatData struct {
 }
 
 type BrainstormMsgView struct {
-	Role    string
-	Content string
+	Role     string
+	Content  string
+	Thinking string
 }
 
 func BrainstormChatPage(data BrainstormChatData) templ.Component {
@@ -275,8 +276,36 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_19 string = msg.Content
-				_, err = templBuffer.WriteString(templ.EscapeString(var_19))
+				if msg.Thinking != "" {
+					_, err = templBuffer.WriteString("<details class=\"thinking-details\"><summary>")
+					if err != nil {
+						return err
+					}
+					var_19 := `Thinking (done)`
+					_, err = templBuffer.WriteString(var_19)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</summary><pre>")
+					if err != nil {
+						return err
+					}
+					var var_20 string = msg.Thinking
+					_, err = templBuffer.WriteString(templ.EscapeString(var_20))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</pre></details>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString(" ")
+				if err != nil {
+					return err
+				}
+				var var_21 string = msg.Content
+				_, err = templBuffer.WriteString(templ.EscapeString(var_21))
 				if err != nil {
 					return err
 				}
@@ -289,8 +318,8 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_20 := `Send`
-			_, err = templBuffer.WriteString(var_20)
+			var_22 := `Send`
+			_, err = templBuffer.WriteString(var_22)
 			if err != nil {
 				return err
 			}
@@ -298,7 +327,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_21 := `
+			var_23 := `
 			(function() {
 				var form = document.getElementById('chat-form');
 				var input = document.getElementById('chat-input');
@@ -360,10 +389,13 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 						if (!res.ok) throw new Error('Failed to send');
 
 						var source = new EventSource('/projects/' + projectID + '/brainstorm/' + chatID + '/stream');
-						var accumulated = '';
 						var thinkingEl = null;
 						var thinkingPre = null;
 						var contentStarted = false;
+						var contentNode = document.createTextNode('');
+						bodyEl.textContent = '';
+						bodyEl.appendChild(contentNode);
+						bodyEl.appendChild(indicator);
 						source.onmessage = function(event) {
 							var d = JSON.parse(event.data);
 							if (d.type === 'done') {
@@ -373,7 +405,8 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 							}
 							if (d.type === 'error') {
 								source.close();
-								bodyEl.textContent = accumulated + '\nError: ' + d.error;
+								contentNode.textContent += '\nError: ' + d.error;
+								if (indicator.parentNode) indicator.remove();
 								input.disabled = false;
 								btn.disabled = false;
 								btn.textContent = 'Send';
@@ -390,7 +423,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 									thinkingEl.appendChild(summary);
 									thinkingPre = document.createElement('pre');
 									thinkingEl.appendChild(thinkingPre);
-									bodyEl.appendChild(thinkingEl);
+									bodyEl.insertBefore(thinkingEl, contentNode);
 								}
 								thinkingPre.textContent += d.chunk;
 								thinkingPre.scrollTop = thinkingPre.scrollHeight;
@@ -402,10 +435,8 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 									thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
 									contentStarted = true;
 								}
-								accumulated += d.chunk;
-								bodyEl.textContent = accumulated;
-								bodyEl.appendChild(indicator);
-								if (thinkingEl) bodyEl.insertBefore(thinkingEl, bodyEl.firstChild);
+								if (!contentStarted) { if (indicator.parentNode) indicator.remove(); contentStarted = true; }
+								contentNode.textContent += d.chunk;
 								scrollToBottom();
 							}
 							if (d.type === 'tool_start') {
@@ -414,10 +445,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 									thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
 									contentStarted = true;
 								}
-								accumulated += '\n[' + d.summary + '...]\n';
-								bodyEl.textContent = accumulated;
-								bodyEl.appendChild(indicator);
-								if (thinkingEl) bodyEl.insertBefore(thinkingEl, bodyEl.firstChild);
+								contentNode.textContent += '\n[' + d.summary + '...]\n';
 								scrollToBottom();
 							}
 						};
@@ -439,7 +467,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				scrollToBottom();
 			})();
 		`
-			_, err = templBuffer.WriteString(var_21)
+			_, err = templBuffer.WriteString(var_23)
 			if err != nil {
 				return err
 			}

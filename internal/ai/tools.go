@@ -240,13 +240,14 @@ func (c *Client) streamOneTurn(
 			}
 		}
 
-		// Handle reasoning — support both field formats
+		// Handle reasoning — prefer simple string field, fall back to details array
 		if choice.Delta.Reasoning != "" {
 			onReasoning(choice.Delta.Reasoning)
-		}
-		for _, rd := range choice.Delta.ReasoningDetails {
-			if rd.Type == "reasoning.text" && rd.Text != "" {
-				onReasoning(rd.Text)
+		} else {
+			for _, rd := range choice.Delta.ReasoningDetails {
+				if rd.Type == "reasoning.text" && rd.Text != "" {
+					onReasoning(rd.Text)
+				}
 			}
 		}
 
