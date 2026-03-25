@@ -139,3 +139,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Spinner */
 .spinner { width: 32px; height: 32px; border: 3px solid #e5e5e5; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.thinking-details { margin-bottom: 1rem; }
+.thinking-details summary { cursor: pointer; font-style: italic; color: #6b7280; }
+.thinking-details pre { white-space: pre-wrap; font-size: 0.8rem; color: #9ca3af; max-height: 300px; overflow-y: auto; }

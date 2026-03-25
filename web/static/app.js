@@ -1203,15 +1203,47 @@ function initProductionBoard(projectID, runID) {
     // Helper: connect SSE stream to an element
     function streamToElement(url, el, onDone) {
         el.textContent = '';
+        var thinkingEl = null;
+        var thinkingPre = null;
+        var contentStarted = false;
         var source = new EventSource(url);
         source.onmessage = function(event) {
             var d = JSON.parse(event.data);
-            if (d.type === 'chunk') {
+            if (d.type === 'thinking') {
+                if (!thinkingEl) {
+                    thinkingEl = document.createElement('details');
+                    thinkingEl.className = 'thinking-details';
+                    thinkingEl.setAttribute('open', '');
+                    var summary = document.createElement('summary');
+                    summary.textContent = 'Thinking...';
+                    thinkingEl.appendChild(summary);
+                    thinkingPre = document.createElement('pre');
+                    thinkingEl.appendChild(thinkingPre);
+                    el.parentNode.insertBefore(thinkingEl, el);
+                }
+                thinkingPre.textContent += d.chunk;
+                thinkingPre.scrollTop = thinkingPre.scrollHeight;
+            } else if (d.type === 'chunk') {
+                if (!contentStarted && thinkingEl) {
+                    thinkingEl.removeAttribute('open');
+                    thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
+                    contentStarted = true;
+                }
                 el.textContent += d.chunk;
                 el.scrollTop = el.scrollHeight;
             } else if (d.type === 'tool_start') {
+                if (!contentStarted && thinkingEl) {
+                    thinkingEl.removeAttribute('open');
+                    thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
+                    contentStarted = true;
+                }
                 el.textContent += '\n[' + d.summary + '...]\n';
             } else if (d.type === 'content_written') {
+                if (!contentStarted && thinkingEl) {
+                    thinkingEl.removeAttribute('open');
+                    thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
+                    contentStarted = true;
+                }
                 renderContentBody(el, d.platform, d.format, JSON.stringify(d.data));
             } else if (d.type === 'done') {
                 source.close();
