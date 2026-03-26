@@ -254,7 +254,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 
 	piece, _ := h.queries.GetContentPiece(pieceID)
 	run, _ := h.queries.GetPipelineRun(runID)
-	profile, _ := h.queries.BuildProfileString(projectID)
+	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
 
 	systemPrompt := h.buildPiecePrompt(projectID, piece, run, profile)
 
@@ -936,7 +936,7 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 		promptText = fmt.Sprintf("You are writing a %s %s.", platform, format)
 	}
 
-	profile, _ := h.queries.BuildProfileString(projectID)
+	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
 
 	systemPrompt := fmt.Sprintf("Today's date: %s\n\n%s\n\n## Client profile\n%s\n",
 		time.Now().Format("January 2, 2006"), promptText, profile)

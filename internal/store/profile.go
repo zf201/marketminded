@@ -68,6 +68,25 @@ func (q *Queries) BuildProfileString(projectID int64) (string, error) {
 	return b.String(), nil
 }
 
+func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string) (string, error) {
+	sections, err := q.ListProfileSections(projectID)
+	if err != nil {
+		return "", err
+	}
+	excludeMap := make(map[string]bool, len(exclude))
+	for _, e := range exclude {
+		excludeMap[e] = true
+	}
+	var b strings.Builder
+	for _, s := range sections {
+		if s.Content == "" || excludeMap[s.Section] {
+			continue
+		}
+		fmt.Fprintf(&b, "## %s\n%s\n\n", sectionTitle(s.Section), s.Content)
+	}
+	return b.String(), nil
+}
+
 func sectionTitle(s string) string {
 	if s == "" {
 		return s
