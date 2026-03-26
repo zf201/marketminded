@@ -2,6 +2,7 @@ package store
 
 import "testing"
 
+
 func TestPipelineRunCRUD(t *testing.T) {
 	q := testDB(t)
 	p, _ := q.CreateProject("Test", "test")
@@ -16,8 +17,8 @@ func TestPipelineRunCRUD(t *testing.T) {
 	if run.Brief != "5 pricing mistakes" {
 		t.Errorf("expected brief '5 pricing mistakes', got %s", run.Brief)
 	}
-	if run.Status != "planning" {
-		t.Errorf("expected planning, got %s", run.Status)
+	if run.Status != "producing" {
+		t.Errorf("expected producing, got %s", run.Status)
 	}
 
 	q.UpdatePipelinePlan(run.ID, `{"cornerstone":{"platform":"blog"}}`)

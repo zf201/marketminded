@@ -41,9 +41,11 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 			<div class="card mb-2">
 				<h3 style="margin-bottom:1rem">Company URLs</h3>
 
+				<p class="text-muted" style="font-size:0.75rem;margin-bottom:1rem">These URLs are fetched by the Brand Enricher during pipeline runs to ground content in your actual brand info. Use commas to separate multiple URLs.</p>
+
 				<div class="form-group">
 					<label>Company Website</label>
-					<input type="url" name="company_website" value={ data.CompanyWebsite } placeholder="https://example.com"/>
+					<input type="text" name="company_website" value={ data.CompanyWebsite } placeholder="https://example.com, https://example.com/about"/>
 				</div>
 				<div class="form-group">
 					<label>Website Usage Notes</label>
@@ -52,7 +54,7 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 
 				<div class="form-group">
 					<label>Pricing Page</label>
-					<input type="url" name="company_pricing" value={ data.CompanyPricing } placeholder="https://example.com/pricing"/>
+					<input type="text" name="company_pricing" value={ data.CompanyPricing } placeholder="https://example.com/pricing, https://example.com/plans"/>
 				</div>
 				<div class="form-group">
 					<label>Pricing Usage Notes</label>
@@ -61,7 +63,7 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 
 				<div class="form-group">
 					<label>Blog URL</label>
-					<input type="url" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog"/>
+					<input type="text" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog"/>
 				</div>
 				<div class="form-group">
 					<label>Blog Usage Notes</label>

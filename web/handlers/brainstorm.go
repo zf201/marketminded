@@ -295,6 +295,13 @@ func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Create the cornerstone agent steps
+	h.queries.CreatePipelineStep(run.ID, "research", 0)
+	h.queries.CreatePipelineStep(run.ID, "brand_enricher", 1)
+	h.queries.CreatePipelineStep(run.ID, "factcheck", 2)
+	h.queries.CreatePipelineStep(run.ID, "tone_analyzer", 3)
+	h.queries.CreatePipelineStep(run.ID, "write", 4)
+
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, run.ID), http.StatusSeeOther)
 }
 

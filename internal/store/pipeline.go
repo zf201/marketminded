@@ -8,6 +8,7 @@ type PipelineRun struct {
 	Topic     string
 	Brief     string
 	Plan      string
+	Phase     string
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -26,8 +27,8 @@ func (q *Queries) CreatePipelineRun(projectID int64, brief string) (*PipelineRun
 func (q *Queries) GetPipelineRun(id int64) (*PipelineRun, error) {
 	r := &PipelineRun{}
 	err := q.db.QueryRow(
-		"SELECT id, project_id, topic, COALESCE(brief,''), COALESCE(plan,''), status, created_at, updated_at FROM pipeline_runs WHERE id = ?", id,
-	).Scan(&r.ID, &r.ProjectID, &r.Topic, &r.Brief, &r.Plan, &r.Status, &r.CreatedAt, &r.UpdatedAt)
+		"SELECT id, project_id, topic, COALESCE(brief,''), COALESCE(plan,''), phase, status, created_at, updated_at FROM pipeline_runs WHERE id = ?", id,
+	).Scan(&r.ID, &r.ProjectID, &r.Topic, &r.Brief, &r.Plan, &r.Phase, &r.Status, &r.CreatedAt, &r.UpdatedAt)
 	return r, err
 }
 
@@ -51,9 +52,14 @@ func (q *Queries) DeletePipelineRun(id int64) error {
 	return err
 }
 
+func (q *Queries) UpdatePipelinePhase(id int64, phase string) error {
+	_, err := q.db.Exec("UPDATE pipeline_runs SET phase = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", phase, id)
+	return err
+}
+
 func (q *Queries) ListPipelineRuns(projectID int64) ([]PipelineRun, error) {
 	rows, err := q.db.Query(
-		"SELECT id, project_id, topic, COALESCE(brief,''), COALESCE(plan,''), status, created_at, updated_at FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC", projectID,
+		"SELECT id, project_id, topic, COALESCE(brief,''), COALESCE(plan,''), phase, status, created_at, updated_at FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC", projectID,
 	)
 	if err != nil {
 		return nil, err
@@ -63,7 +69,7 @@ func (q *Queries) ListPipelineRuns(projectID int64) ([]PipelineRun, error) {
 	var runs []PipelineRun
 	for rows.Next() {
 		var r PipelineRun
-		if err := rows.Scan(&r.ID, &r.ProjectID, &r.Topic, &r.Brief, &r.Plan, &r.Status, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.ProjectID, &r.Topic, &r.Brief, &r.Plan, &r.Phase, &r.Status, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		runs = append(runs, r)

@@ -474,6 +474,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (contextPage) {
         initContextChat(contextPage.dataset.projectId, contextPage.dataset.itemId);
     }
+
+    var cornerstonePage = document.getElementById('cornerstone-pipeline-page');
+    if (cornerstonePage) {
+        initCornerstonePipeline(cornerstonePage.dataset.projectId, cornerstonePage.dataset.runId);
+    }
+
+    var waterfallPage = document.getElementById('waterfall-page');
+    if (waterfallPage) {
+        initWaterfallPage(waterfallPage.dataset.projectId, waterfallPage.dataset.runId);
+    }
 });
 
 function initProfileSectionChat(projectID, sectionName) {
@@ -770,8 +780,8 @@ function renderSection(parent, label, content, opts) {
     if (opts.markdown && typeof marked !== 'undefined' && content) {
         var md = document.createElement('div');
         md.className = 'markdown-body';
-        // Collapse multiple blank lines to single before parsing
-        var cleaned = content.replace(/\n{3,}/g, '\n\n');
+        // Unescape literal \n to real newlines, then collapse multiple blank lines
+        var cleaned = content.replace(/\\n/g, '\n').replace(/\n{3,}/g, '\n\n');
         md.innerHTML = marked.parse(cleaned, { breaks: false, gfm: true });
         sec.appendChild(md);
     } else if (opts.badges && content) {
@@ -873,7 +883,7 @@ function renderContentBody(el, platform, format, bodyText) {
 
     // Always render instructions if present (available on all types)
     if (data && data.instructions) {
-        renderSection(el, 'Production Notes', data.instructions, { minor: true });
+        renderSection(el, 'Production Notes', data.instructions, { minor: true, markdown: true });
     }
 }
 
@@ -1202,6 +1212,590 @@ function openContentModal(opts) {
                 cancelBtn.textContent = 'Close';
             });
     }
+}
+
+// --- Cornerstone pipeline auto-chaining ---
+
+function initCornerstonePipeline(projectID, runID) {
+    var basePath = '/projects/' + projectID + '/pipeline/' + runID;
+    var runBtn = document.getElementById('run-pipeline-btn');
+
+    function setBadge(card, text, cls) {
+        var badges = card.querySelectorAll('.badge');
+        var badge = badges[badges.length - 1];
+        if (!badge) return;
+        badge.textContent = text;
+        badge.className = 'badge ' + (cls || '');
+    }
+
+    function streamStep(stepID, card, onDone, onError) {
+        var outputEl = card.querySelector('.step-output');
+        var thinkingEl = card.querySelector('.step-thinking');
+
+        console.log('[pipeline] streamStep', stepID, 'outputEl:', !!outputEl, 'thinkingEl:', !!thinkingEl);
+        if (outputEl) outputEl.textContent = '';
+        if (thinkingEl) thinkingEl.textContent = '';
+
+        var thinkingDetails = null;
+        var thinkingPre = null;
+        var contentStarted = false;
+
+        var url = basePath + '/stream/step/' + stepID;
+        console.log('[pipeline] Opening SSE:', url);
+        var source = new EventSource(url);
+
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+
+            if (d.type === 'thinking') {
+                if (thinkingEl) {
+                    if (!thinkingDetails) {
+                        thinkingDetails = document.createElement('details');
+                        thinkingDetails.className = 'thinking-details';
+                        thinkingDetails.setAttribute('open', '');
+                        var summary = document.createElement('summary');
+                        summary.textContent = 'Thinking...';
+                        thinkingDetails.appendChild(summary);
+                        thinkingPre = document.createElement('pre');
+                        thinkingDetails.appendChild(thinkingPre);
+                        thinkingEl.appendChild(thinkingDetails);
+                    }
+                    thinkingPre.textContent += d.chunk;
+                    thinkingPre.scrollTop = thinkingPre.scrollHeight;
+                }
+            } else if (d.type === 'chunk') {
+                if (!contentStarted && thinkingDetails) {
+                    thinkingDetails.removeAttribute('open');
+                    thinkingDetails.querySelector('summary').textContent = 'Thinking (done)';
+                    contentStarted = true;
+                }
+                if (outputEl) {
+                    outputEl.textContent += d.chunk;
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                }
+            } else if (d.type === 'tool_start') {
+                if (!contentStarted && thinkingDetails) {
+                    thinkingDetails.removeAttribute('open');
+                    thinkingDetails.querySelector('summary').textContent = 'Thinking (done)';
+                    contentStarted = true;
+                }
+                if (outputEl) outputEl.textContent += '\n[' + d.summary + '...]\n';
+            } else if (d.type === 'content_written') {
+                if (!contentStarted && thinkingDetails) {
+                    thinkingDetails.removeAttribute('open');
+                    thinkingDetails.querySelector('summary').textContent = 'Thinking (done)';
+                    contentStarted = true;
+                }
+                if (outputEl) renderContentBody(outputEl, d.platform, d.format, JSON.stringify(d.data));
+            } else if (d.type === 'done') {
+                source.close();
+                setBadge(card, 'completed', 'badge-success');
+                card.dataset.status = 'completed';
+                if (onDone) onDone();
+            } else if (d.type === 'error') {
+                source.close();
+                if (outputEl) outputEl.textContent += '\nError: ' + d.error;
+                setBadge(card, 'failed', 'badge-error');
+                card.dataset.status = 'failed';
+                if (onError) onError(d.error);
+            }
+        };
+
+        source.onerror = function() {
+            source.close();
+            setBadge(card, 'failed', 'badge-error');
+            card.dataset.status = 'failed';
+            if (onError) onError('Connection lost');
+        };
+
+        return source;
+    }
+
+    function runNextStep(cards, index) {
+        if (index >= cards.length) {
+            // All done — reload to show the cornerstone piece
+            window.location.reload();
+            return;
+        }
+
+        var card = cards[index];
+        var status = card.dataset.status;
+
+        if (status === 'completed') {
+            runNextStep(cards, index + 1);
+            return;
+        }
+
+        if (status !== 'pending' && status !== 'failed') {
+            // Skip non-runnable statuses
+            runNextStep(cards, index + 1);
+            return;
+        }
+
+        var stepID = card.dataset.stepId;
+        setBadge(card, 'running', 'badge-running');
+        card.dataset.status = 'running';
+
+        streamStep(stepID, card, function() {
+            runNextStep(cards, index + 1);
+        }, function() {
+            // On error, stop chaining
+        });
+    }
+
+    if (runBtn) {
+        runBtn.addEventListener('click', function() {
+            runBtn.disabled = true;
+            runBtn.textContent = 'Running...';
+
+            var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
+            console.log('[pipeline] Run Pipeline clicked, found', cards.length, 'step cards');
+            cards.forEach(function(c) { console.log('[pipeline] card:', c.dataset.stepId, c.dataset.status); });
+            runNextStep(cards, 0);
+        });
+    }
+
+    // Retry buttons
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.step-retry-btn');
+        if (!btn) return;
+
+        var stepIndex = parseInt(btn.dataset.stepIndex) || 0;
+        var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
+        if (stepIndex < cards.length) {
+            var card = cards[stepIndex];
+            var stepID = card.dataset.stepId;
+            setBadge(card, 'running', 'badge-running');
+            card.dataset.status = 'running';
+            btn.disabled = true;
+
+            streamStep(stepID, card, function() {
+                // After retry success, continue with next steps
+                runNextStep(cards, stepIndex + 1);
+            }, function() {
+                btn.disabled = false;
+            });
+        }
+    });
+
+    // Approve button with phase_change support
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.piece-approve-btn');
+        if (!btn) return;
+
+        var pieceId = btn.dataset.pieceId;
+        if (!pieceId) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Approving...';
+
+        fetch(basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.phase_change === 'waterfall') {
+                    window.location.href = '/projects/' + projectID + '/pipeline/' + runID + '/waterfall';
+                } else {
+                    window.location.reload();
+                }
+            })
+            .catch(function() { window.location.reload(); });
+    });
+
+    // Reject button
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.piece-reject-btn');
+        if (!btn) return;
+        var pieceId = btn.dataset.pieceId;
+        if (!pieceId) return;
+        var reason = prompt('Why should this be rejected?');
+        if (reason === null) return;
+        fetch(basePath + '/piece/' + pieceId + '/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'reason=' + encodeURIComponent(reason)
+        }).then(function() { window.location.reload(); });
+    });
+
+    // Render existing content bodies (cornerstone piece after page load)
+    document.querySelectorAll('.board-card-body').forEach(function(el) {
+        var text = el.textContent.trim();
+        if (text && el.dataset.platform) {
+            renderContentBody(el, el.dataset.platform, el.dataset.format, text);
+        }
+    });
+
+    // Render step outputs nicely
+    document.querySelectorAll('.step-card[data-step-id]').forEach(function(card) {
+        var stepType = card.querySelector('.board-card-header strong');
+        var outputEl = card.querySelector('.step-output');
+        if (!outputEl) return;
+        var raw = outputEl.textContent.trim();
+        if (!raw) return;
+        var typeName = stepType ? stepType.textContent.trim() : '';
+        try {
+            var data = JSON.parse(raw);
+            renderStepOutput(outputEl, typeName, data);
+        } catch (e) {
+            // Leave as text
+        }
+    });
+
+    // Proofread buttons
+    document.querySelectorAll('.proofread-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var pieceId = btn.dataset.pieceId;
+            var bodyEl = document.getElementById('piece-body-' + pieceId);
+            openContentModal({
+                mode: 'proofread',
+                pieceId: pieceId,
+                platform: bodyEl ? bodyEl.dataset.platform : '',
+                format: bodyEl ? bodyEl.dataset.format : '',
+                basePath: basePath
+            });
+        });
+    });
+
+    // Improve buttons
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.piece-improve-btn');
+        if (!btn) return;
+        var pieceId = btn.dataset.pieceId;
+        if (!pieceId) return;
+        var bodyEl = document.getElementById('piece-body-' + pieceId);
+        openContentModal({
+            mode: 'improve',
+            pieceId: pieceId,
+            platform: bodyEl ? bodyEl.dataset.platform : '',
+            format: bodyEl ? bodyEl.dataset.format : '',
+            basePath: basePath
+        });
+    });
+}
+
+function renderStepOutput(el, typeName, data) {
+    el.textContent = '';
+    el.style.whiteSpace = 'normal';
+
+    if (typeName === 'Researcher') {
+        // Research output: sources + brief
+        if (data.brief) {
+            var briefDiv = document.createElement('div');
+            briefDiv.className = 'markdown-body';
+            briefDiv.innerHTML = marked.parse(data.brief.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
+            el.appendChild(briefDiv);
+        }
+        if (data.sources && data.sources.length > 0) {
+            var h = document.createElement('h4');
+            h.textContent = 'Sources (' + data.sources.length + ')';
+            h.style.marginTop = '1rem';
+            el.appendChild(h);
+            var list = document.createElement('ul');
+            list.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
+            data.sources.forEach(function(s) {
+                var li = document.createElement('li');
+                li.style.marginBottom = '0.5rem';
+                var a = document.createElement('a');
+                a.href = s.url;
+                a.textContent = s.title || s.url;
+                a.target = '_blank';
+                a.style.fontWeight = 'bold';
+                li.appendChild(a);
+                if (s.date) {
+                    var dateSpan = document.createElement('span');
+                    dateSpan.textContent = ' (' + s.date + ')';
+                    dateSpan.style.color = '#888';
+                    li.appendChild(dateSpan);
+                }
+                if (s.summary) {
+                    var sumDiv = document.createElement('div');
+                    sumDiv.textContent = s.summary;
+                    sumDiv.style.color = '#555';
+                    li.appendChild(sumDiv);
+                }
+                list.appendChild(li);
+            });
+            el.appendChild(list);
+        }
+    } else if (typeName === 'Brand Enricher') {
+        // Brand enricher output: brand_context + enriched_brief
+        if (data.brand_context) {
+            var h = document.createElement('h4');
+            h.textContent = 'Brand Context';
+            el.appendChild(h);
+            var ctxDiv = document.createElement('div');
+            ctxDiv.className = 'markdown-body';
+            ctxDiv.innerHTML = marked.parse(data.brand_context.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
+            el.appendChild(ctxDiv);
+        }
+        if (data.enriched_brief) {
+            var h2 = document.createElement('h4');
+            h2.textContent = 'Enriched Brief';
+            h2.style.marginTop = '1rem';
+            el.appendChild(h2);
+            var briefDiv = document.createElement('div');
+            briefDiv.className = 'markdown-body';
+            briefDiv.innerHTML = marked.parse(data.enriched_brief.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
+            el.appendChild(briefDiv);
+        }
+        if (data.sources && data.sources.length > 0) {
+            var h3 = document.createElement('h4');
+            h3.textContent = 'Sources (' + data.sources.length + ')';
+            h3.style.marginTop = '1rem';
+            el.appendChild(h3);
+            var list = document.createElement('ul');
+            list.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
+            data.sources.forEach(function(s) {
+                var li = document.createElement('li');
+                li.style.marginBottom = '0.5rem';
+                var a = document.createElement('a');
+                a.href = s.url;
+                a.textContent = s.title || s.url;
+                a.target = '_blank';
+                a.style.fontWeight = 'bold';
+                li.appendChild(a);
+                if (s.summary) {
+                    var sumDiv = document.createElement('div');
+                    sumDiv.textContent = s.summary;
+                    sumDiv.style.color = '#555';
+                    li.appendChild(sumDiv);
+                }
+                list.appendChild(li);
+            });
+            el.appendChild(list);
+        }
+    } else if (typeName === 'Tone Analyzer') {
+        if (data.tone_guide) {
+            var h = document.createElement('h4');
+            h.textContent = 'Tone & Style Guide';
+            el.appendChild(h);
+            var guideDiv = document.createElement('div');
+            guideDiv.className = 'markdown-body';
+            guideDiv.innerHTML = marked.parse(data.tone_guide.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
+            el.appendChild(guideDiv);
+        }
+        if (data.posts && data.posts.length > 0) {
+            var h2 = document.createElement('h4');
+            h2.textContent = 'Posts Analyzed (' + data.posts.length + ')';
+            h2.style.marginTop = '1rem';
+            el.appendChild(h2);
+            var list = document.createElement('ul');
+            list.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
+            data.posts.forEach(function(p) {
+                var li = document.createElement('li');
+                li.style.marginBottom = '0.3rem';
+                var a = document.createElement('a');
+                a.href = p.url;
+                a.textContent = p.title || p.url;
+                a.target = '_blank';
+                li.appendChild(a);
+                list.appendChild(li);
+            });
+            el.appendChild(list);
+        }
+    } else if (typeName === 'Fact-Checker') {
+        // Fact-check output: issues + enriched brief + sources
+        if (data.issues_found && data.issues_found.length > 0) {
+            var h = document.createElement('h4');
+            h.textContent = 'Issues Found (' + data.issues_found.length + ')';
+            el.appendChild(h);
+            var issueList = document.createElement('ul');
+            issueList.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
+            data.issues_found.forEach(function(issue) {
+                var li = document.createElement('li');
+                li.style.marginBottom = '0.5rem';
+                var claim = document.createElement('strong');
+                claim.textContent = issue.claim;
+                li.appendChild(claim);
+                var prob = document.createElement('div');
+                prob.textContent = 'Problem: ' + issue.problem;
+                prob.style.color = '#dc2626';
+                li.appendChild(prob);
+                var res = document.createElement('div');
+                res.textContent = 'Resolution: ' + issue.resolution;
+                res.style.color = '#059669';
+                li.appendChild(res);
+                issueList.appendChild(li);
+            });
+            el.appendChild(issueList);
+        } else {
+            var noIssues = document.createElement('p');
+            noIssues.textContent = 'No issues found.';
+            noIssues.style.cssText = 'color:#059669;font-weight:bold';
+            el.appendChild(noIssues);
+        }
+        if (data.enriched_brief) {
+            var h2 = document.createElement('h4');
+            h2.textContent = 'Enriched Brief';
+            h2.style.marginTop = '1rem';
+            el.appendChild(h2);
+            var briefDiv = document.createElement('div');
+            briefDiv.className = 'markdown-body';
+            briefDiv.innerHTML = marked.parse(data.enriched_brief.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
+            el.appendChild(briefDiv);
+        }
+    } else {
+        // Writer or unknown — leave as collapsible JSON
+        el.textContent = JSON.stringify(data, null, 2);
+        el.style.whiteSpace = 'pre-wrap';
+    }
+}
+
+// --- Waterfall parallel generation ---
+
+function initWaterfallPage(projectID, runID) {
+    var basePath = '/projects/' + projectID + '/pipeline/' + runID;
+
+    // Helper: stream a step into a plain output element
+    function streamStepToEl(stepID, outputEl, onDone) {
+        if (outputEl) outputEl.textContent = '';
+        var url = basePath + '/stream/step/' + stepID;
+        var source = new EventSource(url);
+
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            if (d.type === 'chunk') {
+                if (outputEl) outputEl.textContent += d.chunk;
+            } else if (d.type === 'done') {
+                source.close();
+                if (onDone) onDone();
+            } else if (d.type === 'error') {
+                source.close();
+                if (outputEl) outputEl.textContent += '\nError: ' + d.error;
+            }
+        };
+
+        source.onerror = function() { source.close(); };
+        return source;
+    }
+
+    // Helper: stream a piece into its card
+    function streamPieceCard(pieceID, card) {
+        var bodyEl = document.getElementById('piece-body-' + pieceID);
+        if (!bodyEl) return;
+
+        card.className = card.className.replace(/board-card-(pending|rejected)/g, '') + ' board-card-generating';
+        bodyEl.classList.remove('collapsed');
+
+        var badges = card.querySelectorAll('.badge');
+        var badge = badges[badges.length - 1];
+        if (badge) { badge.textContent = 'generating'; badge.className = 'badge badge-running'; }
+
+        function showDraftActions() {
+            if (badge) { badge.textContent = 'draft'; badge.className = 'badge badge-draft'; }
+            card.dataset.status = 'draft';
+            card.className = card.className.replace(/board-card-generating/g, '') + ' board-card-draft';
+            var actionsEl = card.querySelector('.board-card-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = '';
+                var approveBtn = document.createElement('button');
+                approveBtn.className = 'btn piece-approve-btn';
+                approveBtn.dataset.pieceId = pieceID;
+                approveBtn.textContent = 'Approve';
+                actionsEl.appendChild(approveBtn);
+
+                var rejectBtn = document.createElement('button');
+                rejectBtn.className = 'btn btn-danger piece-reject-btn';
+                rejectBtn.dataset.pieceId = pieceID;
+                rejectBtn.textContent = 'Reject';
+                rejectBtn.style.marginLeft = '0.5rem';
+                actionsEl.appendChild(rejectBtn);
+
+                var improveBtn = document.createElement('button');
+                improveBtn.className = 'btn btn-secondary piece-improve-btn';
+                improveBtn.dataset.pieceId = pieceID;
+                improveBtn.textContent = 'Improve';
+                improveBtn.style.marginLeft = '0.5rem';
+                actionsEl.appendChild(improveBtn);
+            }
+        }
+
+        var source = new EventSource(basePath + '/stream/piece/' + pieceID);
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            if (d.type === 'chunk') {
+                bodyEl.textContent += d.chunk;
+            } else if (d.type === 'content_written') {
+                renderContentBody(bodyEl, d.platform, d.format, JSON.stringify(d.data));
+                source.close();
+                showDraftActions();
+            } else if (d.type === 'done') {
+                source.close();
+                showDraftActions();
+            } else if (d.type === 'error') {
+                source.close();
+                if (badge) { badge.textContent = 'error'; badge.className = 'badge badge-error'; }
+            }
+        };
+        source.onerror = function() { source.close(); };
+    }
+
+    // Create Waterfall button
+    var createBtn = document.getElementById('create-waterfall-btn');
+    if (createBtn) {
+        createBtn.addEventListener('click', function() {
+            createBtn.disabled = true;
+            createBtn.textContent = 'Planning...';
+
+            fetch(basePath + '/waterfall/create-plan', { method: 'POST' })
+                .then(function(resp) { return resp.json(); })
+                .then(function(data) {
+                    var stepID = data.step_id;
+                    var outputEl = document.getElementById('waterfall-plan-output');
+                    streamStepToEl(stepID, outputEl, function() {
+                        window.location.reload();
+                    });
+                })
+                .catch(function() {
+                    createBtn.disabled = false;
+                    createBtn.textContent = 'Create Waterfall';
+                });
+        });
+    }
+
+    // Generate All button
+    var genAllBtn = document.getElementById('generate-all-btn');
+    if (genAllBtn) {
+        genAllBtn.addEventListener('click', function() {
+            genAllBtn.disabled = true;
+            genAllBtn.textContent = 'Generating...';
+
+            var cards = document.querySelectorAll('.board-card[data-piece-id]');
+            var started = 0;
+            cards.forEach(function(card) {
+                var status = card.dataset.status;
+                if (status === 'pending' || status === 'rejected') {
+                    var pieceID = card.dataset.pieceId;
+                    started++;
+                    streamPieceCard(pieceID, card);
+                }
+            });
+
+            if (started === 0) {
+                genAllBtn.disabled = false;
+                genAllBtn.textContent = 'Generate All';
+            }
+        });
+    }
+
+    // Individual generate buttons via event delegation
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.piece-generate-btn');
+        if (!btn) return;
+        var pieceId = btn.dataset.pieceId;
+        if (!pieceId) return;
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        var card = btn.closest('.board-card');
+        if (card) streamPieceCard(pieceId, card);
+    });
+
+    // Render existing content bodies
+    document.querySelectorAll('.board-card-body').forEach(function(el) {
+        var text = el.textContent.trim();
+        if (text && el.dataset.platform) {
+            renderContentBody(el, el.dataset.platform, el.dataset.format, text);
+        }
+    });
 }
 
 // --- Production board ---

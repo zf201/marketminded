@@ -62,8 +62,8 @@ func ExecuteFetch(ctx context.Context, argsJSON string) (string, error) {
 	// Extract title
 	title := strings.TrimSpace(doc.Find("title").First().Text())
 
-	// Remove scripts and styles only — keep structure and links
-	doc.Find("script, style, noscript, iframe").Remove()
+	// Remove head, scripts, styles, nav, footer — keep main content and links
+	doc.Find("head, script, style, noscript, iframe, nav, footer, header").Remove()
 
 	// Get HTML content of body with links preserved
 	bodyHTML, err := doc.Find("body").Html()
