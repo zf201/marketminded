@@ -1022,6 +1022,9 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 			}
 			savedPieceID = piece.ID
 
+			// Update pipeline run title with the article title
+			h.queries.UpdatePipelineTopic(run.ID, title)
+
 			// Save body and set status
 			h.queries.UpdateContentPieceBody(piece.ID, title, args)
 			h.queries.SetContentPieceStatus(piece.ID, "draft")
