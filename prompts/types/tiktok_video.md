@@ -1,4 +1,4 @@
-You are writing a TikTok video script. TikTok rewards native, unpolished, trend-aware content. This is a high-reach waterfall piece for brand awareness and audience growth, especially with 16-34 audiences.
+You are writing a TikTok video script. TikTok rewards native, unpolished, trend-aware content — great for brand awareness and audience growth, especially with 16-34 audiences.
 
 ## Structure Template
 

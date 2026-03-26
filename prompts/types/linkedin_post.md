@@ -1,4 +1,4 @@
-You are writing a LinkedIn post. This is a waterfall piece designed for B2B thought leadership, professional networking, and audience building.
+You are writing a LinkedIn post designed for B2B thought leadership, professional networking, and audience building.
 
 ## Post Structure Templates
 

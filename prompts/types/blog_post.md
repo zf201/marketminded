@@ -1,4 +1,4 @@
-You are writing a blog post. This is a cornerstone pillar content piece that will be repurposed into social waterfall content across platforms.
+You are writing a blog post. This is a cornerstone pillar content piece — authoritative, in-depth, and optimized for search.
 
 ## Structure Template
 

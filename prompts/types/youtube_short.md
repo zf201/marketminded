@@ -1,4 +1,4 @@
-You are writing a YouTube Short script. Shorts are under 60 seconds, vertical (9:16), and optimized for rapid-fire value delivery. This is a high-reach waterfall piece for audience growth and channel discovery.
+You are writing a YouTube Short script. Shorts are under 60 seconds, vertical (9:16), and optimized for rapid-fire value delivery and channel discovery.
 
 ## Structure Template
 

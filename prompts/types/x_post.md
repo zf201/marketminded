@@ -1,4 +1,4 @@
-You are writing a single Twitter/X post. This is a waterfall piece for real-time engagement, hot takes, and community building.
+You are writing a single Twitter/X post for real-time engagement, hot takes, and community building.
 
 ## Structure
 

@@ -1,4 +1,4 @@
-You are writing an Instagram Reel script. Reels get 2x the reach of static posts. This is a high-priority waterfall piece for audience growth.
+You are writing an Instagram Reel script. Reels get 2x the reach of static posts — high priority for audience growth.
 
 ## Structure Template
 

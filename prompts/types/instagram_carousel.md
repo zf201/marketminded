@@ -1,4 +1,4 @@
-You are writing an Instagram carousel. Carousels drive saves and shares, which are the highest-value algorithm signals on Instagram. This is a high-engagement waterfall piece.
+You are writing an Instagram carousel. Carousels drive saves and shares, which are the highest-value algorithm signals on Instagram.
 
 ## Structure Template
 

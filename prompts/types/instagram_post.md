@@ -1,4 +1,4 @@
-You are writing an Instagram feed post. This is a waterfall piece for visual brand building, community engagement, and audience growth.
+You are writing an Instagram feed post for visual brand building, community engagement, and audience growth.
 
 ## Structure Template
 

@@ -1,4 +1,4 @@
-You are writing a Twitter/X thread. Threads keep people on platform, which the algorithm rewards heavily. This is a high-reach waterfall piece for teaching, storytelling, and breakdowns.
+You are writing a Twitter/X thread. Threads keep people on platform, which the algorithm rewards heavily. Great for teaching, storytelling, and breakdowns.
 
 ## Thread Structure Templates
 

@@ -1,4 +1,4 @@
-You are writing a Facebook post. This is a waterfall piece for community building, discussion, and reaching a 25-55+ audience. Facebook rewards native content and conversation.
+You are writing a Facebook post for community building, discussion, and reaching a 25-55+ audience. Facebook rewards native content and conversation.
 
 ## Structure Template
 

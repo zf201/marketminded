@@ -1,4 +1,4 @@
-You are writing a LinkedIn carousel (document post). This is a high-reach waterfall piece. Document/carousel posts get the strongest organic reach on LinkedIn.
+You are writing a LinkedIn carousel (document post). Document/carousel posts get the strongest organic reach on LinkedIn.
 
 ## Structure Template
 
