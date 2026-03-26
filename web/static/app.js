@@ -480,10 +480,6 @@ document.addEventListener('DOMContentLoaded', function() {
         initCornerstonePipeline(cornerstonePage.dataset.projectId, cornerstonePage.dataset.runId);
     }
 
-    var waterfallPage = document.getElementById('waterfall-page');
-    if (waterfallPage) {
-        initWaterfallPage(waterfallPage.dataset.projectId, waterfallPage.dataset.runId);
-    }
 });
 
 function initProfileSectionChat(projectID, sectionName) {
@@ -824,21 +820,6 @@ function renderPlan(el) {
         el.appendChild(h);
     }
 
-    if (data.waterfall && data.waterfall.length > 0) {
-        var wh = document.createElement('div');
-        wh.style.cssText = 'font-weight:600;margin-top:0.75rem;margin-bottom:0.5rem;font-size:0.9rem';
-        wh.textContent = 'Waterfall pieces:';
-        el.appendChild(wh);
-        var list = document.createElement('div');
-        list.className = 'content-items';
-        data.waterfall.forEach(function(w) {
-            var item = document.createElement('div');
-            item.className = 'content-item';
-            item.textContent = (w.count || 1) + 'x ' + w.platform + ' ' + w.format;
-            list.appendChild(item);
-        });
-        el.appendChild(list);
-    }
 }
 
 // --- Content type renderers ---
@@ -1378,7 +1359,7 @@ function initCornerstonePipeline(projectID, runID) {
         }
     });
 
-    // Approve button with phase_change support
+    // Approve button
     document.addEventListener('click', function(e) {
         var btn = e.target.closest('.piece-approve-btn');
         if (!btn) return;
@@ -1390,14 +1371,7 @@ function initCornerstonePipeline(projectID, runID) {
         btn.textContent = 'Approving...';
 
         fetch(basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
-            .then(function(resp) { return resp.json(); })
-            .then(function(data) {
-                if (data.phase_change === 'waterfall') {
-                    window.location.href = '/projects/' + projectID + '/pipeline/' + runID + '/waterfall';
-                } else {
-                    window.location.reload();
-                }
-            })
+            .then(function() { window.location.reload(); })
             .catch(function() { window.location.reload(); });
     });
 
@@ -1640,163 +1614,6 @@ function renderStepOutput(el, typeName, data) {
     }
 }
 
-// --- Waterfall parallel generation ---
-
-function initWaterfallPage(projectID, runID) {
-    var basePath = '/projects/' + projectID + '/pipeline/' + runID;
-
-    // Helper: stream a step into a plain output element
-    function streamStepToEl(stepID, outputEl, onDone) {
-        if (outputEl) outputEl.textContent = '';
-        var url = basePath + '/stream/step/' + stepID;
-        var source = new EventSource(url);
-
-        source.onmessage = function(event) {
-            var d = JSON.parse(event.data);
-            if (d.type === 'chunk') {
-                if (outputEl) outputEl.textContent += d.chunk;
-            } else if (d.type === 'done') {
-                source.close();
-                if (onDone) onDone();
-            } else if (d.type === 'error') {
-                source.close();
-                if (outputEl) outputEl.textContent += '\nError: ' + d.error;
-            }
-        };
-
-        source.onerror = function() { source.close(); };
-        return source;
-    }
-
-    // Helper: stream a piece into its card
-    function streamPieceCard(pieceID, card) {
-        var bodyEl = document.getElementById('piece-body-' + pieceID);
-        if (!bodyEl) return;
-
-        card.className = card.className.replace(/board-card-(pending|rejected)/g, '') + ' board-card-generating';
-        bodyEl.classList.remove('collapsed');
-
-        var badges = card.querySelectorAll('.badge');
-        var badge = badges[badges.length - 1];
-        if (badge) { badge.textContent = 'generating'; badge.className = 'badge badge-running'; }
-
-        function showDraftActions() {
-            if (badge) { badge.textContent = 'draft'; badge.className = 'badge badge-draft'; }
-            card.dataset.status = 'draft';
-            card.className = card.className.replace(/board-card-generating/g, '') + ' board-card-draft';
-            var actionsEl = card.querySelector('.board-card-actions');
-            if (actionsEl) {
-                actionsEl.innerHTML = '';
-                var approveBtn = document.createElement('button');
-                approveBtn.className = 'btn piece-approve-btn';
-                approveBtn.dataset.pieceId = pieceID;
-                approveBtn.textContent = 'Approve';
-                actionsEl.appendChild(approveBtn);
-
-                var rejectBtn = document.createElement('button');
-                rejectBtn.className = 'btn btn-danger piece-reject-btn';
-                rejectBtn.dataset.pieceId = pieceID;
-                rejectBtn.textContent = 'Reject';
-                rejectBtn.style.marginLeft = '0.5rem';
-                actionsEl.appendChild(rejectBtn);
-
-                var improveBtn = document.createElement('button');
-                improveBtn.className = 'btn btn-secondary piece-improve-btn';
-                improveBtn.dataset.pieceId = pieceID;
-                improveBtn.textContent = 'Improve';
-                improveBtn.style.marginLeft = '0.5rem';
-                actionsEl.appendChild(improveBtn);
-            }
-        }
-
-        var source = new EventSource(basePath + '/stream/piece/' + pieceID);
-        source.onmessage = function(event) {
-            var d = JSON.parse(event.data);
-            if (d.type === 'chunk') {
-                bodyEl.textContent += d.chunk;
-            } else if (d.type === 'content_written') {
-                renderContentBody(bodyEl, d.platform, d.format, JSON.stringify(d.data));
-                source.close();
-                showDraftActions();
-            } else if (d.type === 'done') {
-                source.close();
-                showDraftActions();
-            } else if (d.type === 'error') {
-                source.close();
-                if (badge) { badge.textContent = 'error'; badge.className = 'badge badge-error'; }
-            }
-        };
-        source.onerror = function() { source.close(); };
-    }
-
-    // Create Waterfall button
-    var createBtn = document.getElementById('create-waterfall-btn');
-    if (createBtn) {
-        createBtn.addEventListener('click', function() {
-            createBtn.disabled = true;
-            createBtn.textContent = 'Planning...';
-
-            fetch(basePath + '/waterfall/create-plan', { method: 'POST' })
-                .then(function(resp) { return resp.json(); })
-                .then(function(data) {
-                    var stepID = data.step_id;
-                    var outputEl = document.getElementById('waterfall-plan-output');
-                    streamStepToEl(stepID, outputEl, function() {
-                        window.location.reload();
-                    });
-                })
-                .catch(function() {
-                    createBtn.disabled = false;
-                    createBtn.textContent = 'Create Waterfall';
-                });
-        });
-    }
-
-    // Generate All button
-    var genAllBtn = document.getElementById('generate-all-btn');
-    if (genAllBtn) {
-        genAllBtn.addEventListener('click', function() {
-            genAllBtn.disabled = true;
-            genAllBtn.textContent = 'Generating...';
-
-            var cards = document.querySelectorAll('.board-card[data-piece-id]');
-            var started = 0;
-            cards.forEach(function(card) {
-                var status = card.dataset.status;
-                if (status === 'pending' || status === 'rejected') {
-                    var pieceID = card.dataset.pieceId;
-                    started++;
-                    streamPieceCard(pieceID, card);
-                }
-            });
-
-            if (started === 0) {
-                genAllBtn.disabled = false;
-                genAllBtn.textContent = 'Generate All';
-            }
-        });
-    }
-
-    // Individual generate buttons via event delegation
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.piece-generate-btn');
-        if (!btn) return;
-        var pieceId = btn.dataset.pieceId;
-        if (!pieceId) return;
-        btn.disabled = true;
-        btn.textContent = 'Generating...';
-        var card = btn.closest('.board-card');
-        if (card) streamPieceCard(pieceId, card);
-    });
-
-    // Render existing content bodies
-    document.querySelectorAll('.board-card-body').forEach(function(el) {
-        var text = el.textContent.trim();
-        if (text && el.dataset.platform) {
-            renderContentBody(el, el.dataset.platform, el.dataset.format, text);
-        }
-    });
-}
 
 // --- Production board ---
 
