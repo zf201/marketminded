@@ -38,6 +38,12 @@ func main() {
 		}
 		return cfg.ModelContent
 	}
+	copywritingModel := func() string {
+		if v, err := queries.GetSetting("model_copywriting"); err == nil && v != "" {
+			return v
+		}
+		return cfg.ModelCopywriting
+	}
 	ideationModel := func() string {
 		if v, err := queries.GetSetting("model_ideation"); err == nil && v != "" {
 			return v
@@ -48,7 +54,7 @@ func main() {
 	// Handlers
 	dashboardHandler := handlers.NewDashboardHandler(queries)
 	projectHandler := handlers.NewProjectHandler(queries)
-	pipelineHandler := handlers.NewPipelineHandler(queries, aiClient, braveClient, contentModel)
+	pipelineHandler := handlers.NewPipelineHandler(queries, aiClient, braveClient, contentModel, copywritingModel)
 	contentHandler := handlers.NewContentHandler(queries)
 	templateHandler := handlers.NewTemplateHandler(queries)
 	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)

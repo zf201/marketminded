@@ -37,14 +37,15 @@ Use natural transitions instead: "Here's the thing", "But", "So", "Also", "Plus"
 Vary sentence length. Read it aloud. If it sounds like a press release, rewrite it.`
 
 type PipelineHandler struct {
-	queries     *store.Queries
-	aiClient    *ai.Client
-	braveClient *search.BraveClient
-	model       func() string
+	queries        *store.Queries
+	aiClient       *ai.Client
+	braveClient    *search.BraveClient
+	model          func() string
+	writerModel    func() string
 }
 
-func NewPipelineHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *PipelineHandler {
-	return &PipelineHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
+func NewPipelineHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string, writerModel func() string) *PipelineHandler {
+	return &PipelineHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model, writerModel: writerModel}
 }
 
 func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -278,7 +279,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -409,7 +410,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -1056,7 +1057,7 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(ctx, h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(ctx, h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil && savedPieceID == 0 {
 		// Only mark failed if the write tool wasn't called (context cancel after tool is expected)
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")

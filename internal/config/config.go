@@ -11,6 +11,7 @@ type Config struct {
 	OpenRouterAPIKey string
 	BraveAPIKey      string
 	ModelContent     string
+	ModelCopywriting string
 	ModelIdeation    string
 }
 
@@ -28,6 +29,7 @@ func Load() (*Config, error) {
 		OpenRouterAPIKey: orKey,
 		BraveAPIKey:      braveKey,
 		ModelContent:     envOr("MARKETMINDED_MODEL_CONTENT", "x-ai/grok-4.1-fast"),
+		ModelCopywriting: envOr("MARKETMINDED_MODEL_COPYWRITING", "x-ai/grok-4.1-fast"),
 		ModelIdeation:    envOr("MARKETMINDED_MODEL_IDEATION", "x-ai/grok-4.1-fast"),
 	}, nil
 }

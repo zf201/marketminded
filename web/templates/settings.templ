@@ -1,11 +1,12 @@
 package templates
 
 type SettingsData struct {
-	ModelContent   string
-	ModelIdeation  string
-	ModelProofread string
-	Temperature    string
-	Saved          bool
+	ModelContent     string
+	ModelCopywriting string
+	ModelIdeation    string
+	ModelProofread   string
+	Temperature      string
+	Saved            bool
 }
 
 templ SettingsPage(data SettingsData) {
@@ -27,8 +28,13 @@ templ SettingsPage(data SettingsData) {
 				<p class="text-muted mb-2">Choose which OpenRouter models to use. Leave blank to use defaults from environment variables.</p>
 
 				<div class="form-group">
-					<label for="model_content">Content Model (pillar writing, social posts, voice/tone analysis)</label>
-					<input type="text" id="model_content" name="model_content" value={ data.ModelContent } placeholder="e.g. anthropic/claude-sonnet-4-20250514"/>
+					<label for="model_content">Content Research Model (research, fact-checking, brand enrichment, tone analysis)</label>
+					<input type="text" id="model_content" name="model_content" value={ data.ModelContent } placeholder="e.g. x-ai/grok-4.1-fast"/>
+				</div>
+
+				<div class="form-group">
+					<label for="model_copywriting">Copywriting Model (cornerstone article writing)</label>
+					<input type="text" id="model_copywriting" name="model_copywriting" value={ data.ModelCopywriting } placeholder="e.g. anthropic/claude-sonnet-4-20250514"/>
 				</div>
 
 				<div class="form-group">

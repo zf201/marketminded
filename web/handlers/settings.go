@@ -27,17 +27,19 @@ func (h *SettingsHandler) show(w http.ResponseWriter, r *http.Request, saved boo
 	settings, _ := h.queries.AllSettings()
 
 	templates.SettingsPage(templates.SettingsData{
-		ModelContent:   settings["model_content"],
-		ModelIdeation:  settings["model_ideation"],
-		ModelProofread: settings["model_proofread"],
-		Temperature:    settings["temperature"],
-		Saved:          saved,
+		ModelContent:     settings["model_content"],
+		ModelCopywriting: settings["model_copywriting"],
+		ModelIdeation:    settings["model_ideation"],
+		ModelProofread:   settings["model_proofread"],
+		Temperature:      settings["temperature"],
+		Saved:            saved,
 	}).Render(r.Context(), w)
 }
 
 func (h *SettingsHandler) save(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	h.queries.SetSetting("model_content", r.FormValue("model_content"))
+	h.queries.SetSetting("model_copywriting", r.FormValue("model_copywriting"))
 	h.queries.SetSetting("model_ideation", r.FormValue("model_ideation"))
 	h.queries.SetSetting("model_proofread", r.FormValue("model_proofread"))
 	h.queries.SetSetting("temperature", r.FormValue("temperature"))
