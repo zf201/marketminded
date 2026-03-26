@@ -402,7 +402,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		if content.IsWriteTool(name) && pieceID > 0 {
 			h.queries.UpdateContentPieceBody(pieceID, "", args)
 			h.queries.SetContentPieceStatus(pieceID, "draft")
-			return "Content updated.", nil
+			return "Content updated.", ai.ErrToolDone
 		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -496,7 +496,7 @@ func (h *PipelineHandler) buildTools(pieceID int64) ([]ai.Tool, ai.ToolExecutor)
 				// Save structured content to piece body
 				h.queries.UpdateContentPieceBody(pieceID, "", args)
 				h.queries.SetContentPieceStatus(pieceID, "draft")
-				return "Content saved successfully. The user will review it.", nil
+				return "Content saved successfully. The user will review it.", ai.ErrToolDone
 			}
 			return "", fmt.Errorf("unknown tool: %s", name)
 		}
@@ -712,7 +712,7 @@ When you have gathered enough material, call submit_research with your sources a
 		if name == "submit_research" {
 			savedOutput = args
 			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
-			return "Research saved successfully.", nil
+			return "Research saved successfully.", ai.ErrToolDone
 		}
 		return baseExecutor(ctx, name, args)
 	}
@@ -836,7 +836,7 @@ When done, call submit_factcheck with your findings and the enriched brief.`, ti
 		if name == "submit_factcheck" {
 			savedOutput = args
 			h.queries.UpdatePipelineStepOutput(stepID, args, "")
-			return "Fact-check saved successfully.", nil
+			return "Fact-check saved successfully.", ai.ErrToolDone
 		}
 		return baseExecutor(ctx, name, args)
 	}
@@ -1003,6 +1003,8 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 
 	var savedPieceID int64
 
+	ctx := r.Context()
+
 	executor := func(ctx context.Context, name, args string) (string, error) {
 		if content.IsWriteTool(name) {
 			// Parse title from args
@@ -1033,7 +1035,7 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 			h.queries.UpdatePipelineStepOutput(stepID, args, "")
 			h.queries.UpdatePipelineStepStatus(stepID, "completed")
 
-			return "Content piece created successfully.", nil
+			return "Content piece created successfully.", ai.ErrToolDone
 		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -1054,9 +1056,9 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(ctx, h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
 	if err != nil && savedPieceID == 0 {
-		// Only mark failed if the write tool wasn't called
+		// Only mark failed if the write tool wasn't called (context cancel after tool is expected)
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
@@ -1272,7 +1274,7 @@ You MUST call the submit_brand_enrichment tool with your findings. Do not return
 			savedOutput = args
 			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
 			h.queries.UpdatePipelineStepStatus(stepID, "completed")
-			return "Brand enrichment saved successfully.", nil
+			return "Brand enrichment saved successfully.", ai.ErrToolDone
 		}
 		if name == "fetch_url" {
 			return tools.ExecuteFetch(ctx, args)
@@ -1421,7 +1423,7 @@ You MUST call submit_tone_analysis with your findings.`, time.Now().Format("Janu
 			savedOutput = args
 			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
 			h.queries.UpdatePipelineStepStatus(stepID, "completed")
-			return "Tone analysis saved.", nil
+			return "Tone analysis saved.", ai.ErrToolDone
 		}
 		if name == "fetch_url" {
 			return tools.ExecuteFetch(ctx, args)

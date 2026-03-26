@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -79,6 +80,10 @@ type streamResponse struct {
 	Choices []streamChoice `json:"choices"`
 }
 
+// ErrToolDone signals that the executor has captured its final output
+// and StreamWithTools should stop after emitting the tool_result event.
+var ErrToolDone = fmt.Errorf("tool done")
+
 // Callback types
 type ToolExecutor func(ctx context.Context, toolName string, arguments string) (string, error)
 
@@ -138,6 +143,7 @@ func (c *Client) StreamWithTools(
 		chatMsgs = append(chatMsgs, assistantMsg)
 
 		// Execute each tool call
+		done := false
 		for _, tc := range toolCalls {
 			// Emit tool_start
 			onToolEvent(ToolEvent{
@@ -148,6 +154,17 @@ func (c *Client) StreamWithTools(
 
 			// Execute
 			result, execErr := executor(ctx, tc.Function.Name, tc.Function.Arguments)
+			if errors.Is(execErr, ErrToolDone) {
+				// Final submit/write tool — emit result and stop
+				onToolEvent(ToolEvent{
+					Type:    "tool_result",
+					Tool:    tc.Function.Name,
+					Args:    tc.Function.Arguments,
+					Summary: result,
+				})
+				done = true
+				break
+			}
 			if execErr != nil {
 				result = "Error: " + execErr.Error()
 			}
@@ -166,6 +183,9 @@ func (c *Client) StreamWithTools(
 				Content:    result,
 				ToolCallID: tc.ID,
 			})
+		}
+		if done {
+			return fullText.String(), nil
 		}
 	}
 
