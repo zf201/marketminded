@@ -308,34 +308,13 @@ func (h *PipelineHandler) approvePiece(w http.ResponseWriter, r *http.Request, p
 	piece, _ := h.queries.GetContentPiece(pieceID)
 	h.queries.SetContentPieceStatus(pieceID, "approved")
 
-	run, _ := h.queries.GetPipelineRun(runID)
-
-	if piece.ParentID == nil && run.Phase == "cornerstone" {
-		// Cornerstone approved — flip to waterfall phase
-		h.queries.UpdatePipelinePhase(runID, "waterfall")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"phase_change": "waterfall"})
-		return
-	}
-
-	// Waterfall phase — check if all done
-	allDone, _ := h.queries.AllPiecesApproved(runID)
-	if allDone {
+	// Cornerstone approved = run complete
+	if piece.ParentID == nil {
 		h.queries.UpdatePipelineStatus(runID, "complete")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"complete": true})
-		return
-	}
-
-	next, err := h.queries.NextPendingPiece(runID)
-	if err == nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"next_piece_id": next.ID})
-		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"complete": false})
+	json.NewEncoder(w).Encode(map[string]any{"complete": piece.ParentID == nil})
 }
 
 func (h *PipelineHandler) rejectPiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
