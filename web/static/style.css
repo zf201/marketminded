@@ -30,7 +30,6 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8
 .badge-planning { background: #e0e7ff; color: #3730a3; }
 .badge-producing { background: #fce7f3; color: #9d174d; }
 .badge-creating_pillar { background: #fce7f3; color: #9d174d; }
-.badge-waterfalling { background: #cffafe; color: #155e75; }
 .badge-complete { background: #d1fae5; color: #065f46; }
 .badge-abandoned { background: #f3f4f6; color: #6b7280; }
 .badge-pending { background: #f3f4f6; color: #6b7280; }
