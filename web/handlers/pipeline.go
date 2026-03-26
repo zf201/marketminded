@@ -224,20 +224,13 @@ func (h *PipelineHandler) buildPiecePrompt(projectID int64, piece *store.Content
 	prompt := fmt.Sprintf("Today's date: %s\n\n%s\n\n## Client profile\n%s\n",
 		time.Now().Format("January 2, 2006"), promptText, profile)
 
-	if piece.ParentID == nil {
-		// Cornerstone — inject storytelling framework if set
-		if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
-			if fw := content.FrameworkByKey(fwKey); fw != nil {
-				prompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\n", fw.Name, fw.Attribution, fw.PromptInstruction)
-			}
+	// Cornerstone — inject storytelling framework if set
+	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
+		if fw := content.FrameworkByKey(fwKey); fw != nil {
+			prompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\n", fw.Name, fw.Attribution, fw.PromptInstruction)
 		}
-		prompt += fmt.Sprintf("\n## Topic brief\n%s\n", run.Brief)
-	} else {
-		// Waterfall — inject cornerstone
-		cornerstone, _ := h.queries.GetContentPiece(*piece.ParentID)
-		prompt += fmt.Sprintf("\n## Cornerstone content (your source material)\n%s\n", cornerstone.Body)
-		prompt += "\nIMPORTANT: This content exists to funnel audience to the cornerstone piece. Stay faithful to the cornerstone's message and facts. Do not introduce new claims or information that isn't in the cornerstone.\n"
 	}
+	prompt += fmt.Sprintf("\n## Topic brief\n%s\n", run.Brief)
 
 	if piece.RejectionReason != "" {
 		prompt += fmt.Sprintf("\nPrevious version was rejected. Feedback: %s. Address this.\n", piece.RejectionReason)
