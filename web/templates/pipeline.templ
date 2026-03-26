@@ -46,9 +46,6 @@ templ PipelineListPage(data PipelineListData) {
 						<strong>{ run.Topic }</strong>
 					</div>
 					<div>
-						if run.Phase != "" {
-							<span class={ "badge badge-" + run.Phase }>{ run.Phase }</span>
-						}
 						<span class={ "badge badge-" + run.Status }>{ run.Status }</span>
 					</div>
 				</div>
@@ -86,15 +83,6 @@ type ContentPieceView struct {
 type ContentEditData struct {
 	ProjectID int64
 	Piece     ContentPieceView
-}
-
-func (d WaterfallPageData) hasPendingPieces() bool {
-	for _, p := range d.Pieces {
-		if p.Status == "pending" || p.Status == "rejected" {
-			return true
-		}
-	}
-	return false
 }
 
 func (d ProductionBoardData) hasPendingSteps() bool {
@@ -240,107 +228,10 @@ templ ProductionBoardPage(data ProductionBoardData) {
 				}
 			}
 
-			if data.Phase == "waterfall" {
-				<div class="mt-4">
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/waterfall", data.ProjectID, data.RunID)) } class="btn">Go to Waterfall</a>
-				</div>
-			}
 		</div>
 	}
 }
 
-type WaterfallPageData struct {
-	ProjectID        int64
-	ProjectName      string
-	RunID            int64
-	CornerstoneTitle string
-	PlanStep         *PipelineStepView
-	Pieces           []ContentPieceView
-	Status           string
-}
-
-templ WaterfallPage(data WaterfallPageData) {
-	@Layout(fmt.Sprintf("Waterfall: %s", data.CornerstoneTitle)) {
-		<div id="waterfall-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-run-id={ fmt.Sprintf("%d", data.RunID) }>
-			<div class="board-header flex-between mb-4">
-				<div>
-					<h1>Waterfall: { data.CornerstoneTitle }</h1>
-					<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
-				</div>
-				<div>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, data.RunID)) } class="btn btn-secondary">Back to Cornerstone</a>
-				</div>
-			</div>
-
-			if data.PlanStep == nil {
-				<div class="mb-4">
-					<button class="btn" id="create-waterfall-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Create Waterfall</button>
-				</div>
-				<div id="waterfall-plan-output" style="white-space:pre-wrap;font-size:0.85rem"></div>
-			} else if data.PlanStep.Status == "completed" {
-				if data.hasPendingPieces() {
-					<div class="mb-4">
-						<button class="btn" id="generate-all-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Generate All</button>
-					</div>
-				}
-			}
-
-			for _, piece := range data.Pieces {
-				<div
-					class={ "board-card",
-						templ.KV("board-card-pending", piece.Status == "pending"),
-						templ.KV("board-card-generating", piece.Status == "generating"),
-						templ.KV("board-card-draft", piece.Status == "draft"),
-						templ.KV("board-card-approved", piece.Status == "approved"),
-						templ.KV("board-card-rejected", piece.Status == "rejected"),
-					}
-					data-piece-id={ fmt.Sprintf("%d", piece.ID) }
-					data-status={ piece.Status }
-				>
-					<div class="board-card-header">
-						<div>
-							<span class="badge badge-planning">{ piece.Platform }/{ piece.Format }</span>
-							if piece.Title != "" {
-								<strong style="margin-left:0.5rem">{ piece.Title }</strong>
-							}
-						</div>
-						<span class={ "badge badge-" + piece.Status }>{ piece.Status }</span>
-					</div>
-
-					<div class={ "board-card-body", templ.KV("collapsed", piece.Status == "approved") } id={ fmt.Sprintf("piece-body-%d", piece.ID) } data-platform={ piece.Platform } data-format={ piece.Format }>
-						if piece.Body != "" {
-							{ piece.Body }
-						} else if piece.Status == "pending" {
-							<p class="text-muted">Waiting to be generated...</p>
-						}
-					</div>
-
-					if piece.RejectionReason != "" && piece.Status == "rejected" {
-						<p style="color:#dc2626;font-size:0.85rem;margin-bottom:0.5rem">Rejected: { piece.RejectionReason }</p>
-					}
-
-					<div class="board-card-actions" id={ fmt.Sprintf("piece-actions-%d", piece.ID) }>
-						if piece.Status == "generating" {
-							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/abort", data.ProjectID, data.RunID, piece.ID)) } style="display:inline">
-								<button type="submit" class="btn btn-danger">Abort</button>
-							</form>
-						}
-						if piece.Status == "draft" {
-							<button class="btn piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>
-							<button class="btn btn-danger piece-reject-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Reject</button>
-							<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
-							<button class="btn btn-secondary proofread-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Proofread</button>
-						}
-						if piece.Status == "approved" {
-							<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
-							<button class="btn btn-secondary proofread-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Proofread</button>
-						}
-					</div>
-				</div>
-			}
-		</div>
-	}
-}
 
 templ ContentEditPage(data ContentEditData) {
 	@Layout("Edit Content") {
