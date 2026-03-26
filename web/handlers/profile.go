@@ -18,7 +18,7 @@ import (
 
 var allSections = []string{
 	"product_and_positioning", "audience", "voice_and_tone",
-	"content_strategy", "guidelines",
+	"guidelines", "content_strategy",
 }
 
 var sectionDescriptions = map[string]string{
@@ -29,9 +29,7 @@ var sectionDescriptions = map[string]string{
 - Anxiety: concerns that might stop them from acting
 - Habit: what keeps them stuck with the status quo`,
 	"voice_and_tone": `How the brand communicates: personality traits, vocabulary level, sentence style, formality, humor, warmth. Characteristic phrases to use. How they relate to the audience (peer, mentor, authority). Words/phrases to always use and to never use. Ask for examples of writing they like, use THEIR words, not marketing theory. Include content role models: creators, brands, or accounts they admire and why.`,
-	"content_strategy": `Content goals (traffic, leads, authority, community). Which platforms to post on and why. Content formats per platform (blog, carousel, reel, thread, newsletter). Posting frequency per platform. 3-5 content pillars: recurring topic categories with example post ideas for each. For each pillar, include both "searchable" content (captures existing demand via SEO) and "shareable" content (creates demand through insights, stories, original takes).
-
-IMPORTANT: The core of this strategy is the "content waterfall" approach. One cornerstone piece of content (like a blog post or video) gets repurposed into many smaller pieces across platforms. Define the client's waterfall flows clearly. For example: "Each blog post becomes 2 Instagram posts, 2 reels, 1 LinkedIn post, 1 X post, and 1 X thread." Be specific about what goes where and how many.`,
+	"content_strategy": `Define how the client's cornerstone content gets distributed across social platforms — what goes where and how many pieces per platform.`,
 	"guidelines": `Content-specific rules: topics that are off-limits, formatting preferences, hashtag strategy, emoji usage, visual style. Anti-patterns: what should content NEVER look or sound like. Any brand-specific dos and don'ts not covered elsewhere.`,
 }
 
@@ -315,7 +313,14 @@ func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, pro
 	w.WriteHeader(http.StatusOK)
 }
 
+var sectionDisplayTitles = map[string]string{
+	"content_strategy": "Social Content Strategy",
+}
+
 func sectionTitle(s string) string {
+	if t, ok := sectionDisplayTitles[s]; ok {
+		return t
+	}
 	if s == "" {
 		return s
 	}

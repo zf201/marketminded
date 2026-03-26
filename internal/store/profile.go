@@ -87,7 +87,14 @@ func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string)
 	return b.String(), nil
 }
 
+var sectionDisplayTitles = map[string]string{
+	"content_strategy": "Social Content Strategy",
+}
+
 func sectionTitle(s string) string {
+	if t, ok := sectionDisplayTitles[s]; ok {
+		return t
+	}
 	if s == "" {
 		return s
 	}
