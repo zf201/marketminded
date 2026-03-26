@@ -669,7 +669,7 @@ func (h *PipelineHandler) streamResearch(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	profile, _ := h.queries.BuildProfileString(projectID)
+	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
@@ -1218,7 +1218,7 @@ func (h *PipelineHandler) streamBrandEnricher(w http.ResponseWriter, r *http.Req
 		urlList.WriteString("\n")
 	}
 
-	profile, _ := h.queries.BuildProfileString(projectID)
+	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
