@@ -2,17 +2,24 @@ package templates
 
 import "fmt"
 
+type FrameworkOption struct {
+	Key  string
+	Name string
+}
+
 type ProjectSettingsData struct {
-	ProjectID      int64
-	ProjectName    string
-	Language       string
-	CompanyWebsite string
-	WebsiteNotes   string
-	CompanyPricing string
-	PricingNotes   string
-	CompanyBlog    string
-	BlogNotes      string
-	Saved          bool
+	ProjectID            int64
+	ProjectName          string
+	Language             string
+	CompanyWebsite       string
+	WebsiteNotes         string
+	CompanyPricing       string
+	PricingNotes         string
+	CompanyBlog          string
+	BlogNotes            string
+	StorytellingFramework string
+	Frameworks           []FrameworkOption
+	Saved                bool
 }
 
 templ ProjectSettingsPage(data ProjectSettingsData) {
@@ -35,6 +42,28 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 					<label>Content Language</label>
 					<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..."/>
 					<p class="text-muted" style="font-size:0.75rem">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
+				</div>
+			</div>
+
+			<div class="card mb-2">
+				<h3 style="margin-bottom:1rem">Storytelling Framework</h3>
+				<div class="form-group">
+					<label>Framework</label>
+					<select name="storytelling_framework" style="width:100%;padding:0.5rem;border:1px solid #d1d5db;border-radius:4px">
+						if data.StorytellingFramework == "" {
+							<option value="" selected>None</option>
+						} else {
+							<option value="">None</option>
+						}
+						for _, fw := range data.Frameworks {
+							if fw.Key == data.StorytellingFramework {
+								<option value={ fw.Key } selected>{ fw.Name }</option>
+							} else {
+								<option value={ fw.Key }>{ fw.Name }</option>
+							}
+						}
+					</select>
+					<p class="text-muted" style="font-size:0.75rem">Guides how the AI structures the narrative in cornerstone content.</p>
 				</div>
 			</div>
 

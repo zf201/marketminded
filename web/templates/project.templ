@@ -10,7 +10,6 @@ type ProjectDetail struct {
 	RunCount       int
 	ContextItems   []ContextItemView
 	Language       string // from project settings
-	FrameworkName  string // display name of selected storytelling framework, empty if none
 }
 
 type ContextItemView struct {
@@ -53,18 +52,6 @@ templ ProjectOverview(p ProjectDetail) {
 					}
 				</p>
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-secondary">Manage Settings</a>
-			</div>
-
-			<div class="card">
-				<h3>Storytelling Framework</h3>
-				<p class="mb-2">
-					if p.FrameworkName != "" {
-						<span class="badge badge-approved">{ p.FrameworkName }</span>
-					} else {
-						<span class="badge badge-draft">Not set</span>
-					}
-				</p>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/storytelling", p.ID)) } class="btn btn-secondary">Choose Framework</a>
 			</div>
 
 			<div class="card">

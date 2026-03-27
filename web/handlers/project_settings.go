@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/web/templates"
 )
@@ -33,17 +34,24 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 
 	settings, _ := h.queries.AllProjectSettings(projectID)
 
+	fwOptions := make([]templates.FrameworkOption, len(content.Frameworks))
+	for i, fw := range content.Frameworks {
+		fwOptions[i] = templates.FrameworkOption{Key: fw.Key, Name: fw.Name}
+	}
+
 	templates.ProjectSettingsPage(templates.ProjectSettingsData{
-		ProjectID:         projectID,
-		ProjectName:       project.Name,
-		Language:          settings["language"],
-		CompanyWebsite:    settings["company_website"],
-		WebsiteNotes:      settings["website_notes"],
-		CompanyPricing:    settings["company_pricing"],
-		PricingNotes:      settings["pricing_notes"],
-		CompanyBlog:       settings["company_blog"],
-		BlogNotes:         settings["blog_notes"],
-		Saved:             r.URL.Query().Get("saved") == "1",
+		ProjectID:             projectID,
+		ProjectName:           project.Name,
+		Language:              settings["language"],
+		CompanyWebsite:        settings["company_website"],
+		WebsiteNotes:          settings["website_notes"],
+		CompanyPricing:        settings["company_pricing"],
+		PricingNotes:          settings["pricing_notes"],
+		CompanyBlog:           settings["company_blog"],
+		BlogNotes:             settings["blog_notes"],
+		StorytellingFramework: settings["storytelling_framework"],
+		Frameworks:            fwOptions,
+		Saved:                 r.URL.Query().Get("saved") == "1",
 	}).Render(r.Context(), w)
 }
 
@@ -56,5 +64,6 @@ func (h *ProjectSettingsHandler) save(w http.ResponseWriter, r *http.Request, pr
 	h.queries.SetProjectSetting(projectID, "pricing_notes", r.FormValue("pricing_notes"))
 	h.queries.SetProjectSetting(projectID, "company_blog", r.FormValue("company_blog"))
 	h.queries.SetProjectSetting(projectID, "blog_notes", r.FormValue("blog_notes"))
+	h.queries.SetProjectSetting(projectID, "storytelling_framework", r.FormValue("storytelling_framework"))
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/settings?saved=1", projectID), http.StatusSeeOther)
 }

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/web/templates"
 )
@@ -102,13 +101,6 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 	}
 
 	settings, _ := h.queries.AllProjectSettings(id)
-	frameworkName := ""
-	if fwKey := settings["storytelling_framework"]; fwKey != "" {
-		if fw := content.FrameworkByKey(fwKey); fw != nil {
-			frameworkName = fw.Name
-		}
-	}
-
 	detail := templates.ProjectDetail{
 		ID:            project.ID,
 		Name:          project.Name,
@@ -117,7 +109,6 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 		RunCount:      len(runs),
 		ContextItems:  ctxViews,
 		Language:      settings["language"],
-		FrameworkName: frameworkName,
 	}
 
 	templates.ProjectOverview(detail).Render(r.Context(), w)
