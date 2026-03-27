@@ -1530,15 +1530,24 @@ function renderSourcesList(sources) {
     list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin-top:0.25rem';
     sources.forEach(function(s) {
         var li = document.createElement('li');
-        li.style.marginBottom = '0.3rem';
+        li.style.marginBottom = '0.5rem';
         var a = document.createElement('a');
         a.href = s.url;
         a.textContent = s.title || s.url;
         a.target = '_blank';
+        a.style.fontWeight = '600';
         li.appendChild(a);
         if (s.date) {
-            var d = document.createTextNode(' (' + s.date + ')');
-            li.appendChild(d);
+            var dateSpan = document.createElement('span');
+            dateSpan.textContent = ' (' + s.date + ')';
+            dateSpan.style.color = '#888';
+            li.appendChild(dateSpan);
+        }
+        if (s.summary) {
+            var sumDiv = document.createElement('div');
+            sumDiv.textContent = s.summary;
+            sumDiv.style.color = '#555';
+            li.appendChild(sumDiv);
         }
         list.appendChild(li);
     });
