@@ -1450,7 +1450,9 @@ function initCornerstonePipeline(projectID, runID) {
         // Collapse completed steps except the last one when all are done
         if (allCompleted && card.dataset.status === 'completed' && idx < stepCards.length - 1) {
             var output = card.querySelector('.step-output');
+            var pills = card.querySelector('.step-tool-pills');
             if (output) output.style.display = 'none';
+            if (pills) pills.style.display = 'none';
             card.dataset.collapsed = 'true';
 
             // Wrap badge + toggle button in a container for right alignment
@@ -1472,8 +1474,10 @@ function initCornerstonePipeline(projectID, runID) {
             toggleBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 var o = card.querySelector('.step-output');
+                var p = card.querySelector('.step-tool-pills');
                 var isCollapsed = card.dataset.collapsed === 'true';
                 if (o) o.style.display = isCollapsed ? '' : 'none';
+                if (p) p.style.display = isCollapsed ? '' : 'none';
                 card.dataset.collapsed = isCollapsed ? 'false' : 'true';
                 toggleBtn.classList.toggle('expanded');
                 toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
