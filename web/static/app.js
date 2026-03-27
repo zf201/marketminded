@@ -1215,7 +1215,12 @@ function initCornerstonePipeline(projectID, runID) {
         if (type === 'search') {
             var pill = document.createElement('span');
             pill.className = 'tool-pill tool-pill-search';
-            pill.textContent = value.length > 30 ? value.substring(0, 30) + '...' : value;
+            var icon = document.createElement('span');
+            icon.textContent = '\uD83D\uDD0D';
+            icon.style.opacity = '0.5';
+            pill.appendChild(icon);
+            var text = document.createTextNode(' ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value));
+            pill.appendChild(text);
             pill.title = value;
             pillsEl.appendChild(pill);
         } else if (type === 'fetch') {
@@ -1223,7 +1228,14 @@ function initCornerstonePipeline(projectID, runID) {
             a.className = 'tool-pill tool-pill-fetch';
             a.href = value;
             a.target = '_blank';
-            try { a.textContent = new URL(value).hostname; } catch(e) { a.textContent = value.substring(0, 25); }
+            var icon = document.createElement('span');
+            icon.textContent = '\uD83C\uDF10';
+            icon.style.opacity = '0.6';
+            a.appendChild(icon);
+            var host = value;
+            try { host = new URL(value).hostname; } catch(e) { host = value.substring(0, 25); }
+            var text = document.createTextNode(' ' + host);
+            a.appendChild(text);
             a.title = value;
             pillsEl.appendChild(a);
         }
@@ -1273,22 +1285,8 @@ function initCornerstonePipeline(projectID, runID) {
             } else if (d.type === 'done') {
                 source.close();
                 if (tickerEl) tickerEl.classList.add('done');
-                // Collapse stream, wrap in details
-                if (streamEl && streamEl.textContent.trim()) {
-                    var details = document.createElement('details');
-                    details.className = 'step-output-details';
-                    details.style.marginTop = '0.5rem';
-                    var summary = document.createElement('summary');
-                    summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555';
-                    summary.textContent = 'View streamed output';
-                    details.appendChild(summary);
-                    var clone = streamEl.cloneNode(true);
-                    details.appendChild(clone);
-                    streamEl.parentNode.replaceChild(details, streamEl);
-                }
                 setBadge(card, 'completed', 'badge-success');
                 card.dataset.status = 'completed';
-                // Reload to get rendered JSON output
                 if (onDone) onDone();
             } else if (d.type === 'error') {
                 source.close();
