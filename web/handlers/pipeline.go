@@ -811,21 +811,23 @@ func (h *PipelineHandler) streamFactcheck(w http.ResponseWriter, r *http.Request
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
-You are a fact-checker. You will verify the research brief below, check key claims against reliable sources, and produce an enriched brief for the writer.
+You are a fact-checker. Verify the key claims in the research brief below, then call submit_factcheck with your findings.
 
-Research output to verify:
+## Research output to verify
 %s
 
-Your job:
-1. Identify any claims that seem uncertain, outdated, or potentially wrong
-2. Search/fetch to verify them
-3. Correct anything that's wrong
-4. Add any important context or caveats
-5. Confirm or update the source list
+## Workflow
+1. Identify the 3-5 most important claims that could be wrong (prices, dates, statistics, percentages)
+2. Do focused searches to verify those specific claims — do NOT try to verify everything
+3. Correct anything wrong, add caveats where needed
+4. Call submit_factcheck with the enriched brief and complete sources list
 
-IMPORTANT: Your sources list MUST include ALL sources from the input above, plus any new sources you found during verification. Never drop existing sources — always carry them forward.
-
-When done, call submit_factcheck with your findings and the enriched brief.`, time.Now().Format("January 2, 2006"), researchOutput)
+## Rules
+- Be efficient. 3-5 targeted searches, not 15+ scattered ones.
+- Focus on claims that would embarrass the brand if wrong (prices, percentages, dates).
+- Accept reasonable claims from credible sources without re-verifying.
+- Your sources list MUST include ALL sources from the input above, plus any new ones. Never drop sources.
+- Call submit_factcheck when done. This is your only way to deliver results.`, time.Now().Format("January 2, 2006"), researchOutput)
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt},
@@ -860,7 +862,7 @@ When done, call submit_factcheck with your findings and the enriched brief.`, ti
 	}
 
 	temp := 0.2
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp, 15)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp, 20)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
