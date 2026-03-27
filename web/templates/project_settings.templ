@@ -42,7 +42,7 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 				<h3 style="margin-bottom:1rem">Memory</h3>
 				<p class="text-muted" style="font-size:0.75rem;margin-bottom:0.75rem">Facts, corrections, and instructions that every AI agent in the pipeline will see. Use this for things the AI keeps getting wrong, important rules, or context that isn't in the profile.</p>
 				<div class="form-group">
-					<textarea name="memory" style="min-height:120px" placeholder="e.g. Fuel/gas is NEVER included in any offer. Always mention that fuel is the customer's responsibility.&#10;&#10;ABmobil headquarters is in Ljubljana, not Maribor.&#10;&#10;Never compare us to Avant2Go — they are a partner, not a competitor.">{ data.Memory }</textarea>
+					<textarea name="memory" style="min-height:120px" placeholder="e.g. Our free tier includes 1000 API calls, not unlimited.&#10;&#10;Never mention competitor X by name.&#10;&#10;Pricing on the website is excluding VAT.">{ data.Memory }</textarea>
 				</div>
 			</div>
 
