@@ -1420,8 +1420,14 @@ function initCornerstonePipeline(projectID, runID) {
         } catch(e) {}
     });
 
-    // Render step outputs nicely
-    document.querySelectorAll('.step-card[data-step-id]').forEach(function(card) {
+    // Render step outputs nicely and collapse completed non-last steps
+    var stepCards = document.querySelectorAll('.step-card[data-step-id]');
+    var allCompleted = true;
+    stepCards.forEach(function(card) {
+        if (card.dataset.status !== 'completed') allCompleted = false;
+    });
+
+    stepCards.forEach(function(card, idx) {
         var stepType = card.querySelector('.board-card-header strong');
         var outputEl = card.querySelector('.step-output');
         if (!outputEl) return;
@@ -1433,6 +1439,25 @@ function initCornerstonePipeline(projectID, runID) {
             renderStepOutput(outputEl, typeName, data);
         } catch (e) {
             // Leave as text
+        }
+
+        // Collapse completed steps except the last one when all are done
+        if (allCompleted && card.dataset.status === 'completed' && idx < stepCards.length - 1) {
+            var output = card.querySelector('.step-output');
+            var stream = card.querySelector('.step-stream');
+            if (output) output.style.display = 'none';
+            if (stream) stream.style.display = 'none';
+            // Make header clickable to toggle
+            var header = card.querySelector('.board-card-header');
+            if (header) {
+                header.style.cursor = 'pointer';
+                header.addEventListener('click', function() {
+                    var o = card.querySelector('.step-output');
+                    var s = card.querySelector('.step-stream');
+                    if (o) o.style.display = o.style.display === 'none' ? '' : 'none';
+                    if (s) s.style.display = s.style.display === 'none' ? '' : 'none';
+                });
+            }
         }
     });
 
@@ -1468,117 +1493,68 @@ function initCornerstonePipeline(projectID, runID) {
     });
 }
 
+function renderSourcesList(sources) {
+    var details = document.createElement('details');
+    details.style.marginTop = '0.5rem';
+    var summary = document.createElement('summary');
+    summary.textContent = 'Sources (' + sources.length + ')';
+    summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555;font-weight:600';
+    details.appendChild(summary);
+    var list = document.createElement('ul');
+    list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin-top:0.25rem';
+    sources.forEach(function(s) {
+        var li = document.createElement('li');
+        li.style.marginBottom = '0.3rem';
+        var a = document.createElement('a');
+        a.href = s.url;
+        a.textContent = s.title || s.url;
+        a.target = '_blank';
+        li.appendChild(a);
+        if (s.date) {
+            var d = document.createTextNode(' (' + s.date + ')');
+            li.appendChild(d);
+        }
+        list.appendChild(li);
+    });
+    details.appendChild(list);
+    return details;
+}
+
+function renderMarkdown(text) {
+    var div = document.createElement('div');
+    div.className = 'markdown-body';
+    div.style.fontSize = '0.85rem';
+    try {
+        div.innerHTML = marked.parse(text.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
+    } catch(e) {
+        div.textContent = text;
+    }
+    return div;
+}
+
 function renderStepOutput(el, typeName, data) {
     el.textContent = '';
     el.style.whiteSpace = 'normal';
 
     if (typeName === 'Researcher') {
-        // Research output: sources + brief
-        if (data.brief) {
-            var briefDiv = document.createElement('div');
-            briefDiv.className = 'markdown-body';
-            briefDiv.innerHTML = marked.parse(data.brief.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
-            el.appendChild(briefDiv);
-        }
-        if (data.sources && data.sources.length > 0) {
-            var h = document.createElement('h4');
-            h.textContent = 'Sources (' + data.sources.length + ')';
-            h.style.marginTop = '1rem';
-            el.appendChild(h);
-            var list = document.createElement('ul');
-            list.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
-            data.sources.forEach(function(s) {
-                var li = document.createElement('li');
-                li.style.marginBottom = '0.5rem';
-                var a = document.createElement('a');
-                a.href = s.url;
-                a.textContent = s.title || s.url;
-                a.target = '_blank';
-                a.style.fontWeight = 'bold';
-                li.appendChild(a);
-                if (s.date) {
-                    var dateSpan = document.createElement('span');
-                    dateSpan.textContent = ' (' + s.date + ')';
-                    dateSpan.style.color = '#888';
-                    li.appendChild(dateSpan);
-                }
-                if (s.summary) {
-                    var sumDiv = document.createElement('div');
-                    sumDiv.textContent = s.summary;
-                    sumDiv.style.color = '#555';
-                    li.appendChild(sumDiv);
-                }
-                list.appendChild(li);
-            });
-            el.appendChild(list);
-        }
+        if (data.brief) el.appendChild(renderMarkdown(data.brief));
+        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesList(data.sources));
     } else if (typeName === 'Brand Enricher') {
-        // Brand enricher output: brand_context + enriched_brief
-        if (data.brand_context) {
-            var h = document.createElement('h4');
-            h.textContent = 'Brand Context';
-            el.appendChild(h);
-            var ctxDiv = document.createElement('div');
-            ctxDiv.className = 'markdown-body';
-            ctxDiv.innerHTML = marked.parse(data.brand_context.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
-            el.appendChild(ctxDiv);
-        }
-        if (data.enriched_brief) {
-            var h2 = document.createElement('h4');
-            h2.textContent = 'Enriched Brief';
-            h2.style.marginTop = '1rem';
-            el.appendChild(h2);
-            var briefDiv = document.createElement('div');
-            briefDiv.className = 'markdown-body';
-            briefDiv.innerHTML = marked.parse(data.enriched_brief.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
-            el.appendChild(briefDiv);
-        }
-        if (data.sources && data.sources.length > 0) {
-            var h3 = document.createElement('h4');
-            h3.textContent = 'Sources (' + data.sources.length + ')';
-            h3.style.marginTop = '1rem';
-            el.appendChild(h3);
-            var list = document.createElement('ul');
-            list.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
-            data.sources.forEach(function(s) {
-                var li = document.createElement('li');
-                li.style.marginBottom = '0.5rem';
-                var a = document.createElement('a');
-                a.href = s.url;
-                a.textContent = s.title || s.url;
-                a.target = '_blank';
-                a.style.fontWeight = 'bold';
-                li.appendChild(a);
-                if (s.summary) {
-                    var sumDiv = document.createElement('div');
-                    sumDiv.textContent = s.summary;
-                    sumDiv.style.color = '#555';
-                    li.appendChild(sumDiv);
-                }
-                list.appendChild(li);
-            });
-            el.appendChild(list);
-        }
+        if (data.enriched_brief) el.appendChild(renderMarkdown(data.enriched_brief));
+        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesList(data.sources));
     } else if (typeName === 'Tone Analyzer') {
-        if (data.tone_guide) {
-            var h = document.createElement('h4');
-            h.textContent = 'Tone & Style Guide';
-            el.appendChild(h);
-            var guideDiv = document.createElement('div');
-            guideDiv.className = 'markdown-body';
-            guideDiv.innerHTML = marked.parse(data.tone_guide.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
-            el.appendChild(guideDiv);
-        }
+        if (data.tone_guide) el.appendChild(renderMarkdown(data.tone_guide));
         if (data.posts && data.posts.length > 0) {
-            var h2 = document.createElement('h4');
-            h2.textContent = 'Posts Analyzed (' + data.posts.length + ')';
-            h2.style.marginTop = '1rem';
-            el.appendChild(h2);
+            var details = document.createElement('details');
+            details.style.marginTop = '0.5rem';
+            var summary = document.createElement('summary');
+            summary.textContent = 'Posts Analyzed (' + data.posts.length + ')';
+            summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555;font-weight:600';
+            details.appendChild(summary);
             var list = document.createElement('ul');
-            list.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
+            list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin-top:0.25rem';
             data.posts.forEach(function(p) {
                 var li = document.createElement('li');
-                li.style.marginBottom = '0.3rem';
                 var a = document.createElement('a');
                 a.href = p.url;
                 a.textContent = p.title || p.url;
@@ -1586,53 +1562,96 @@ function renderStepOutput(el, typeName, data) {
                 li.appendChild(a);
                 list.appendChild(li);
             });
-            el.appendChild(list);
+            details.appendChild(list);
+            el.appendChild(details);
         }
     } else if (typeName === 'Fact-Checker') {
-        // Fact-check output: issues + enriched brief + sources
         if (data.issues_found && data.issues_found.length > 0) {
-            var h = document.createElement('h4');
-            h.textContent = 'Issues Found (' + data.issues_found.length + ')';
-            el.appendChild(h);
-            var issueList = document.createElement('ul');
-            issueList.style.cssText = 'font-size:0.85rem;padding-left:1.2rem';
             data.issues_found.forEach(function(issue) {
-                var li = document.createElement('li');
-                li.style.marginBottom = '0.5rem';
+                var div = document.createElement('div');
+                div.style.cssText = 'margin-bottom:0.5rem;padding:0.4rem 0.5rem;background:#fef2f2;border-radius:4px;font-size:0.8rem';
                 var claim = document.createElement('strong');
                 claim.textContent = issue.claim;
-                li.appendChild(claim);
-                var prob = document.createElement('div');
-                prob.textContent = 'Problem: ' + issue.problem;
-                prob.style.color = '#dc2626';
-                li.appendChild(prob);
-                var res = document.createElement('div');
-                res.textContent = 'Resolution: ' + issue.resolution;
-                res.style.color = '#059669';
-                li.appendChild(res);
-                issueList.appendChild(li);
+                div.appendChild(claim);
+                if (issue.problem) {
+                    var prob = document.createElement('div');
+                    prob.textContent = issue.problem;
+                    prob.style.color = '#dc2626';
+                    div.appendChild(prob);
+                }
+                if (issue.resolution) {
+                    var res = document.createElement('div');
+                    res.textContent = issue.resolution;
+                    res.style.color = '#059669';
+                    div.appendChild(res);
+                }
+                el.appendChild(div);
             });
-            el.appendChild(issueList);
         } else {
-            var noIssues = document.createElement('p');
-            noIssues.textContent = 'No issues found.';
-            noIssues.style.cssText = 'color:#059669;font-weight:bold';
-            el.appendChild(noIssues);
+            var ok = document.createElement('p');
+            ok.textContent = 'No issues found.';
+            ok.style.cssText = 'color:#059669;font-weight:600;font-size:0.85rem';
+            el.appendChild(ok);
         }
         if (data.enriched_brief) {
-            var h2 = document.createElement('h4');
-            h2.textContent = 'Enriched Brief';
-            h2.style.marginTop = '1rem';
-            el.appendChild(h2);
-            var briefDiv = document.createElement('div');
-            briefDiv.className = 'markdown-body';
-            briefDiv.innerHTML = marked.parse(data.enriched_brief.replace(/\\n/g, '\n'), { breaks: false, gfm: true });
-            el.appendChild(briefDiv);
+            var details = document.createElement('details');
+            details.style.marginTop = '0.5rem';
+            var summary = document.createElement('summary');
+            summary.textContent = 'Enriched Brief';
+            summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555;font-weight:600';
+            details.appendChild(summary);
+            details.appendChild(renderMarkdown(data.enriched_brief));
+            el.appendChild(details);
+        }
+        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesList(data.sources));
+    } else if (typeName === 'Editor') {
+        if (data.angle) {
+            var angle = document.createElement('p');
+            angle.style.cssText = 'font-weight:600;font-size:0.9rem;margin-bottom:0.5rem';
+            angle.textContent = data.angle;
+            el.appendChild(angle);
+        }
+        if (data.sections && data.sections.length > 0) {
+            data.sections.forEach(function(sec) {
+                var div = document.createElement('div');
+                div.style.cssText = 'margin-bottom:0.5rem;padding:0.4rem 0.5rem;background:#f0fdf4;border-radius:4px;font-size:0.8rem';
+                var heading = document.createElement('strong');
+                heading.textContent = sec.heading;
+                if (sec.framework_beat) heading.textContent += ' (' + sec.framework_beat + ')';
+                div.appendChild(heading);
+                if (sec.key_points && sec.key_points.length > 0) {
+                    var ul = document.createElement('ul');
+                    ul.style.cssText = 'margin:0.25rem 0 0;padding-left:1rem';
+                    sec.key_points.forEach(function(pt) {
+                        var li = document.createElement('li');
+                        li.textContent = pt;
+                        ul.appendChild(li);
+                    });
+                    div.appendChild(ul);
+                }
+                if (sec.editorial_notes) {
+                    var note = document.createElement('div');
+                    note.textContent = sec.editorial_notes;
+                    note.style.cssText = 'color:#6b7280;font-style:italic;margin-top:0.25rem';
+                    div.appendChild(note);
+                }
+                el.appendChild(div);
+            });
+        }
+        if (data.conclusion_strategy) {
+            var conc = document.createElement('div');
+            conc.style.cssText = 'margin-top:0.5rem;padding:0.4rem 0.5rem;background:#eff6ff;border-radius:4px;font-size:0.8rem';
+            var label = document.createElement('strong');
+            label.textContent = 'Conclusion: ';
+            conc.appendChild(label);
+            conc.appendChild(document.createTextNode(data.conclusion_strategy));
+            el.appendChild(conc);
         }
     } else {
-        // Writer or unknown — leave as collapsible JSON
+        // Unknown — show formatted JSON
         el.textContent = JSON.stringify(data, null, 2);
         el.style.whiteSpace = 'pre-wrap';
+        el.style.fontSize = '0.8rem';
     }
 }
 
