@@ -1447,13 +1447,21 @@ function initCornerstonePipeline(projectID, runID) {
             if (output) output.style.display = 'none';
             card.dataset.collapsed = 'true';
 
-            // Add circle toggle button next to the badge
+            // Wrap badge + toggle button in a container for right alignment
             var headerDiv = card.querySelector('.board-card-header');
+            var badge = headerDiv.querySelector('.badge');
+            var rightGroup = document.createElement('div');
+            rightGroup.style.cssText = 'display:flex;align-items:center;gap:0.3rem';
+            if (badge) {
+                badge.parentNode.removeChild(badge);
+                rightGroup.appendChild(badge);
+            }
             var toggleBtn = document.createElement('button');
             toggleBtn.className = 'step-toggle-btn';
             toggleBtn.textContent = '\u25B6';
             toggleBtn.title = 'Expand';
-            headerDiv.appendChild(toggleBtn);
+            rightGroup.appendChild(toggleBtn);
+            headerDiv.appendChild(rightGroup);
 
             toggleBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
