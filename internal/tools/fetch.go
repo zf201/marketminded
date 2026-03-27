@@ -65,14 +65,22 @@ func ExecuteFetch(ctx context.Context, argsJSON string) (string, error) {
 	// Remove non-content elements
 	doc.Find("head, script, style, noscript, iframe, nav, footer, header, svg, form, button").Remove()
 
-	// Strip all attributes except href and id
+	// Strip all attributes except href
 	doc.Find("*").Each(func(i int, s *goquery.Selection) {
-		for _, attr := range s.Get(0).Attr {
-			if attr.Key != "href" && attr.Key != "id" {
-				s.RemoveAttr(attr.Key)
+		node := s.Get(0)
+		var toRemove []string
+		for _, attr := range node.Attr {
+			if attr.Key != "href" {
+				toRemove = append(toRemove, attr.Key)
 			}
 		}
+		for _, key := range toRemove {
+			s.RemoveAttr(key)
+		}
 	})
+
+	// Remove images — they're just noise for text extraction
+	doc.Find("img, picture, figure, video, audio, canvas").Remove()
 
 	// Get cleaned HTML with links preserved
 	bodyHTML, err := doc.Find("body").Html()
