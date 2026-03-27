@@ -862,6 +862,55 @@ When done, call submit_factcheck with your findings and the enriched brief.`, ti
 	sendDone()
 }
 
+// --- Source collection helper ---
+
+type pipelineSource struct {
+	URL, Title, Summary, Date string
+}
+
+func collectSources(steps []store.PipelineStep) []pipelineSource {
+	seen := map[string]bool{}
+	var sources []pipelineSource
+	for _, s := range steps {
+		if s.Output == "" {
+			continue
+		}
+		var parsed struct {
+			Sources []struct {
+				URL     string `json:"url"`
+				Title   string `json:"title"`
+				Summary string `json:"summary"`
+				Date    string `json:"date"`
+			} `json:"sources"`
+		}
+		if json.Unmarshal([]byte(s.Output), &parsed) == nil {
+			for _, src := range parsed.Sources {
+				if src.URL != "" && !seen[src.URL] {
+					seen[src.URL] = true
+					sources = append(sources, pipelineSource{src.URL, src.Title, src.Summary, src.Date})
+				}
+			}
+		}
+	}
+	return sources
+}
+
+func formatSourcesText(sources []pipelineSource) string {
+	if len(sources) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n## Sources (from research, brand analysis, and fact-checking)\n")
+	for _, s := range sources {
+		line := fmt.Sprintf("- [%s](%s): %s", s.Title, s.URL, s.Summary)
+		if s.Date != "" {
+			line += fmt.Sprintf(" (%s)", s.Date)
+		}
+		b.WriteString(line + "\n")
+	}
+	return b.String()
+}
+
 // --- Writer agent ---
 
 func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, factcheckOutput string) {
@@ -883,46 +932,9 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 	}
 	_ = json.Unmarshal([]byte(factcheckOutput), &factcheck)
 
-	// Collect sources from ALL pipeline steps (researcher, brand enricher, fact-checker)
-	type source struct {
-		URL, Title, Summary, Date string
-	}
-	seen := map[string]bool{}
-	var allSources []source
 	steps, _ := h.queries.ListPipelineSteps(run.ID)
-	for _, s := range steps {
-		if s.Output == "" {
-			continue
-		}
-		var parsed struct {
-			Sources []struct {
-				URL     string `json:"url"`
-				Title   string `json:"title"`
-				Summary string `json:"summary"`
-				Date    string `json:"date"`
-			} `json:"sources"`
-		}
-		if json.Unmarshal([]byte(s.Output), &parsed) == nil {
-			for _, src := range parsed.Sources {
-				if src.URL != "" && !seen[src.URL] {
-					seen[src.URL] = true
-					allSources = append(allSources, source{src.URL, src.Title, src.Summary, src.Date})
-				}
-			}
-		}
-	}
-
-	var sourcesText strings.Builder
-	if len(allSources) > 0 {
-		sourcesText.WriteString("\n## Sources (from research, brand analysis, and fact-checking)\n")
-		for _, s := range allSources {
-			line := fmt.Sprintf("- [%s](%s): %s", s.Title, s.URL, s.Summary)
-			if s.Date != "" {
-				line += fmt.Sprintf(" (%s)", s.Date)
-			}
-			sourcesText.WriteString(line + "\n")
-		}
-	}
+	allSources := collectSources(steps)
+	sourcesText := formatSourcesText(allSources)
 
 	// Defaults for cornerstone
 	platform := "blog"
@@ -955,7 +967,7 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 		brief = run.Brief
 	}
 	systemPrompt += fmt.Sprintf("\n## Topic brief\n%s\n", brief)
-	systemPrompt += sourcesText.String()
+	systemPrompt += sourcesText
 
 	// Check for rejected cornerstone piece — include rejection reason for re-runs
 	pieces, _ := h.queries.ListContentByPipelineRun(run.ID)
