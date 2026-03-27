@@ -142,3 +142,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .thinking-details { margin-bottom: 1rem; }
 .thinking-details summary { cursor: pointer; font-style: italic; color: #6b7280; }
 .thinking-details pre { white-space: pre-wrap; font-size: 0.8rem; color: #9ca3af; max-height: 300px; overflow-y: auto; }
+
+/* Step tool pills */
+.step-tool-pills { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.tool-pill { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-size: 0.7rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-pill-search { background: #f3f4f6; color: #374151; }
+.tool-pill-fetch { background: #eff6ff; color: #1d4ed8; cursor: pointer; text-decoration: none; }
+.tool-pill-fetch:hover { background: #dbeafe; }
+
+/* Step thinking ticker */
+.step-thinking-ticker { font-size: 0.75rem; color: #9ca3af; background: #f9fafb; border-radius: 4px; padding: 0.35rem 0.5rem; max-height: 3.6em; overflow: hidden; line-height: 1.2em; font-family: monospace; white-space: pre-wrap; word-break: break-word; }
+.step-thinking-ticker:empty { display: none; }
+.step-thinking-ticker.done { display: none; }

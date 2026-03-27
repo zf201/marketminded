@@ -1209,73 +1209,91 @@ function initCornerstonePipeline(projectID, runID) {
         badge.className = 'badge ' + (cls || '');
     }
 
+    function addToolPill(card, type, value) {
+        var pillsEl = card.querySelector('.step-tool-pills');
+        if (!pillsEl) return;
+        if (type === 'search') {
+            var pill = document.createElement('span');
+            pill.className = 'tool-pill tool-pill-search';
+            pill.textContent = value.length > 30 ? value.substring(0, 30) + '...' : value;
+            pill.title = value;
+            pillsEl.appendChild(pill);
+        } else if (type === 'fetch') {
+            var a = document.createElement('a');
+            a.className = 'tool-pill tool-pill-fetch';
+            a.href = value;
+            a.target = '_blank';
+            try { a.textContent = new URL(value).hostname; } catch(e) { a.textContent = value.substring(0, 25); }
+            a.title = value;
+            pillsEl.appendChild(a);
+        }
+    }
+
     function streamStep(stepID, card, onDone, onError) {
+        var streamEl = card.querySelector('.step-stream');
         var outputEl = card.querySelector('.step-output');
-        var thinkingEl = card.querySelector('.step-thinking');
+        var tickerEl = card.querySelector('.step-thinking-ticker');
 
-        console.log('[pipeline] streamStep', stepID, 'outputEl:', !!outputEl, 'thinkingEl:', !!thinkingEl);
+        if (streamEl) streamEl.textContent = '';
         if (outputEl) outputEl.textContent = '';
-        if (thinkingEl) thinkingEl.textContent = '';
-
-        var thinkingDetails = null;
-        var thinkingPre = null;
-        var contentStarted = false;
+        if (tickerEl) tickerEl.textContent = '';
 
         var url = basePath + '/stream/step/' + stepID;
-        console.log('[pipeline] Opening SSE:', url);
         var source = new EventSource(url);
 
         source.onmessage = function(event) {
             var d = JSON.parse(event.data);
 
             if (d.type === 'thinking') {
-                if (thinkingEl) {
-                    if (!thinkingDetails) {
-                        thinkingDetails = document.createElement('details');
-                        thinkingDetails.className = 'thinking-details';
-                        thinkingDetails.setAttribute('open', '');
-                        var summary = document.createElement('summary');
-                        summary.textContent = 'Thinking...';
-                        thinkingDetails.appendChild(summary);
-                        thinkingPre = document.createElement('pre');
-                        thinkingDetails.appendChild(thinkingPre);
-                        thinkingEl.appendChild(thinkingDetails);
-                    }
-                    thinkingPre.textContent += d.chunk;
-                    thinkingPre.scrollTop = thinkingPre.scrollHeight;
+                // Thinking ticker — show last ~3 lines, auto-scrolls
+                if (tickerEl) {
+                    tickerEl.textContent += d.chunk;
+                    tickerEl.scrollTop = tickerEl.scrollHeight;
                 }
             } else if (d.type === 'chunk') {
-                if (!contentStarted && thinkingDetails) {
-                    thinkingDetails.removeAttribute('open');
-                    thinkingDetails.querySelector('summary').textContent = 'Thinking (done)';
-                    contentStarted = true;
+                // Streamed output — visible while running
+                if (tickerEl && tickerEl.textContent) {
+                    tickerEl.classList.add('done');
                 }
-                if (outputEl) {
-                    outputEl.textContent += d.chunk;
-                    outputEl.scrollTop = outputEl.scrollHeight;
+                if (streamEl) {
+                    streamEl.textContent += d.chunk;
+                    streamEl.scrollTop = streamEl.scrollHeight;
                 }
             } else if (d.type === 'tool_start') {
-                if (!contentStarted && thinkingDetails) {
-                    thinkingDetails.removeAttribute('open');
-                    thinkingDetails.querySelector('summary').textContent = 'Thinking (done)';
-                    contentStarted = true;
+                if (tickerEl && tickerEl.textContent) {
+                    tickerEl.classList.add('done');
                 }
-                if (outputEl) outputEl.textContent += '\n[' + d.summary + '...]\n';
+                if (d.tool === 'web_search' && d.query) {
+                    addToolPill(card, 'search', d.query);
+                } else if (d.tool === 'fetch_url' && d.url) {
+                    addToolPill(card, 'fetch', d.url);
+                }
             } else if (d.type === 'content_written') {
-                if (!contentStarted && thinkingDetails) {
-                    thinkingDetails.removeAttribute('open');
-                    thinkingDetails.querySelector('summary').textContent = 'Thinking (done)';
-                    contentStarted = true;
-                }
                 if (outputEl) renderContentBody(outputEl, d.platform, d.format, JSON.stringify(d.data));
             } else if (d.type === 'done') {
                 source.close();
+                if (tickerEl) tickerEl.classList.add('done');
+                // Collapse stream, wrap in details
+                if (streamEl && streamEl.textContent.trim()) {
+                    var details = document.createElement('details');
+                    details.className = 'step-output-details';
+                    details.style.marginTop = '0.5rem';
+                    var summary = document.createElement('summary');
+                    summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555';
+                    summary.textContent = 'View streamed output';
+                    details.appendChild(summary);
+                    var clone = streamEl.cloneNode(true);
+                    details.appendChild(clone);
+                    streamEl.parentNode.replaceChild(details, streamEl);
+                }
                 setBadge(card, 'completed', 'badge-success');
                 card.dataset.status = 'completed';
+                // Reload to get rendered JSON output
                 if (onDone) onDone();
             } else if (d.type === 'error') {
                 source.close();
-                if (outputEl) outputEl.textContent += '\nError: ' + d.error;
+                if (tickerEl) tickerEl.classList.add('done');
+                if (streamEl) streamEl.textContent += '\nError: ' + d.error;
                 setBadge(card, 'failed', 'badge-error');
                 card.dataset.status = 'failed';
                 if (onError) onError(d.error);
@@ -1396,6 +1414,18 @@ function initCornerstonePipeline(projectID, runID) {
         if (text && el.dataset.platform) {
             renderContentBody(el, el.dataset.platform, el.dataset.format, text);
         }
+    });
+
+    // Render tool pills from data attribute on page load
+    document.querySelectorAll('.step-card[data-tool-calls]').forEach(function(card) {
+        var raw = card.dataset.toolCalls;
+        if (!raw) return;
+        try {
+            var calls = JSON.parse(raw);
+            calls.forEach(function(tc) {
+                addToolPill(card, tc.type, tc.value);
+            });
+        } catch(e) {}
     });
 
     // Render step outputs nicely

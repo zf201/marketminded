@@ -174,11 +174,12 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 	stepViews := make([]templates.PipelineStepView, len(steps))
 	for i, s := range steps {
 		stepViews[i] = templates.PipelineStepView{
-			ID:       s.ID,
-			StepType: s.StepType,
-			Status:   s.Status,
-			Output:   s.Output,
-			Thinking: s.Thinking,
+			ID:        s.ID,
+			StepType:  s.StepType,
+			Status:    s.Status,
+			Output:    s.Output,
+			Thinking:  s.Thinking,
+			ToolCalls: s.ToolCalls,
 		}
 	}
 
@@ -538,7 +539,15 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID in
 					*toolCalls = append(*toolCalls, toolCallRecord{Type: "search", Value: args.Query})
 				}
 			}
-			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
+			evt := map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary}
+			if event.Tool == "fetch_url" {
+				var a struct{ URL string `json:"url"` }
+				if json.Unmarshal([]byte(event.Args), &a) == nil { evt["url"] = a.URL }
+			} else if event.Tool == "web_search" {
+				var a struct{ Query string `json:"query"` }
+				if json.Unmarshal([]byte(event.Args), &a) == nil { evt["query"] = a.Query }
+			}
+			sendEvent(evt)
 		case "tool_result":
 			if content.IsWriteTool(event.Tool) && pieceID > 0 {
 				piece, err := h.queries.GetContentPiece(pieceID)

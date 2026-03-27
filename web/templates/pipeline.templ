@@ -16,11 +16,12 @@ type PipelineRunView struct {
 }
 
 type PipelineStepView struct {
-	ID       int64
-	StepType string
-	Status   string
-	Output   string
-	Thinking string
+	ID        int64
+	StepType  string
+	Status    string
+	Output    string
+	Thinking  string
+	ToolCalls string
 }
 
 templ PipelineListPage(data PipelineListData) {
@@ -149,19 +150,28 @@ templ ProductionBoardPage(data ProductionBoardData) {
 							class="step-card board-card"
 							data-step-id={ fmt.Sprintf("%d", step.ID) }
 							data-status={ step.Status }
+							data-tool-calls={ step.ToolCalls }
 						>
 							<div class="board-card-header">
 								<strong>@stepTypeLabel(step.StepType)</strong>
 								<span class={ "badge badge-" + step.Status }>{ step.Status }</span>
 							</div>
-							<div class="step-thinking" style="margin-top:0.25rem"></div>
+							<div class="step-tool-pills" style="margin-top:0.5rem"></div>
+							<div class="step-thinking-ticker" style="margin-top:0.25rem"></div>
 							if step.Status == "completed" && step.Output != "" {
-								<details style="margin-top:0.5rem">
-									<summary style="cursor:pointer;font-size:0.85rem;color:#555">View output</summary>
-									<div class="step-output" style="white-space:pre-wrap;font-size:0.8rem;margin-top:0.5rem;max-height:300px;overflow-y:auto;padding:0.5rem;background:#f9fafb;border-radius:4px">{ step.Output }</div>
+								<details class="step-output-details" style="margin-top:0.5rem">
+									<summary style="cursor:pointer;font-size:0.85rem;color:#555">View streamed output</summary>
+									<div class="step-stream" style="white-space:pre-wrap;font-size:0.8rem;margin-top:0.5rem;max-height:300px;overflow-y:auto;padding:0.5rem;background:#fff;border:1px solid #e5e7eb;border-radius:4px"></div>
+								</details>
+								<div class="step-output" style="margin-top:0.5rem">{ step.Output }</div>
+							} else if step.Status == "failed" && step.Output != "" {
+								<details class="step-output-details" style="margin-top:0.5rem">
+									<summary style="cursor:pointer;font-size:0.85rem;color:#dc2626">View failed output</summary>
+									<div class="step-stream" style="white-space:pre-wrap;font-size:0.8rem;margin-top:0.5rem;max-height:300px;overflow-y:auto;padding:0.5rem;background:#fef2f2;border:1px solid #fecaca;border-radius:4px">{ step.Output }</div>
 								</details>
 							} else {
-								<div class="step-output" style="white-space:pre-wrap;font-size:0.85rem;margin-top:0.5rem;max-height:300px;overflow-y:auto"></div>
+								<div class="step-stream" style="white-space:pre-wrap;font-size:0.85rem;margin-top:0.5rem;max-height:300px;overflow-y:auto"></div>
+								<div class="step-output" style="margin-top:0.5rem"></div>
 							}
 						</div>
 					}
