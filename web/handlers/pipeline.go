@@ -727,15 +727,23 @@ When you have gathered enough material, call submit_research with your sources a
 
 	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
+	var chunkBuf strings.Builder
+	captureChunk := func(chunk string) error {
+		chunkBuf.WriteString(chunk)
+		return sendChunk(chunk)
+	}
+
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, capturingSendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp)
 	if err != nil {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
 	}
 
 	if savedOutput == "" {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Researcher did not submit findings via tool call. Try again.")
 		return
@@ -845,15 +853,23 @@ When done, call submit_factcheck with your findings and the enriched brief.`, ti
 
 	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
+	var chunkBuf strings.Builder
+	captureChunk := func(chunk string) error {
+		chunkBuf.WriteString(chunk)
+		return sendChunk(chunk)
+	}
+
 	temp := 0.2
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp)
 	if err != nil {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
 	}
 
 	if savedOutput == "" {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Fact-checker did not submit results via tool call. Try again.")
 		return
@@ -1055,15 +1071,23 @@ Do NOT write the article. Produce only the structural outline via the tool.
 
 	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
 
+	var chunkBuf strings.Builder
+	captureChunk := func(chunk string) error {
+		chunkBuf.WriteString(chunk)
+		return sendChunk(chunk)
+	}
+
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, capturingSendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp)
 	if err != nil {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
 	}
 
 	if savedOutput == "" {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Editor did not submit outline via tool call. Try again.")
 		return
@@ -1448,15 +1472,23 @@ You are a brand enricher. You receive market research about a topic and company 
 		return sendThinking(chunk)
 	}
 
+	var chunkBuf strings.Builder
+	captureChunk := func(chunk string) error {
+		chunkBuf.WriteString(chunk)
+		return sendChunk(chunk)
+	}
+
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, captureThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp)
 	if err != nil {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
 	}
 
 	if savedOutput == "" {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Brand enricher did not submit results via tool call. Try again.")
 		return
@@ -1594,15 +1626,23 @@ You MUST call submit_tone_analysis with your findings.`, time.Now().Format("Janu
 		return sendThinking(chunk)
 	}
 
+	var chunkBuf strings.Builder
+	captureChunk := func(chunk string) error {
+		chunkBuf.WriteString(chunk)
+		return sendChunk(chunk)
+	}
+
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, captureThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp)
 	if err != nil {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
 	}
 
 	if savedOutput == "" {
+		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Tone analyzer did not submit results via tool call. Try again.")
 		return
