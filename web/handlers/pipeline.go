@@ -271,7 +271,8 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	toolList, executor := h.buildTools(pieceID)
-	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
+	var tc []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID, &tc)
 
 	// Add the content type's write tool
 	ct, ctOk := content.LookupType(piece.Platform, piece.Format)
@@ -408,7 +409,8 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
-	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID)
+	var tc2 []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID, &tc2)
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
@@ -507,25 +509,38 @@ func (h *PipelineHandler) buildTools(pieceID int64) ([]ai.Tool, ai.ToolExecutor)
 	return toolList, executor
 }
 
-func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID int64) ai.ToolEventFn {
+type toolCallRecord struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID int64, toolCalls *[]toolCallRecord) ai.ToolEventFn {
 	return func(event ai.ToolEvent) {
 		switch event.Type {
 		case "tool_start":
 			if content.IsWriteTool(event.Tool) || event.Tool == "submit_production_plan" {
-				// Don't show a tool indicator for write/plan tools
 				return
 			}
 			summary := ""
 			switch event.Tool {
 			case "fetch_url":
 				summary = tools.FetchSummary(event.Args)
+				// Extract URL for pill display
+				var args struct{ URL string `json:"url"` }
+				if json.Unmarshal([]byte(event.Args), &args) == nil && args.URL != "" {
+					*toolCalls = append(*toolCalls, toolCallRecord{Type: "fetch", Value: args.URL})
+				}
 			case "web_search":
 				summary = tools.SearchSummary(event.Args)
+				// Extract query for pill display
+				var args struct{ Query string `json:"query"` }
+				if json.Unmarshal([]byte(event.Args), &args) == nil && args.Query != "" {
+					*toolCalls = append(*toolCalls, toolCallRecord{Type: "search", Value: args.Query})
+				}
 			}
 			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
 		case "tool_result":
 			if content.IsWriteTool(event.Tool) && pieceID > 0 {
-				// Send content_written event so the frontend can render immediately
 				piece, err := h.queries.GetContentPiece(pieceID)
 				if err == nil {
 					sendEvent(map[string]any{
@@ -535,7 +550,6 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID in
 						"data":     json.RawMessage(piece.Body),
 					})
 				}
-				// Send done immediately — don't let AI continue after writing
 				sendEvent(map[string]string{"type": "done"})
 				return
 			}
@@ -546,6 +560,14 @@ func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID in
 			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
 		}
 	}
+}
+
+func toolCallsJSON(calls []toolCallRecord) string {
+	if len(calls) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(calls)
+	return string(data)
 }
 
 func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -725,7 +747,8 @@ When you have gathered enough material, call submit_research with your sources a
 		return origSendThinking(chunk)
 	}
 
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
+	var toolCallsList []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
 
 	var chunkBuf strings.Builder
 	captureChunk := func(chunk string) error {
@@ -737,6 +760,7 @@ When you have gathered enough material, call submit_research with your sources a
 	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp, 25)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
@@ -744,11 +768,13 @@ When you have gathered enough material, call submit_research with your sources a
 
 	if savedOutput == "" {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Researcher did not submit findings via tool call. Try again.")
 		return
 	}
 
+	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 	h.queries.UpdatePipelineStepStatus(stepID, "completed")
 	sendDone()
 }
@@ -853,7 +879,8 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 		return baseExecutor(ctx, name, args)
 	}
 
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
+	var toolCallsList []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
 
 	var chunkBuf strings.Builder
 	captureChunk := func(chunk string) error {
@@ -865,6 +892,7 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp, 20)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
@@ -872,11 +900,13 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 
 	if savedOutput == "" {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Fact-checker did not submit results via tool call. Try again.")
 		return
 	}
 
+	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 	h.queries.UpdatePipelineStepStatus(stepID, "completed")
 	sendDone()
 }
@@ -1071,7 +1101,8 @@ Do NOT write the article. Produce only the structural outline via the tool.
 		return origSendThinking(chunk)
 	}
 
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
+	var toolCallsList []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
 
 	var chunkBuf strings.Builder
 	captureChunk := func(chunk string) error {
@@ -1083,6 +1114,7 @@ Do NOT write the article. Produce only the structural outline via the tool.
 	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp, 5)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
@@ -1090,11 +1122,13 @@ Do NOT write the article. Produce only the structural outline via the tool.
 
 	if savedOutput == "" {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Editor did not submit outline via tool call. Try again.")
 		return
 	}
 
+	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 	h.queries.UpdatePipelineStepStatus(stepID, "completed")
 	sendDone()
 }
@@ -1469,7 +1503,8 @@ You are a brand enricher. You receive market research about a specific topic and
 		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
+	var toolCallsList []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
 
 	captureThinking := func(chunk string) error {
 		thinkingBuf.WriteString(chunk)
@@ -1486,6 +1521,7 @@ You are a brand enricher. You receive market research about a specific topic and
 	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp, 12)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
@@ -1493,10 +1529,12 @@ You are a brand enricher. You receive market research about a specific topic and
 
 	if savedOutput == "" {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Brand enricher did not submit results via tool call. Try again.")
 		return
 	}
+	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 	sendDone()
 }
 
@@ -1623,7 +1661,8 @@ You MUST call submit_tone_analysis with your findings.`, time.Now().Format("Janu
 		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
+	var toolCallsList []toolCallRecord
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
 
 	captureThinking := func(chunk string) error {
 		thinkingBuf.WriteString(chunk)
@@ -1640,6 +1679,7 @@ You MUST call submit_tone_analysis with your findings.`, time.Now().Format("Janu
 	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp, 10)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError(err.Error())
 		return
@@ -1647,10 +1687,12 @@ You MUST call submit_tone_analysis with your findings.`, time.Now().Format("Janu
 
 	if savedOutput == "" {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
+		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
 		sendError("Tone analyzer did not submit results via tool call. Try again.")
 		return
 	}
+	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
 	sendDone()
 }
 
