@@ -1444,20 +1444,27 @@ function initCornerstonePipeline(projectID, runID) {
         // Collapse completed steps except the last one when all are done
         if (allCompleted && card.dataset.status === 'completed' && idx < stepCards.length - 1) {
             var output = card.querySelector('.step-output');
-            var stream = card.querySelector('.step-stream');
+            var pills = card.querySelector('.step-tool-pills');
             if (output) output.style.display = 'none';
-            if (stream) stream.style.display = 'none';
-            // Make header clickable to toggle
-            var header = card.querySelector('.board-card-header');
-            if (header) {
-                header.style.cursor = 'pointer';
-                header.addEventListener('click', function() {
-                    var o = card.querySelector('.step-output');
-                    var s = card.querySelector('.step-stream');
-                    if (o) o.style.display = o.style.display === 'none' ? '' : 'none';
-                    if (s) s.style.display = s.style.display === 'none' ? '' : 'none';
-                });
+            // Add expand indicator to badge
+            var badge = card.querySelector('.badge');
+            if (badge) {
+                badge.textContent = 'completed \u25B6';
+                badge.style.cursor = 'pointer';
             }
+            card.dataset.collapsed = 'true';
+            // Make entire card clickable to toggle
+            card.style.cursor = 'pointer';
+            card.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') return; // Don't intercept link clicks
+                var o = card.querySelector('.step-output');
+                var p = card.querySelector('.step-tool-pills');
+                var isCollapsed = card.dataset.collapsed === 'true';
+                if (o) o.style.display = isCollapsed ? '' : 'none';
+                card.dataset.collapsed = isCollapsed ? 'false' : 'true';
+                var b = card.querySelector('.badge');
+                if (b) b.textContent = isCollapsed ? 'completed \u25BC' : 'completed \u25B6';
+            });
         }
     });
 
