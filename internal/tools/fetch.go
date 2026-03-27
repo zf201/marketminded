@@ -62,16 +62,25 @@ func ExecuteFetch(ctx context.Context, argsJSON string) (string, error) {
 	// Extract title
 	title := strings.TrimSpace(doc.Find("title").First().Text())
 
-	// Remove head, scripts, styles, nav, footer — keep main content and links
-	doc.Find("head, script, style, noscript, iframe, nav, footer, header").Remove()
+	// Remove non-content elements
+	doc.Find("head, script, style, noscript, iframe, nav, footer, header, svg, form, button").Remove()
 
-	// Get HTML content of body with links preserved
+	// Strip all attributes except href and id
+	doc.Find("*").Each(func(i int, s *goquery.Selection) {
+		for _, attr := range s.Get(0).Attr {
+			if attr.Key != "href" && attr.Key != "id" {
+				s.RemoveAttr(attr.Key)
+			}
+		}
+	})
+
+	// Get cleaned HTML with links preserved
 	bodyHTML, err := doc.Find("body").Html()
 	if err != nil {
 		bodyHTML = doc.Find("body").Text()
 	}
 
-	// Clean up excessive whitespace but preserve structure
+	// Clean up excessive whitespace
 	lines := strings.Split(bodyHTML, "\n")
 	var cleaned []string
 	for _, line := range lines {
@@ -80,14 +89,14 @@ func ExecuteFetch(ctx context.Context, argsJSON string) (string, error) {
 			cleaned = append(cleaned, line)
 		}
 	}
-	html := strings.Join(cleaned, "\n")
+	content := strings.Join(cleaned, "\n")
 
-	// Truncate
-	if len(html) > 8000 {
-		html = html[:8000] + "..."
+	// Truncate — cleaned HTML is much smaller, allow more content
+	if len(content) > 12000 {
+		content = content[:12000] + "\n[truncated]"
 	}
 
-	return fmt.Sprintf("Title: %s\n\n%s", title, html), nil
+	return fmt.Sprintf("Title: %s\n\n%s", title, content), nil
 }
 
 // FetchSummary returns a human-readable summary for the frontend indicator
