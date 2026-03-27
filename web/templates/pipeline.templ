@@ -121,12 +121,6 @@ templ ProductionBoardPage(data ProductionBoardData) {
 				<div>
 					<h1>{ data.Topic }</h1>
 					<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
-					if data.Brief != "" {
-						<details style="margin-top:0.5rem">
-							<summary class="text-muted" style="cursor:pointer;font-size:0.8rem">View brief</summary>
-							<div style="white-space:pre-wrap;font-size:0.8rem;color:#666;margin-top:0.5rem;max-height:200px;overflow-y:auto;padding:0.5rem;background:#f9fafb;border-radius:4px">{ data.Brief }</div>
-						</details>
-					}
 				</div>
 				<div>
 					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary">Back</a>
@@ -145,6 +139,14 @@ templ ProductionBoardPage(data ProductionBoardData) {
 
 			if len(data.Steps) > 0 {
 				<div class="mb-4">
+					if data.Brief != "" {
+						<div class="board-card topic-card" data-collapsed="true">
+							<div class="board-card-header" style="margin-bottom:0">
+								<strong>Topic</strong>
+							</div>
+							<div class="topic-brief" style="display:none;white-space:pre-wrap;font-size:0.85rem;color:#555;margin-top:0.5rem">{ data.Brief }</div>
+						</div>
+					}
 					for _, step := range data.Steps {
 						<div
 							class="step-card board-card"

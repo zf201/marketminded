@@ -1408,6 +1408,29 @@ function initCornerstonePipeline(projectID, runID) {
         }
     });
 
+    // Topic card expand/collapse
+    var topicCard = document.querySelector('.topic-card');
+    if (topicCard) {
+        var topicHeader = topicCard.querySelector('.board-card-header');
+        var topicBrief = topicCard.querySelector('.topic-brief');
+        var rightGroup = document.createElement('div');
+        rightGroup.style.cssText = 'display:flex;align-items:center;gap:0.3rem';
+        var toggleBtn = document.createElement('button');
+        toggleBtn.className = 'step-toggle-btn';
+        toggleBtn.textContent = '+';
+        toggleBtn.title = 'Expand';
+        rightGroup.appendChild(toggleBtn);
+        topicHeader.appendChild(rightGroup);
+        toggleBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var isCollapsed = topicCard.dataset.collapsed === 'true';
+            if (topicBrief) topicBrief.style.display = isCollapsed ? '' : 'none';
+            topicCard.dataset.collapsed = isCollapsed ? 'false' : 'true';
+            toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
+            topicHeader.style.marginBottom = isCollapsed ? '' : '0';
+        });
+    }
+
     // Render tool pills from data attribute on page load
     document.querySelectorAll('.step-card[data-tool-calls]').forEach(function(card) {
         var raw = card.dataset.toolCalls;
