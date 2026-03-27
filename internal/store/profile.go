@@ -53,12 +53,19 @@ func (q *Queries) ListProfileSections(projectID int64) ([]ProfileSection, error)
 	return sections, rows.Err()
 }
 
+func (q *Queries) prependMemory(projectID int64, b *strings.Builder) {
+	if mem, err := q.GetProjectSetting(projectID, "memory"); err == nil && mem != "" {
+		fmt.Fprintf(b, "## Important rules and facts\n%s\n\n", mem)
+	}
+}
+
 func (q *Queries) BuildProfileString(projectID int64) (string, error) {
 	sections, err := q.ListProfileSections(projectID)
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
+	q.prependMemory(projectID, &b)
 	for _, s := range sections {
 		if s.Content == "" {
 			continue
@@ -78,6 +85,7 @@ func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string)
 		excludeMap[e] = true
 	}
 	var b strings.Builder
+	q.prependMemory(projectID, &b)
 	for _, s := range sections {
 		if s.Content == "" || excludeMap[s.Section] {
 			continue
