@@ -111,7 +111,13 @@ func (c *Client) StreamWithTools(
 	onChunk types.StreamFunc,
 	onReasoning types.StreamFunc,
 	temperature *float64,
+	maxIterations ...int,
 ) (string, error) {
+	limit := 20
+	if len(maxIterations) > 0 && maxIterations[0] > 0 {
+		limit = maxIterations[0]
+	}
+
 	// Convert types.Message to ChatMessage
 	chatMsgs := make([]ChatMessage, len(messages))
 	for i, m := range messages {
@@ -120,7 +126,7 @@ func (c *Client) StreamWithTools(
 
 	var fullText strings.Builder
 
-	for iteration := 0; iteration < 20; iteration++ {
+	for iteration := 0; iteration < limit; iteration++ {
 		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature)
 		if err != nil {
 			return fullText.String(), err

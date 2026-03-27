@@ -734,7 +734,7 @@ When you have gathered enough material, call submit_research with your sources a
 	}
 
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp, 25)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
@@ -860,7 +860,7 @@ When done, call submit_factcheck with your findings and the enriched brief.`, ti
 	}
 
 	temp := 0.2
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp, 15)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
@@ -1078,7 +1078,7 @@ Do NOT write the article. Produce only the structural outline via the tool.
 	}
 
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp, 5)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
@@ -1330,27 +1330,26 @@ func (h *PipelineHandler) brandEnricherTool() ai.Tool {
 		Type: "function",
 		Function: ai.ToolFunction{
 			Name:        "submit_brand_enrichment",
-			Description: "Submit the research brief enriched with brand-specific context from the company URLs.",
+			Description: "Submit the enriched research brief. You MUST call this tool to deliver your results.",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"enriched_brief": {"type": "string", "description": "The research brief enriched with relevant brand context, products, pricing, and messaging"},
-					"brand_context": {"type": "string", "description": "Summary of relevant brand information found on the company pages"},
+					"enriched_brief": {"type": "string", "description": "The complete research brief rewritten with brand context woven in — product names, pricing, features, messaging. Include everything the writer needs."},
 					"sources": {
 						"type": "array",
+						"description": "ALL sources: original research sources plus brand URLs you fetched",
 						"items": {
 							"type": "object",
 							"properties": {
 								"url": {"type": "string"},
 								"title": {"type": "string"},
-								"summary": {"type": "string"},
-								"date": {"type": "string"}
+								"summary": {"type": "string"}
 							},
-							"required": ["url", "title", "summary"]
+							"required": ["url", "title"]
 						}
 					}
 				},
-				"required": ["enriched_brief", "brand_context", "sources"]
+				"required": ["enriched_brief", "sources"]
 			}`),
 		},
 	}
@@ -1479,7 +1478,7 @@ You are a brand enricher. You receive market research about a topic and company 
 	}
 
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp, 12)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
@@ -1633,7 +1632,7 @@ You MUST call submit_tone_analysis with your findings.`, time.Now().Format("Janu
 	}
 
 	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp)
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp, 10)
 	if err != nil {
 		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
 		h.queries.UpdatePipelineStepStatus(stepID, "failed")
