@@ -76,7 +76,6 @@ Your writing will be flagged as AI-generated if you use these. Avoid ALL of them
 - 1,200-2,000 words for pillar content.
 - SEO-friendly H2/H3 headers that match search intent.
 - Use subheadings for scannability.
-- Meta description under 160 characters, benefit-focused.
 - Front-load keywords naturally in headline and first paragraph.
 
 ## Quality Checklist
@@ -96,4 +95,4 @@ Your writing will be flagged as AI-generated if you use these. Avoid ALL of them
 - [ ] Every paragraph earns its place?
 - [ ] Read it aloud. Does it sound like a human wrote it?
 
-Call the write_blog_post tool with title, body (markdown), meta_description, and instructions (production notes: image guidance, visual direction, internal linking suggestions) when done.
+Call the write_blog_post tool with title and body (markdown) when done.

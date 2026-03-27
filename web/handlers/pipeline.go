@@ -1075,28 +1075,12 @@ Do NOT write the article. Produce only the structural outline via the tool.
 
 // --- Writer agent ---
 
-func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, factcheckOutput string) {
+func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, editorOutput string) {
 	ok, err := h.queries.TrySetStepRunning(stepID)
 	if err != nil || !ok {
 		http.Error(w, "Step already running or completed", http.StatusConflict)
 		return
 	}
-
-	// Parse factcheck output to get enriched_brief
-	var factcheck struct {
-		EnrichedBrief string `json:"enriched_brief"`
-		Sources       []struct {
-			URL     string `json:"url"`
-			Title   string `json:"title"`
-			Summary string `json:"summary"`
-			Date    string `json:"date"`
-		} `json:"sources"`
-	}
-	_ = json.Unmarshal([]byte(factcheckOutput), &factcheck)
-
-	steps, _ := h.queries.ListPipelineSteps(run.ID)
-	allSources := collectSources(steps)
-	sourcesText := formatSourcesText(allSources)
 
 	// Defaults for cornerstone
 	platform := "blog"
@@ -1116,31 +1100,20 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 	systemPrompt := fmt.Sprintf("Today's date: %s\n\n%s\n\n## Client profile\n%s\n",
 		time.Now().Format("January 2, 2006"), promptText, profile)
 
-	// Storytelling framework
-	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
-		if fw := content.FrameworkByKey(fwKey); fw != nil {
-			systemPrompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\n", fw.Name, fw.Attribution, fw.PromptInstruction)
-		}
-	}
-
-	// Use enriched brief if available, fall back to run brief
-	brief := factcheck.EnrichedBrief
-	if brief == "" {
-		brief = run.Brief
-	}
-	systemPrompt += fmt.Sprintf("\n## Topic brief\n%s\n", brief)
-	systemPrompt += sourcesText
+	// Editorial outline is the primary input
+	systemPrompt += fmt.Sprintf("\n## Editorial outline\nFollow this outline closely. It defines the angle, structure, and key points. Your job is to write compelling prose that brings this outline to life.\n\n%s\n", editorOutput)
 
 	// Check for rejected cornerstone piece — include rejection reason for re-runs
 	pieces, _ := h.queries.ListContentByPipelineRun(run.ID)
 	for _, p := range pieces {
 		if p.ParentID == nil && p.Status == "rejected" && p.RejectionReason != "" {
-			systemPrompt += fmt.Sprintf("\nPrevious version was rejected. Feedback: %s. Address this.\n", p.RejectionReason)
+			systemPrompt += fmt.Sprintf("\n## Previous rejection feedback\n%s. Address this in the new version.\n", p.RejectionReason)
 			break
 		}
 	}
 
 	// Inject tone reference from tone_analyzer step (if it ran)
+	steps, _ := h.queries.ListPipelineSteps(run.ID)
 	for _, s := range steps {
 		if s.StepType == "tone_analyzer" && s.Status == "completed" && s.Output != "" {
 			var toneResult struct {
@@ -1151,7 +1124,7 @@ func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, pr
 				} `json:"posts"`
 			}
 			if json.Unmarshal([]byte(s.Output), &toneResult) == nil && toneResult.ToneGuide != "" {
-				systemPrompt += "\n## Tone & style reference (from company blog)\nUse this ONLY to match the writing tone, voice, and style. Do NOT use any factual information from the blog posts — all facts must come from the research brief and sources above.\n\n"
+				systemPrompt += "\n## Tone & style reference (from company blog)\nUse this ONLY to match the writing tone, voice, and style. Do NOT use any factual information from the blog posts — all facts must come from the editorial outline above.\n\n"
 				systemPrompt += toneResult.ToneGuide + "\n"
 			}
 			break
@@ -1314,12 +1287,12 @@ func (h *PipelineHandler) streamStep(w http.ResponseWriter, r *http.Request, pro
 		h.streamEditor(w, r, projectID, stepID, run, factcheckOutput)
 
 	case "write":
-		factcheckOutput, ok := findOutput("factcheck")
+		editorOutput, ok := findOutput("editor")
 		if !ok {
-			http.Error(w, "Factcheck step not completed yet", http.StatusConflict)
+			http.Error(w, "Editor step not completed yet", http.StatusConflict)
 			return
 		}
-		h.streamWrite(w, r, projectID, stepID, run, factcheckOutput)
+		h.streamWrite(w, r, projectID, stepID, run, editorOutput)
 
 	default:
 		http.Error(w, "Unknown step type: "+step.StepType, http.StatusBadRequest)

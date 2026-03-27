@@ -22,7 +22,7 @@ var Registry = map[string]ContentType{}
 
 func init() {
 	register("blog", "post", "Blog Post", "blog_post", "write_blog_post",
-		`{"type":"object","properties":{"title":{"type":"string","description":"Blog post title"},"body":{"type":"string","description":"Full blog post in markdown"},"meta_description":{"type":"string","description":"SEO meta description, under 160 chars"}},"required":["title","body","meta_description"]}`)
+		`{"type":"object","properties":{"title":{"type":"string","description":"Blog post title"},"body":{"type":"string","description":"Full blog post in markdown"}},"required":["title","body"]}`)
 
 	register("linkedin", "post", "LinkedIn Post", "linkedin_post", "write_linkedin_post",
 		`{"type":"object","properties":{"caption":{"type":"string","description":"Post caption. Hook in first line. 1200-1500 chars."},"hashtags":{"type":"string","description":"Hashtags, space-separated. 3-5 max."}},"required":["caption"]}`)
