@@ -1542,18 +1542,26 @@ function initCornerstonePipeline(projectID, runID) {
     });
 }
 
-function renderSourcesList(sources) {
-    var details = document.createElement('details');
-    details.style.marginTop = '0.5rem';
-    var summary = document.createElement('summary');
-    summary.textContent = 'Sources (' + sources.length + ')';
-    summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555;font-weight:600';
-    details.appendChild(summary);
+function makeSubcard(title, contentEl) {
+    var card = document.createElement('div');
+    card.style.cssText = 'border:1px solid #e5e7eb;border-radius:6px;padding:0.6rem 0.75rem;margin-bottom:0.5rem;background:#fff';
+    if (title) {
+        var h = document.createElement('div');
+        h.style.cssText = 'font-weight:600;font-size:0.8rem;color:#374151;margin-bottom:0.35rem';
+        h.textContent = title;
+        card.appendChild(h);
+    }
+    card.appendChild(contentEl);
+    return card;
+}
+
+function renderSourcesSubcard(sources) {
+    var wrapper = document.createElement('div');
     var list = document.createElement('ul');
-    list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin-top:0.25rem';
+    list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin:0';
     sources.forEach(function(s) {
         var li = document.createElement('li');
-        li.style.marginBottom = '0.5rem';
+        li.style.marginBottom = '0.4rem';
         var a = document.createElement('a');
         a.href = s.url;
         a.textContent = s.title || s.url;
@@ -1574,8 +1582,8 @@ function renderSourcesList(sources) {
         }
         list.appendChild(li);
     });
-    details.appendChild(list);
-    return details;
+    wrapper.appendChild(list);
+    return makeSubcard('Sources (' + sources.length + ')', wrapper);
 }
 
 function renderMarkdown(text) {
@@ -1595,24 +1603,19 @@ function renderStepOutput(el, typeName, data) {
     el.style.whiteSpace = 'normal';
 
     if (typeName === 'Researcher') {
-        if (data.brief) el.appendChild(renderMarkdown(data.brief));
-        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesList(data.sources));
+        if (data.brief) el.appendChild(makeSubcard('Research Brief', renderMarkdown(data.brief)));
+        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesSubcard(data.sources));
     } else if (typeName === 'Brand Enricher') {
-        if (data.enriched_brief) el.appendChild(renderMarkdown(data.enriched_brief));
-        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesList(data.sources));
+        if (data.enriched_brief) el.appendChild(makeSubcard('Enriched Brief', renderMarkdown(data.enriched_brief)));
+        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesSubcard(data.sources));
     } else if (typeName === 'Tone Analyzer') {
-        if (data.tone_guide) el.appendChild(renderMarkdown(data.tone_guide));
+        if (data.tone_guide) el.appendChild(makeSubcard('Tone Guide', renderMarkdown(data.tone_guide)));
         if (data.posts && data.posts.length > 0) {
-            var details = document.createElement('details');
-            details.style.marginTop = '0.5rem';
-            var summary = document.createElement('summary');
-            summary.textContent = 'Posts Analyzed (' + data.posts.length + ')';
-            summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555;font-weight:600';
-            details.appendChild(summary);
             var list = document.createElement('ul');
-            list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin-top:0.25rem';
+            list.style.cssText = 'font-size:0.8rem;padding-left:1.2rem;margin:0';
             data.posts.forEach(function(p) {
                 var li = document.createElement('li');
+                li.style.marginBottom = '0.3rem';
                 var a = document.createElement('a');
                 a.href = p.url;
                 a.textContent = p.title || p.url;
@@ -1620,63 +1623,61 @@ function renderStepOutput(el, typeName, data) {
                 li.appendChild(a);
                 list.appendChild(li);
             });
-            details.appendChild(list);
-            el.appendChild(details);
+            var wrapper = document.createElement('div');
+            wrapper.appendChild(list);
+            el.appendChild(makeSubcard('Posts Analyzed (' + data.posts.length + ')', wrapper));
         }
     } else if (typeName === 'Fact-Checker') {
+        // Issues subcard
+        var issuesContent = document.createElement('div');
         if (data.issues_found && data.issues_found.length > 0) {
             data.issues_found.forEach(function(issue) {
-                var div = document.createElement('div');
-                div.style.cssText = 'margin-bottom:0.5rem;padding:0.4rem 0.5rem;background:#fef2f2;border-radius:4px;font-size:0.8rem';
+                var row = document.createElement('div');
+                row.style.cssText = 'margin-bottom:0.4rem;font-size:0.8rem';
                 var claim = document.createElement('strong');
                 claim.textContent = issue.claim;
-                div.appendChild(claim);
+                row.appendChild(claim);
                 if (issue.problem) {
                     var prob = document.createElement('div');
                     prob.textContent = issue.problem;
                     prob.style.color = '#dc2626';
-                    div.appendChild(prob);
+                    row.appendChild(prob);
                 }
                 if (issue.resolution) {
                     var res = document.createElement('div');
                     res.textContent = issue.resolution;
                     res.style.color = '#059669';
-                    div.appendChild(res);
+                    row.appendChild(res);
                 }
-                el.appendChild(div);
+                issuesContent.appendChild(row);
             });
+            el.appendChild(makeSubcard('Issues (' + data.issues_found.length + ')', issuesContent));
         } else {
-            var ok = document.createElement('p');
+            var ok = document.createElement('div');
             ok.textContent = 'No issues found.';
             ok.style.cssText = 'color:#059669;font-weight:600;font-size:0.85rem';
-            el.appendChild(ok);
+            el.appendChild(makeSubcard('Issues', ok));
         }
-        if (data.enriched_brief) {
-            var details = document.createElement('details');
-            details.style.marginTop = '0.5rem';
-            var summary = document.createElement('summary');
-            summary.textContent = 'Enriched Brief';
-            summary.style.cssText = 'cursor:pointer;font-size:0.85rem;color:#555;font-weight:600';
-            details.appendChild(summary);
-            details.appendChild(renderMarkdown(data.enriched_brief));
-            el.appendChild(details);
-        }
-        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesList(data.sources));
+        if (data.enriched_brief) el.appendChild(makeSubcard('Enriched Brief', renderMarkdown(data.enriched_brief)));
+        if (data.sources && data.sources.length > 0) el.appendChild(renderSourcesSubcard(data.sources));
     } else if (typeName === 'Editor') {
+        // Angle subcard
         if (data.angle) {
-            var angle = document.createElement('p');
-            angle.style.cssText = 'font-weight:600;font-size:0.9rem;margin-bottom:0.5rem';
-            angle.textContent = data.angle;
-            el.appendChild(angle);
+            var angleDiv = document.createElement('div');
+            angleDiv.style.cssText = 'font-size:0.85rem';
+            angleDiv.textContent = data.angle;
+            el.appendChild(makeSubcard('Angle', angleDiv));
         }
+        // Sections subcard
         if (data.sections && data.sections.length > 0) {
+            var sectionsContent = document.createElement('div');
             data.sections.forEach(function(sec) {
-                var div = document.createElement('div');
-                div.style.cssText = 'margin-bottom:0.5rem;padding:0.4rem 0.5rem;background:#f0fdf4;border-radius:4px;font-size:0.8rem';
+                var row = document.createElement('div');
+                row.style.cssText = 'margin-bottom:0.5rem;padding:0.4rem;background:#f9fafb;border-radius:4px;font-size:0.8rem';
                 var heading = document.createElement('strong');
                 heading.textContent = sec.heading;
                 if (sec.framework_beat) heading.textContent += ' (' + sec.framework_beat + ')';
-                div.appendChild(heading);
+                row.appendChild(heading);
                 if (sec.key_points && sec.key_points.length > 0) {
                     var ul = document.createElement('ul');
                     ul.style.cssText = 'margin:0.25rem 0 0;padding-left:1rem';
@@ -1685,28 +1686,26 @@ function renderStepOutput(el, typeName, data) {
                         li.textContent = pt;
                         ul.appendChild(li);
                     });
-                    div.appendChild(ul);
+                    row.appendChild(ul);
                 }
                 if (sec.editorial_notes) {
                     var note = document.createElement('div');
                     note.textContent = sec.editorial_notes;
                     note.style.cssText = 'color:#6b7280;font-style:italic;margin-top:0.25rem';
-                    div.appendChild(note);
+                    row.appendChild(note);
                 }
-                el.appendChild(div);
+                sectionsContent.appendChild(row);
             });
+            el.appendChild(makeSubcard('Sections (' + data.sections.length + ')', sectionsContent));
         }
+        // Conclusion subcard
         if (data.conclusion_strategy) {
-            var conc = document.createElement('div');
-            conc.style.cssText = 'margin-top:0.5rem;padding:0.4rem 0.5rem;background:#eff6ff;border-radius:4px;font-size:0.8rem';
-            var label = document.createElement('strong');
-            label.textContent = 'Conclusion: ';
-            conc.appendChild(label);
-            conc.appendChild(document.createTextNode(data.conclusion_strategy));
-            el.appendChild(conc);
+            var concDiv = document.createElement('div');
+            concDiv.style.cssText = 'font-size:0.85rem';
+            concDiv.textContent = data.conclusion_strategy;
+            el.appendChild(makeSubcard('Conclusion', concDiv));
         }
     } else {
-        // Unknown — show formatted JSON
         el.textContent = JSON.stringify(data, null, 2);
         el.style.whiteSpace = 'pre-wrap';
         el.style.fontSize = '0.8rem';
