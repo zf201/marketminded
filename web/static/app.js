@@ -1264,17 +1264,11 @@ function initCornerstonePipeline(projectID, runID) {
                 }
             } else if (d.type === 'chunk') {
                 // Streamed output — visible while running
-                if (tickerEl && tickerEl.textContent) {
-                    tickerEl.classList.add('done');
-                }
                 if (streamEl) {
                     streamEl.textContent += d.chunk;
                     streamEl.scrollTop = streamEl.scrollHeight;
                 }
             } else if (d.type === 'tool_start') {
-                if (tickerEl && tickerEl.textContent) {
-                    tickerEl.classList.add('done');
-                }
                 if (d.tool === 'web_search' && d.query) {
                     addToolPill(card, 'search', d.query);
                 } else if (d.tool === 'fetch_url' && d.url) {
