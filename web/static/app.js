@@ -1279,14 +1279,14 @@ function initCornerstonePipeline(projectID, runID) {
             } else if (d.type === 'done') {
                 source.close();
                 if (tickerEl) tickerEl.classList.add('done');
-                setBadge(card, 'completed', 'badge-success');
+                setBadge(card, 'completed', 'badge-completed');
                 card.dataset.status = 'completed';
                 if (onDone) onDone();
             } else if (d.type === 'error') {
                 source.close();
                 if (tickerEl) tickerEl.classList.add('done');
                 if (streamEl) streamEl.textContent += '\nError: ' + d.error;
-                setBadge(card, 'failed', 'badge-error');
+                setBadge(card, 'failed', 'badge-failed');
                 card.dataset.status = 'failed';
                 if (onError) onError(d.error);
             }
@@ -1294,7 +1294,7 @@ function initCornerstonePipeline(projectID, runID) {
 
         source.onerror = function() {
             source.close();
-            setBadge(card, 'failed', 'badge-error');
+            setBadge(card, 'failed', 'badge-failed');
             card.dataset.status = 'failed';
             if (onError) onError('Connection lost');
         };
@@ -1444,26 +1444,25 @@ function initCornerstonePipeline(projectID, runID) {
         // Collapse completed steps except the last one when all are done
         if (allCompleted && card.dataset.status === 'completed' && idx < stepCards.length - 1) {
             var output = card.querySelector('.step-output');
-            var pills = card.querySelector('.step-tool-pills');
             if (output) output.style.display = 'none';
-            // Add expand indicator to badge
-            var badge = card.querySelector('.badge');
-            if (badge) {
-                badge.textContent = 'completed \u25B6';
-                badge.style.cursor = 'pointer';
-            }
             card.dataset.collapsed = 'true';
-            // Make entire card clickable to toggle
-            card.style.cursor = 'pointer';
-            card.addEventListener('click', function(e) {
-                if (e.target.tagName === 'A') return; // Don't intercept link clicks
+
+            // Add circle toggle button next to the badge
+            var headerDiv = card.querySelector('.board-card-header');
+            var toggleBtn = document.createElement('button');
+            toggleBtn.className = 'step-toggle-btn';
+            toggleBtn.textContent = '\u25B6';
+            toggleBtn.title = 'Expand';
+            headerDiv.appendChild(toggleBtn);
+
+            toggleBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
                 var o = card.querySelector('.step-output');
-                var p = card.querySelector('.step-tool-pills');
                 var isCollapsed = card.dataset.collapsed === 'true';
                 if (o) o.style.display = isCollapsed ? '' : 'none';
                 card.dataset.collapsed = isCollapsed ? 'false' : 'true';
-                var b = card.querySelector('.badge');
-                if (b) b.textContent = isCollapsed ? 'completed \u25BC' : 'completed \u25B6';
+                toggleBtn.classList.toggle('expanded');
+                toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
             });
         }
     });
