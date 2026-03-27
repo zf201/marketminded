@@ -1383,27 +1383,28 @@ func (h *PipelineHandler) streamBrandEnricher(w http.ResponseWriter, r *http.Req
 
 	systemPrompt := fmt.Sprintf(`Today's date: %s
 
-You are a brand enricher. You receive market research about a topic and company brand URLs. Your job is to:
+You are a brand enricher. You receive market research about a topic and company brand URLs.
 
-1. Fetch each company URL to understand the brand's products, services, pricing, and messaging
+## Workflow
+
+1. Fetch each company URL below to understand the brand's products, services, pricing, and messaging
 2. Identify which brand offerings are relevant to the research topic
 3. Enrich the research brief with specific brand context — product names, pricing, features, value propositions
-4. Make sure the enriched brief gives the content writer everything they need to naturally weave brand references into the content
+4. Call submit_brand_enrichment with the enriched brief, brand context, and complete sources list
 
-Client profile:
+## Client profile
 %s
 
-Research to enrich:
+## Research to enrich
 %s
 
-Company URLs to fetch:
+## Company URLs to fetch
 %s
 
-Fetch ALL the URLs above. For each URL, read the page content and extract what's relevant to the research topic. Then produce an enriched version of the research brief that weaves in the brand context.
-
-IMPORTANT: Your sources list MUST include ALL sources from the original research above, plus any new brand URLs you fetched. Never drop sources from the researcher — always carry them forward.
-
-You MUST call the submit_brand_enrichment tool with your findings. Do not return results as text.`,
+## Rules
+- Fetch ALL URLs above. Extract what's relevant to the research topic.
+- Your sources list MUST include ALL sources from the original research, plus the brand URLs you fetched. Never drop sources.
+- When done, call submit_brand_enrichment. This is your only way to deliver results.`,
 		time.Now().Format("January 2, 2006"), profile, researchOutput, urlList.String())
 
 	aiMsgs := []types.Message{
