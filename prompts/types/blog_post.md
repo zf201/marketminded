@@ -95,4 +95,4 @@ Your writing will be flagged as AI-generated if you use these. Avoid ALL of them
 - [ ] Every paragraph earns its place?
 - [ ] Read it aloud. Does it sound like a human wrote it?
 
-Call the write_blog_post tool with title and body (markdown) when done.
+Call the write_blog_post tool with title and body (markdown) when done. The body is ONLY the article text. Do NOT include meta descriptions, production notes, image directions, visual guidance, word counts, or any other metadata — just the article itself.
