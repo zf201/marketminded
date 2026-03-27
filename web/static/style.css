@@ -38,9 +38,8 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8
 .badge-failed { background: #fee2e2; color: #991b1b; }
 
 /* Step expand/collapse button */
-.step-toggle-btn { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; border: 1px solid #d1d5db; background: #f9fafb; cursor: pointer; font-size: 0.55rem; color: #6b7280; margin-left: 0.4rem; transition: transform 0.15s; line-height: 1; padding: 0; }
+.step-toggle-btn { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; border: 1px solid #d1d5db; background: #f9fafb; cursor: pointer; font-size: 0.75rem; color: #6b7280; margin-left: 0.4rem; line-height: 1; padding: 0; }
 .step-toggle-btn:hover { background: #e5e7eb; }
-.step-toggle-btn.expanded { transform: rotate(90deg); }
 .badge-generating { background: #fef3c7; color: #92400e; }
 .badge-rejected { background: #fee2e2; color: #991b1b; }
 .chat-messages { max-height: 500px; overflow-y: auto; margin-bottom: 1rem; }

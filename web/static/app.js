@@ -1466,10 +1466,11 @@ function initCornerstonePipeline(projectID, runID) {
             }
             var toggleBtn = document.createElement('button');
             toggleBtn.className = 'step-toggle-btn';
-            toggleBtn.textContent = '\u25B6';
+            toggleBtn.textContent = '+';
             toggleBtn.title = 'Expand';
             rightGroup.appendChild(toggleBtn);
             headerDiv.appendChild(rightGroup);
+            headerDiv.style.marginBottom = '0';
 
             toggleBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1479,8 +1480,9 @@ function initCornerstonePipeline(projectID, runID) {
                 if (o) o.style.display = isCollapsed ? '' : 'none';
                 if (p) p.style.display = isCollapsed ? '' : 'none';
                 card.dataset.collapsed = isCollapsed ? 'false' : 'true';
-                toggleBtn.classList.toggle('expanded');
+                toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
                 toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
+                headerDiv.style.marginBottom = isCollapsed ? '' : '0';
             });
         }
     });
