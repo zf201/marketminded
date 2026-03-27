@@ -122,12 +122,13 @@ func (h *PipelineHandler) create(w http.ResponseWriter, r *http.Request, project
 		return
 	}
 
-	// Create the three cornerstone agent steps
+	// Create cornerstone agent steps
 	h.queries.CreatePipelineStep(run.ID, "research", 0)
 	h.queries.CreatePipelineStep(run.ID, "brand_enricher", 1)
 	h.queries.CreatePipelineStep(run.ID, "factcheck", 2)
 	h.queries.CreatePipelineStep(run.ID, "tone_analyzer", 3)
-	h.queries.CreatePipelineStep(run.ID, "write", 4)
+	h.queries.CreatePipelineStep(run.ID, "editor", 4)
+	h.queries.CreatePipelineStep(run.ID, "write", 5)
 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, run.ID), http.StatusSeeOther)
 }
@@ -911,6 +912,167 @@ func formatSourcesText(sources []pipelineSource) string {
 	return b.String()
 }
 
+// --- Editor agent ---
+
+func (h *PipelineHandler) editorOutlineTool() ai.Tool {
+	return ai.Tool{
+		Type: "function",
+		Function: ai.ToolFunction{
+			Name:        "submit_editorial_outline",
+			Description: "Submit the structured editorial outline for the writer. Call this when you have determined the narrative structure.",
+			Parameters: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"angle": {
+						"type": "string",
+						"description": "The core narrative angle in one sentence"
+					},
+					"sections": {
+						"type": "array",
+						"description": "Ordered sections of the article",
+						"items": {
+							"type": "object",
+							"properties": {
+								"heading": {"type": "string", "description": "Suggested section heading"},
+								"framework_beat": {"type": "string", "description": "Storytelling framework beat this maps to, if any"},
+								"key_points": {
+									"type": "array",
+									"items": {"type": "string"},
+									"description": "Specific points to make, with data/stats where relevant"
+								},
+								"sources_to_use": {
+									"type": "array",
+									"items": {"type": "string"},
+									"description": "Source URLs that back the points in this section"
+								},
+								"editorial_notes": {"type": "string", "description": "Tone and approach guidance for this section"}
+							},
+							"required": ["heading", "key_points"]
+						}
+					},
+					"conclusion_strategy": {
+						"type": "string",
+						"description": "How to close: what ties back, what CTA, what feeling to leave"
+					}
+				},
+				"required": ["angle", "sections", "conclusion_strategy"]
+			}`),
+		},
+	}
+}
+
+func (h *PipelineHandler) streamEditor(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, factcheckOutput string) {
+	ok, err := h.queries.TrySetStepRunning(stepID)
+	if err != nil || !ok {
+		http.Error(w, "Step already running or completed", http.StatusConflict)
+		return
+	}
+
+	var factcheck struct {
+		EnrichedBrief string `json:"enriched_brief"`
+	}
+	_ = json.Unmarshal([]byte(factcheckOutput), &factcheck)
+
+	steps, _ := h.queries.ListPipelineSteps(run.ID)
+	allSources := collectSources(steps)
+	sourcesText := formatSourcesText(allSources)
+
+	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
+
+	brief := factcheck.EnrichedBrief
+	if brief == "" {
+		brief = run.Brief
+	}
+
+	systemPrompt := fmt.Sprintf(`Today's date: %s
+
+You are an editorial director. You receive research, sources, and brand context about a topic. Your job is to craft a structured editorial outline that a copywriter will use to write the final article.
+
+Your job is narrative reasoning:
+- Analyze the research and determine the strongest angle/hook
+- Decide what facts to include, what to cut, and how to order them for maximum impact
+- Build a logical throughline so the conclusion feels inevitable, not forced
+- Specify which sources back which points
+- Produce a tight outline the writer can execute without needing the raw research
+
+Do NOT write the article. Produce only the structural outline via the tool.
+
+## Client profile
+%s
+
+## Research brief
+%s
+%s`, time.Now().Format("January 2, 2006"), profile, brief, sourcesText)
+
+	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
+		if fw := content.FrameworkByKey(fwKey); fw != nil {
+			systemPrompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\nMap the framework beats to the article sections in your outline.\n", fw.Name, fw.Attribution, fw.PromptInstruction)
+		}
+	}
+
+	for _, s := range steps {
+		if s.StepType == "tone_analyzer" && s.Status == "completed" && s.Output != "" {
+			var toneResult struct {
+				ToneGuide string `json:"tone_guide"`
+			}
+			if json.Unmarshal([]byte(s.Output), &toneResult) == nil && toneResult.ToneGuide != "" {
+				systemPrompt += "\n## Tone & style reference\nKeep this voice in mind when choosing the angle and editorial notes.\n\n"
+				systemPrompt += toneResult.ToneGuide + "\n"
+			}
+			break
+		}
+	}
+
+	aiMsgs := []types.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: "Create the editorial outline now."},
+	}
+
+	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
+	if flusher == nil {
+		return
+	}
+
+	toolList := []ai.Tool{h.editorOutlineTool()}
+
+	var thinkingBuf strings.Builder
+	var savedOutput string
+
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		if name == "submit_editorial_outline" {
+			savedOutput = args
+			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
+			return "Editorial outline saved successfully.", ai.ErrToolDone
+		}
+		return "", fmt.Errorf("unknown tool: %s", name)
+	}
+
+	origSendThinking := sendThinking
+	capturingSendThinking := func(chunk string) error {
+		thinkingBuf.WriteString(chunk)
+		return origSendThinking(chunk)
+	}
+
+	onToolEvent := h.buildToolEventCallback(sendEvent, 0)
+
+	temp := 0.3
+	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, capturingSendThinking, &temp)
+	if err != nil {
+		h.queries.UpdatePipelineStepStatus(stepID, "failed")
+		sendError(err.Error())
+		return
+	}
+
+	if savedOutput == "" {
+		h.queries.UpdatePipelineStepStatus(stepID, "failed")
+		sendError("Editor did not submit outline via tool call. Try again.")
+		return
+	}
+
+	h.queries.UpdatePipelineStepStatus(stepID, "completed")
+	sendDone()
+}
+
 // --- Writer agent ---
 
 func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, factcheckOutput string) {
@@ -1142,6 +1304,14 @@ func (h *PipelineHandler) streamStep(w http.ResponseWriter, r *http.Request, pro
 
 	case "tone_analyzer":
 		h.streamToneAnalyzer(w, r, projectID, stepID, run)
+
+	case "editor":
+		factcheckOutput, ok := findOutput("factcheck")
+		if !ok {
+			http.Error(w, "Factcheck step not completed yet", http.StatusConflict)
+			return
+		}
+		h.streamEditor(w, r, projectID, stepID, run, factcheckOutput)
 
 	case "write":
 		factcheckOutput, ok := findOutput("factcheck")
