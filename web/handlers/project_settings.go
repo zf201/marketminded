@@ -36,7 +36,7 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 
 	fwOptions := make([]templates.FrameworkOption, len(content.Frameworks))
 	for i, fw := range content.Frameworks {
-		fwOptions[i] = templates.FrameworkOption{Key: fw.Key, Name: fw.Name}
+		fwOptions[i] = templates.FrameworkOption{Key: fw.Key, Name: fw.Name, Description: fw.ShortDescription}
 	}
 
 	templates.ProjectSettingsPage(templates.ProjectSettingsData{
