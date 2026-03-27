@@ -120,7 +120,7 @@ func (c *Client) StreamWithTools(
 
 	var fullText strings.Builder
 
-	for iteration := 0; iteration < 10; iteration++ {
+	for iteration := 0; iteration < 20; iteration++ {
 		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature)
 		if err != nil {
 			return fullText.String(), err
