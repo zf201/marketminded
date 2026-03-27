@@ -1434,11 +1434,17 @@ function initCornerstonePipeline(projectID, runID) {
         var raw = outputEl.textContent.trim();
         if (!raw) return;
         var typeName = stepType ? stepType.textContent.trim() : '';
-        try {
-            var data = JSON.parse(raw);
-            renderStepOutput(outputEl, typeName, data);
-        } catch (e) {
-            // Leave as text
+
+        // Writer output is shown in the piece card below — hide the raw JSON
+        if (typeName === 'Writer') {
+            outputEl.style.display = 'none';
+        } else {
+            try {
+                var data = JSON.parse(raw);
+                renderStepOutput(outputEl, typeName, data);
+            } catch (e) {
+                // Leave as text
+            }
         }
 
         // Collapse completed steps except the last one when all are done
