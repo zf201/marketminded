@@ -9,7 +9,10 @@ import "context"
 import "io"
 import "bytes"
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/zanfridau/marketminded/web/templates/components"
+)
 
 type BrainstormListData struct {
 	ProjectID   int64
@@ -42,7 +45,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex-between mb-4\"><h1>")
+			_, err = templBuffer.WriteString("<div class=\"flex items-center justify-between mb-4\"><h1 class=\"text-2xl font-bold\">")
 			if err != nil {
 				return err
 			}
@@ -51,7 +54,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1><div><a href=\"")
+			_, err = templBuffer.WriteString("</h1><div class=\"flex items-center gap-2\"><a href=\"")
 			if err != nil {
 				return err
 			}
@@ -60,7 +63,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-ghost btn-sm\">")
 			if err != nil {
 				return err
 			}
@@ -77,7 +80,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn\">")
+			_, err = templBuffer.WriteString("\" class=\"inline\"><button type=\"submit\" class=\"btn btn-primary btn-sm\">")
 			if err != nil {
 				return err
 			}
@@ -91,7 +94,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 				return err
 			}
 			if len(data.Chats) == 0 {
-				_, err = templBuffer.WriteString("<p class=\"text-muted\">")
+				_, err = templBuffer.WriteString("<p class=\"text-base-content/60\">")
 				if err != nil {
 					return err
 				}
@@ -119,7 +122,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\" class=\"card\" style=\"text-decoration:none;color:inherit;display:block\"><strong>")
+				_, err = templBuffer.WriteString("\" class=\"card bg-base-100 shadow-sm border border-base-300 mb-2 hover:border-primary transition-colors block no-underline text-inherit\"><div class=\"card-body py-3\"><span class=\"font-semibold\">")
 				if err != nil {
 					return err
 				}
@@ -128,12 +131,12 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</strong>")
+				_, err = templBuffer.WriteString("</span>")
 				if err != nil {
 					return err
 				}
 				if chat.Preview != "" {
-					_, err = templBuffer.WriteString("<p class=\"text-muted\" style=\"margin-top:0.25rem;font-size:0.85rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden\">")
+					_, err = templBuffer.WriteString("<p class=\"text-base-content/60 text-sm mt-1 line-clamp-2\">")
 					if err != nil {
 						return err
 					}
@@ -147,7 +150,7 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 						return err
 					}
 				}
-				_, err = templBuffer.WriteString("</a>")
+				_, err = templBuffer.WriteString("</div></a>")
 				if err != nil {
 					return err
 				}
@@ -157,7 +160,11 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 			}
 			return err
 		})
-		err = Layout(data.ProjectName+" - Chat").Render(templ.WithChildren(ctx, var_2), templBuffer)
+		err = components.PageShell(data.ProjectName+" - Chat", []components.Breadcrumb{
+			{Label: "Projects", URL: "/"},
+			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+			{Label: "Chat"},
+		}).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}
@@ -201,7 +208,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex-between mb-4\"><h1>")
+			_, err = templBuffer.WriteString("<div class=\"flex items-center justify-between mb-4\"><h1 class=\"text-2xl font-bold\">")
 			if err != nil {
 				return err
 			}
@@ -210,7 +217,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1><div><a href=\"")
+			_, err = templBuffer.WriteString("</h1><div class=\"flex items-center gap-2\"><a href=\"")
 			if err != nil {
 				return err
 			}
@@ -219,7 +226,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-ghost btn-sm\">")
 			if err != nil {
 				return err
 			}
@@ -236,7 +243,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" style=\"display:inline\"><button type=\"submit\" class=\"btn\">")
+			_, err = templBuffer.WriteString("\" class=\"inline\"><button type=\"submit\" class=\"btn btn-primary btn-sm\">")
 			if err != nil {
 				return err
 			}
@@ -263,7 +270,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\"><div class=\"chat-msg-role\">")
+				_, err = templBuffer.WriteString("\"><div class=\"chat-msg-role text-xs font-semibold uppercase text-base-content/50 mb-1\">")
 				if err != nil {
 					return err
 				}
@@ -272,12 +279,12 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</div><div style=\"white-space:pre-wrap\">")
+				_, err = templBuffer.WriteString("</div><div class=\"whitespace-pre-wrap\">")
 				if err != nil {
 					return err
 				}
 				if msg.Thinking != "" {
-					_, err = templBuffer.WriteString("<details class=\"thinking-details\"><summary>")
+					_, err = templBuffer.WriteString("<details class=\"collapse bg-base-200 rounded-lg p-2 mb-1\"><summary class=\"text-sm text-base-content/60 cursor-pointer\">")
 					if err != nil {
 						return err
 					}
@@ -286,7 +293,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</summary><pre>")
+					_, err = templBuffer.WriteString("</summary><pre class=\"text-xs mt-1 whitespace-pre-wrap\">")
 					if err != nil {
 						return err
 					}
@@ -314,7 +321,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 					return err
 				}
 			}
-			_, err = templBuffer.WriteString("</div> <form id=\"chat-form\" class=\"mt-2\"><div class=\"form-group\"><textarea id=\"chat-input\" placeholder=\"Type your message... (Cmd+Enter to send)\" style=\"min-height:80px\"></textarea></div><button type=\"submit\" id=\"chat-send\" class=\"btn\">")
+			_, err = templBuffer.WriteString("</div> <form id=\"chat-form\" class=\"mt-4\"><div class=\"form-control w-full\"><textarea id=\"chat-input\" class=\"textarea textarea-bordered w-full min-h-[80px]\" placeholder=\"Type your message... (Cmd+Enter to send)\"></textarea></div><div class=\"mt-2\"><button type=\"submit\" id=\"chat-send\" class=\"btn btn-primary\">")
 			if err != nil {
 				return err
 			}
@@ -323,7 +330,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</button></form> <script>")
+			_, err = templBuffer.WriteString("</button></div></form> <script>")
 			if err != nil {
 				return err
 			}
@@ -344,7 +351,7 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 					var outer = document.createElement('div');
 					outer.className = 'chat-msg chat-msg-' + role;
 					var roleEl = document.createElement('div');
-					roleEl.className = 'chat-msg-role';
+					roleEl.className = 'chat-msg-role text-xs font-semibold uppercase text-base-content/50 mb-1';
 					roleEl.textContent = role;
 					var bodyEl = document.createElement('div');
 					bodyEl.style.whiteSpace = 'pre-wrap';
@@ -416,12 +423,14 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 								if (!thinkingEl) {
 									if (indicator.parentNode) indicator.remove();
 									thinkingEl = document.createElement('details');
-									thinkingEl.className = 'thinking-details';
+									thinkingEl.className = 'collapse bg-base-200 rounded-lg p-2 mb-1';
 									thinkingEl.setAttribute('open', '');
 									var summary = document.createElement('summary');
 									summary.textContent = 'Thinking...';
+									summary.className = 'text-sm text-base-content/60 cursor-pointer';
 									thinkingEl.appendChild(summary);
 									thinkingPre = document.createElement('pre');
+									thinkingPre.className = 'text-xs mt-1 whitespace-pre-wrap';
 									thinkingEl.appendChild(thinkingPre);
 									bodyEl.insertBefore(thinkingEl, contentNode);
 								}
@@ -480,7 +489,12 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			}
 			return err
 		})
-		err = Layout(data.ChatTitle).Render(templ.WithChildren(ctx, var_12), templBuffer)
+		err = components.PageShell(data.ChatTitle, []components.Breadcrumb{
+			{Label: "Projects", URL: "/"},
+			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+			{Label: "Chat", URL: fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)},
+			{Label: data.ChatTitle},
+		}).Render(templ.WithChildren(ctx, var_12), templBuffer)
 		if err != nil {
 			return err
 		}
