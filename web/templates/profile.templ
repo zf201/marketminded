@@ -1,6 +1,9 @@
 package templates
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/zanfridau/marketminded/web/templates/components"
+)
 
 type ProfilePageData struct {
 	ProjectID   int64
@@ -17,53 +20,58 @@ type ProfileCardView struct {
 }
 
 templ ProfilePage(data ProfilePageData) {
-	@Layout(data.ProjectName + " - Profile") {
-		<div class="flex-between mb-4">
-			<h1>{ data.ProjectName } Profile</h1>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back to Project</a>
+	@components.PageShell(data.ProjectName+" - Profile", []components.Breadcrumb{
+		{Label: "Projects", URL: "/"},
+		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+		{Label: "Profile"},
+	}) {
+		<div class="flex items-center justify-between mb-4">
+			<h1 class="text-2xl font-bold">{ data.ProjectName } Profile</h1>
 		</div>
 
 		for _, card := range data.Cards {
 			<div class={ cardClasses(card) } id={ "card-" + card.Section }>
-				<div class="flex-between mb-1">
-					<div>
-						<strong>{ card.Title }</strong>
-						if card.Content != "" {
-							<span class="badge badge-approved" style="margin-left:0.5rem">Done</span>
-						} else if card.Locked {
-							<span class="badge badge-draft" style="margin-left:0.5rem">Locked</span>
-						} else {
-							<span class="badge badge-draft" style="margin-left:0.5rem">Empty</span>
+				<div class="card-body">
+					<div class="flex items-center justify-between mb-1">
+						<div class="flex items-center gap-2">
+							<strong>{ card.Title }</strong>
+							if card.Content != "" {
+								@components.StatusBadge("approved")
+							} else if card.Locked {
+								<span class="badge badge-ghost">Locked</span>
+							} else {
+								<span class="badge badge-ghost">Empty</span>
+							}
+						</div>
+						if !card.Locked {
+							<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s", data.ProjectID, card.Section)) } class="btn btn-ghost btn-sm">
+								if card.Content != "" {
+									Edit
+								} else {
+									Start
+								}
+							</a>
 						}
 					</div>
-					if !card.Locked {
-						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s", data.ProjectID, card.Section)) } class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.75rem">
-							if card.Content != "" {
-								Edit
-							} else {
-								Start
-							}
-						</a>
+					if card.Content != "" {
+						<div class="whitespace-pre-wrap text-sm leading-relaxed text-base-content/80">{ card.Content }</div>
+					} else if card.Locked {
+						<p class="text-base-content/60 italic text-sm">Complete the sections above first</p>
+					} else {
+						<p class="text-base-content/60 italic text-sm">Not yet filled</p>
 					}
 				</div>
-				if card.Content != "" {
-					<div style="white-space:pre-wrap;font-size:0.85rem;line-height:1.5;color:#333">{ card.Content }</div>
-				} else if card.Locked {
-					<p class="text-muted" style="font-style:italic">Complete the sections above first</p>
-				} else {
-					<p class="text-muted" style="font-style:italic">Not yet filled</p>
-				}
 			</div>
 		}
 	}
 }
 
 type ProfileSectionChatData struct {
-	ProjectID   int64
-	ProjectName string
-	Section     string
+	ProjectID    int64
+	ProjectName  string
+	Section      string
 	SectionTitle string
-	Messages    []ProfileMsgView
+	Messages     []ProfileMsgView
 }
 
 type ProfileMsgView struct {
@@ -72,36 +80,40 @@ type ProfileMsgView struct {
 }
 
 templ ProfileSectionChatPage(data ProfileSectionChatData) {
-	@Layout(data.SectionTitle + " - " + data.ProjectName) {
-		<div class="flex-between mb-4">
-			<h1>{ data.SectionTitle }</h1>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", data.ProjectID)) } class="btn btn-secondary">Back to Profile</a>
+	@components.PageShell(data.SectionTitle, []components.Breadcrumb{
+		{Label: "Projects", URL: "/"},
+		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+		{Label: "Profile", URL: fmt.Sprintf("/projects/%d/profile", data.ProjectID)},
+		{Label: data.SectionTitle},
+	}) {
+		<div class="flex items-center justify-between mb-4">
+			<h1 class="text-2xl font-bold">{ data.SectionTitle }</h1>
 		</div>
 
 		<div id="profile-section-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
-			<div class="chat-messages" id="profile-section-messages">
+			<div class="chat-messages max-h-[500px] overflow-y-auto space-y-3" id="profile-section-messages">
 				for _, msg := range data.Messages {
 					<div class={ "chat-msg chat-msg-" + msg.Role }>
 						<div class="chat-msg-role">{ msg.Role }</div>
-						<div style="white-space:pre-wrap">{ msg.Content }</div>
+						<div class="whitespace-pre-wrap">{ msg.Content }</div>
 					</div>
 				}
 			</div>
 
-			<form id="profile-section-form" class="mt-2">
-				<div class="form-group">
-					<textarea id="profile-section-input" placeholder="Tell the AI about this area, or let it ask you questions..." style="min-height:80px"></textarea>
+			<form id="profile-section-form" class="mt-4">
+				<div class="form-control">
+					<textarea id="profile-section-input" class="textarea textarea-bordered w-full" rows="3" placeholder="Tell the AI about this area, or let it ask you questions..."></textarea>
 				</div>
-				<button type="submit" id="profile-section-send" class="btn">Send</button>
+				<button type="submit" id="profile-section-send" class="btn btn-primary mt-2">Send</button>
 			</form>
 		</div>
 	}
 }
 
 func cardClasses(card ProfileCardView) string {
-	cls := "card mb-2"
+	cls := "card bg-base-100 shadow-sm border border-base-300 mb-3"
 	if card.Locked {
-		cls += " profile-card-locked"
+		cls += " opacity-50"
 	}
 	return cls
 }

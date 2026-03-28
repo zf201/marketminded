@@ -3,77 +3,85 @@ package templates
 import (
 	"fmt"
 	"github.com/zanfridau/marketminded/internal/content"
+	"github.com/zanfridau/marketminded/web/templates/components"
 )
 
 type StorytellingData struct {
-	ProjectID    int64
-	ProjectName  string
-	Frameworks   []content.Framework
-	SelectedKey  string
-	Saved        bool
+	ProjectID   int64
+	ProjectName string
+	Frameworks  []content.Framework
+	SelectedKey string
+	Saved       bool
 }
 
 templ StorytellingPage(data StorytellingData) {
-	@Layout(data.ProjectName + " - Storytelling Framework") {
-		<div class="flex-between mb-4">
-			<h1>Storytelling Framework</h1>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+	@components.PageShell(data.ProjectName+" - Storytelling Framework", []components.Breadcrumb{
+		{Label: "Projects", URL: "/"},
+		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+		{Label: "Storytelling"},
+	}) {
+		<div class="flex items-center justify-between mb-4">
+			<h1 class="text-2xl font-bold">Storytelling Framework</h1>
 		</div>
 
 		if data.Saved {
-			<div class="card" style="background:#d1fae5;border-color:#059669;margin-bottom:1rem">
-				<p style="color:#065f46">Framework saved.</p>
+			<div class="alert alert-success mb-4">
+				<span>Framework saved.</span>
 			</div>
 		}
 
-		<p class="text-muted mb-2">Choose a storytelling framework to structure your cornerstone content (blog posts, video scripts). This guides how the AI structures the narrative.</p>
+		<p class="text-base-content/60 mb-4">Choose a storytelling framework to structure your cornerstone content (blog posts, video scripts). This guides how the AI structures the narrative.</p>
 
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/storytelling", data.ProjectID)) }>
 			<!-- None option -->
-			<div class={ "card mb-1", templ.KV("card-selected", data.SelectedKey == "") }>
-				<label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer;margin-bottom:0">
-					if data.SelectedKey == "" {
-						<input type="radio" name="storytelling_framework" value="" checked/>
-					} else {
-						<input type="radio" name="storytelling_framework" value=""/>
-					}
-					<div>
-						<strong>None</strong>
-						<span class="text-muted" style="margin-left:0.5rem">— No framework applied. AI uses its default structure.</span>
-					</div>
-				</label>
-			</div>
-
-			for _, fw := range data.Frameworks {
-				<div class={ "card mb-1", templ.KV("card-selected", data.SelectedKey == fw.Key) }>
-					<label style="display:flex;align-items:start;gap:0.75rem;cursor:pointer;margin-bottom:0">
-						if data.SelectedKey == fw.Key {
-							<input type="radio" name="storytelling_framework" value={ fw.Key } checked style="margin-top:0.25rem"/>
+			<div class={ "card bg-base-100 shadow-sm border mb-3", templ.KV("border-primary", data.SelectedKey == ""), templ.KV("border-base-300", data.SelectedKey != "") }>
+				<div class="card-body">
+					<label class="flex items-center gap-3 cursor-pointer">
+						if data.SelectedKey == "" {
+							<input type="radio" name="storytelling_framework" value="" class="radio radio-primary" checked/>
 						} else {
-							<input type="radio" name="storytelling_framework" value={ fw.Key } style="margin-top:0.25rem"/>
+							<input type="radio" name="storytelling_framework" value="" class="radio radio-primary"/>
 						}
-						<div style="flex:1">
-							<div class="flex-between">
-								<div>
-									<strong>{ fw.Name }</strong>
-									<span class="text-muted" style="margin-left:0.5rem">— { fw.Attribution }</span>
-								</div>
-								<span class="badge badge-draft">{ fw.BestFor }</span>
-							</div>
-							<p class="text-muted" style="margin:0.5rem 0 0.25rem 0;font-size:0.875rem">{ fw.ShortDescription }</p>
-							<details style="margin-top:0.25rem">
-								<summary class="btn btn-secondary" style="font-size:0.75rem;padding:0.15rem 0.5rem">Show details</summary>
-								<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #e5e5e5">
-									<p style="font-size:0.875rem"><strong>Beats:</strong> { fw.Beats }</p>
-									<p style="font-size:0.875rem;margin-top:0.5rem"><strong>Example:</strong> { fw.Example }</p>
-								</div>
-							</details>
+						<div>
+							<strong>None</strong>
+							<span class="text-base-content/60 ml-2">— No framework applied. AI uses its default structure.</span>
 						</div>
 					</label>
 				</div>
+			</div>
+
+			for _, fw := range data.Frameworks {
+				<div class={ "card bg-base-100 shadow-sm border mb-3", templ.KV("border-primary", data.SelectedKey == fw.Key), templ.KV("border-base-300", data.SelectedKey != fw.Key) }>
+					<div class="card-body">
+						<label class="flex items-start gap-3 cursor-pointer">
+							if data.SelectedKey == fw.Key {
+								<input type="radio" name="storytelling_framework" value={ fw.Key } class="radio radio-primary mt-1" checked/>
+							} else {
+								<input type="radio" name="storytelling_framework" value={ fw.Key } class="radio radio-primary mt-1"/>
+							}
+							<div class="flex-1">
+								<div class="flex items-center justify-between">
+									<div>
+										<strong>{ fw.Name }</strong>
+										<span class="text-base-content/60 ml-2">— { fw.Attribution }</span>
+									</div>
+									<span class="badge badge-ghost">{ fw.BestFor }</span>
+								</div>
+								<p class="text-base-content/60 text-sm mt-2">{ fw.ShortDescription }</p>
+								<details class="mt-2">
+									<summary class="btn btn-ghost btn-xs">Show details</summary>
+									<div class="mt-3 pt-3 border-t border-base-300">
+										<p class="text-sm"><strong>Beats:</strong> { fw.Beats }</p>
+										<p class="text-sm mt-2"><strong>Example:</strong> { fw.Example }</p>
+									</div>
+								</details>
+							</div>
+						</label>
+					</div>
+				</div>
 			}
 
-			<button type="submit" class="btn mt-2">Save Framework</button>
+			<button type="submit" class="btn btn-primary mt-2">Save Framework</button>
 		</form>
 	}
 }
