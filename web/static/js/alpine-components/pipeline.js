@@ -428,7 +428,7 @@ document.addEventListener('alpine:init', function() {
                         var topicHeader = topicCard.querySelector('.board-card-header');
                         var topicBrief = topicCard.querySelector('.topic-brief');
                         var rightGroup = document.createElement('div');
-                        rightGroup.style.cssText = 'display:flex;align-items:center;gap:0.3rem';
+                        rightGroup.className = 'flex items-center gap-1';
                         var toggleBtn = document.createElement('button');
                         toggleBtn.className = 'step-toggle-btn';
                         toggleBtn.textContent = '+';
@@ -495,7 +495,7 @@ document.addEventListener('alpine:init', function() {
                             var headerDiv = card.querySelector('.board-card-header');
                             var badge = headerDiv.querySelector('.badge');
                             var rightGroup = document.createElement('div');
-                            rightGroup.style.cssText = 'display:flex;align-items:center;gap:0.3rem';
+                            rightGroup.className = 'flex items-center gap-1';
                             if (badge) {
                                 badge.parentNode.removeChild(badge);
                                 rightGroup.appendChild(badge);

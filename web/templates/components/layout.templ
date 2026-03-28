@@ -32,9 +32,9 @@ templ PageShell(title string, breadcrumbs []Breadcrumb) {
 				<a href="/settings" class="btn btn-ghost btn-sm">Settings</a>
 			</div>
 		</div>
-		if len(breadcrumbs) > 0 {
-			<div class="bg-base-100 border-b border-base-300 px-4 py-2">
-				<div class="breadcrumbs text-sm max-w-5xl mx-auto">
+		<main class="max-w-5xl mx-auto p-4">
+			if len(breadcrumbs) > 0 {
+				<div class="breadcrumbs text-sm mb-4">
 					<ul>
 						for _, bc := range breadcrumbs {
 							<li>
@@ -47,9 +47,7 @@ templ PageShell(title string, breadcrumbs []Breadcrumb) {
 						}
 					</ul>
 				</div>
-			</div>
-		}
-		<main class="max-w-5xl mx-auto p-4">
+			}
 			{ children... }
 		</main>
 	</body>

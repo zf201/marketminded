@@ -227,9 +227,8 @@ function initProfileChat(projectID) {
         actions.className = 'proposal-block-actions';
 
         var acceptBtn = document.createElement('button');
-        acceptBtn.className = 'btn';
+        acceptBtn.className = 'btn btn-success btn-sm';
         acceptBtn.textContent = 'Accept';
-        acceptBtn.style.fontSize = '0.8rem';
         acceptBtn.onclick = function() {
             fetch('/projects/' + projectID + '/profile/sections/' + section, {
                 method: 'POST',
@@ -239,7 +238,7 @@ function initProfileChat(projectID) {
                 block.className = 'proposal-block proposal-block-accepted';
                 actions.remove();
                 var badge = document.createElement('div');
-                badge.style.cssText = 'color:#059669;font-size:0.8rem;font-weight:600';
+                badge.className = 'text-success font-semibold text-sm';
                 badge.textContent = 'Accepted';
                 block.appendChild(badge);
                 // Update card on the right
@@ -248,7 +247,7 @@ function initProfileChat(projectID) {
                     var cardContent = card.querySelector('.profile-card-content');
                     cardContent.textContent = '';
                     var p = document.createElement('p');
-                    p.style.whiteSpace = 'pre-wrap';
+                    p.className = 'whitespace-pre-wrap';
                     p.textContent = content;
                     cardContent.appendChild(p);
                     card.classList.remove('profile-card-empty');
@@ -257,14 +256,13 @@ function initProfileChat(projectID) {
         };
 
         var rejectBtn = document.createElement('button');
-        rejectBtn.className = 'btn btn-secondary';
+        rejectBtn.className = 'btn btn-ghost btn-sm';
         rejectBtn.textContent = 'Reject';
-        rejectBtn.style.fontSize = '0.8rem';
         rejectBtn.onclick = function() {
             block.className = 'proposal-block proposal-block-rejected';
             actions.remove();
             var badge = document.createElement('div');
-            badge.style.cssText = 'color:#6b7280;font-size:0.8rem;font-weight:600';
+            badge.className = 'text-neutral font-semibold text-sm';
             badge.textContent = 'Rejected';
             block.appendChild(badge);
         };
@@ -286,19 +284,16 @@ function initProfileChat(projectID) {
 
         contentEl.classList.add('profile-card-editing');
         var ta = document.createElement('textarea');
-        ta.className = 'profile-card-editing';
+        ta.className = 'textarea textarea-bordered w-full text-sm mb-2';
         ta.value = currentText;
-        ta.style.cssText = 'width:100%;min-height:80px;font-size:0.85rem;margin-bottom:0.5rem';
 
         var saveBtn = document.createElement('button');
-        saveBtn.className = 'btn';
+        saveBtn.className = 'btn btn-primary btn-sm';
         saveBtn.textContent = 'Save';
-        saveBtn.style.fontSize = '0.75rem';
 
         var cancelBtn = document.createElement('button');
-        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.className = 'btn btn-ghost btn-sm ml-2';
         cancelBtn.textContent = 'Cancel';
-        cancelBtn.style.cssText = 'font-size:0.75rem;margin-left:0.5rem';
 
         contentEl.textContent = '';
         contentEl.appendChild(ta);
@@ -315,7 +310,7 @@ function initProfileChat(projectID) {
                 contentEl.textContent = '';
                 contentEl.classList.remove('profile-card-editing');
                 var np = document.createElement('p');
-                np.style.whiteSpace = 'pre-wrap';
+                np.className = 'whitespace-pre-wrap';
                 np.textContent = newContent;
                 contentEl.appendChild(np);
                 if (newContent) card.classList.remove('profile-card-empty');
@@ -327,12 +322,11 @@ function initProfileChat(projectID) {
             contentEl.textContent = '';
             contentEl.classList.remove('profile-card-editing');
             var np = document.createElement('p');
-            np.style.whiteSpace = 'pre-wrap';
+            np.className = 'whitespace-pre-wrap';
             if (currentText) {
                 np.textContent = currentText;
             } else {
-                np.className = 'text-muted';
-                np.style.fontStyle = 'italic';
+                np.className = 'opacity-60 italic';
                 np.textContent = 'Not yet filled';
             }
             contentEl.appendChild(np);
@@ -366,7 +360,7 @@ function initProfileChat(projectID) {
         roleEl.className = 'chat-msg-role';
         roleEl.textContent = 'user';
         var bodyEl = document.createElement('div');
-        bodyEl.style.whiteSpace = 'pre-wrap';
+        bodyEl.className = 'whitespace-pre-wrap';
         bodyEl.textContent = msg;
         userDiv.appendChild(roleEl);
         userDiv.appendChild(bodyEl);
@@ -380,7 +374,7 @@ function initProfileChat(projectID) {
         aRoleEl.textContent = 'assistant';
         assistantDiv.appendChild(aRoleEl);
         var aBody = document.createElement('div');
-        aBody.style.whiteSpace = 'pre-wrap';
+        aBody.className = 'whitespace-pre-wrap';
         assistantDiv.appendChild(aBody);
         messagesEl.appendChild(assistantDiv);
         scrollToBottom();
@@ -498,7 +492,7 @@ function initProfileSectionChat(projectID, sectionName) {
         roleEl.className = 'chat-msg-role';
         roleEl.textContent = role;
         var bodyEl = document.createElement('div');
-        bodyEl.style.whiteSpace = 'pre-wrap';
+        bodyEl.className = 'whitespace-pre-wrap';
         bodyEl.textContent = text;
         outer.appendChild(roleEl);
         outer.appendChild(bodyEl);
@@ -583,9 +577,8 @@ function initProfileSectionChat(projectID, sectionName) {
                     var acts = document.createElement('div');
                     acts.className = 'proposal-block-actions';
                     var accBtn = document.createElement('button');
-                    accBtn.className = 'btn';
+                    accBtn.className = 'btn btn-success btn-sm';
                     accBtn.textContent = 'Accept';
-                    accBtn.style.fontSize = '0.8rem';
                     accBtn.onclick = function() {
                         fetch('/projects/' + projectID + '/profile/sections/' + d.section, {
                             method: 'POST',
@@ -595,20 +588,19 @@ function initProfileSectionChat(projectID, sectionName) {
                             block.className = 'proposal-block proposal-block-accepted';
                             acts.remove();
                             var badge = document.createElement('div');
-                            badge.style.cssText = 'color:#059669;font-size:0.8rem;font-weight:600';
+                            badge.className = 'text-success font-semibold text-sm';
                             badge.textContent = 'Accepted';
                             block.appendChild(badge);
                         });
                     };
                     var rejBtn = document.createElement('button');
-                    rejBtn.className = 'btn btn-secondary';
+                    rejBtn.className = 'btn btn-ghost btn-sm';
                     rejBtn.textContent = 'Reject';
-                    rejBtn.style.fontSize = '0.8rem';
                     rejBtn.onclick = function() {
                         block.className = 'proposal-block proposal-block-rejected';
                         acts.remove();
                         var badge = document.createElement('div');
-                        badge.style.cssText = 'color:#6b7280;font-size:0.8rem;font-weight:600';
+                        badge.className = 'text-neutral font-semibold text-sm';
                         badge.textContent = 'Rejected';
                         block.appendChild(badge);
                     };
@@ -668,7 +660,7 @@ function initContextChat(projectID, itemID) {
         roleEl.className = 'chat-msg-role';
         roleEl.textContent = role;
         var bodyEl = document.createElement('div');
-        bodyEl.style.whiteSpace = 'pre-wrap';
+        bodyEl.className = 'whitespace-pre-wrap';
         bodyEl.textContent = text;
         outer.appendChild(roleEl);
         outer.appendChild(bodyEl);
@@ -773,21 +765,19 @@ function openContentModal(opts) {
 
     // Build modal DOM
     var overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center';
+    overlay.className = 'modal modal-open';
 
     var modal = document.createElement('div');
-    modal.style.cssText = 'background:white;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:85vh;display:flex;flex-direction:column';
+    modal.className = 'modal-box max-w-2xl flex flex-col max-h-[85vh]';
 
     var headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem';
+    headerRow.className = 'flex justify-between items-center mb-4';
     var titleEl = document.createElement('h3');
     titleEl.textContent = mode === 'proofread' ? 'Proofreading...' : 'Improve Content';
-    titleEl.style.margin = '0';
     headerRow.appendChild(titleEl);
     var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.className = 'btn btn-ghost btn-sm';
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.fontSize = '0.8rem';
     cancelBtn.onclick = function() {
         controller.abort();
         overlay.remove();
@@ -797,19 +787,19 @@ function openContentModal(opts) {
 
     // Chat area (improve only)
     var chatArea = document.createElement('div');
-    chatArea.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden';
+    chatArea.className = 'flex flex-col flex-1 overflow-hidden';
 
     var messages = document.createElement('div');
-    messages.style.cssText = 'overflow-y:auto;flex:1;margin-bottom:0.75rem;max-height:200px';
+    messages.className = 'overflow-y-auto flex-1 mb-3 max-h-52';
     chatArea.appendChild(messages);
 
     if (mode === 'improve') {
         var textarea = document.createElement('textarea');
-        textarea.style.cssText = 'width:100%;min-height:60px;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;resize:vertical;margin-bottom:0.5rem';
+        textarea.className = 'textarea textarea-bordered w-full text-sm mb-2';
         textarea.placeholder = 'What should be improved?';
         chatArea.appendChild(textarea);
         var sendBtn = document.createElement('button');
-        sendBtn.className = 'btn';
+        sendBtn.className = 'btn btn-primary btn-sm';
         sendBtn.textContent = 'Send';
         chatArea.appendChild(sendBtn);
         modal.appendChild(chatArea);
@@ -828,7 +818,7 @@ function openContentModal(opts) {
             // Show user message
             var userDiv = document.createElement('div');
             userDiv.className = 'chat-msg chat-msg-user';
-            userDiv.style.fontSize = '0.85rem';
+            userDiv.className += ' text-sm';
             var roleDiv = document.createElement('div');
             roleDiv.className = 'chat-msg-role';
             roleDiv.textContent = 'you';
@@ -840,8 +830,8 @@ function openContentModal(opts) {
             messages.scrollTop = messages.scrollHeight;
 
             // Hide preview if showing from previous round
-            previewArea.style.display = 'none';
-            actions.style.display = 'none';
+            previewArea.classList.add('hidden');
+            actions.classList.add('hidden');
 
             // Post message then stream rewrite
             fetch(basePath + '/piece/' + pieceId + '/improve', {
@@ -864,16 +854,16 @@ function openContentModal(opts) {
                     } else if (d.type === 'done') {
                         source.close();
                         // If we got text but no write tool, show it as chat
-                        if (accumulated && previewArea.style.display === 'none') {
+                        if (accumulated && previewArea.classList.contains('hidden')) {
                             var assistDiv = document.createElement('div');
                             assistDiv.className = 'chat-msg chat-msg-assistant';
-                            assistDiv.style.fontSize = '0.85rem';
+                            assistDiv.className += ' text-sm';
                             var aRole = document.createElement('div');
                             aRole.className = 'chat-msg-role';
                             aRole.textContent = 'assistant';
                             assistDiv.appendChild(aRole);
                             var aBody = document.createElement('div');
-                            aBody.style.whiteSpace = 'pre-wrap';
+                            aBody.className = 'whitespace-pre-wrap';
                             aBody.textContent = accumulated;
                             assistDiv.appendChild(aBody);
                             messages.appendChild(assistDiv);
@@ -884,7 +874,7 @@ function openContentModal(opts) {
                     } else if (d.type === 'error') {
                         source.close();
                         var errDiv = document.createElement('div');
-                        errDiv.style.cssText = 'color:red;font-size:0.85rem';
+                        errDiv.className = 'text-error text-sm';
                         errDiv.textContent = 'Error: ' + d.error;
                         messages.appendChild(errDiv);
                         sendBtn.disabled = false;
@@ -902,18 +892,24 @@ function openContentModal(opts) {
 
     // Loading spinner (proofread)
     var spinnerEl = document.createElement('div');
-    spinnerEl.style.cssText = 'text-align:center;padding:2rem;display:none';
-    spinnerEl.innerHTML = '<div class="spinner"></div><p class="text-muted" style="margin-top:1rem">Proofreading content...</p>';
+    spinnerEl.className = 'text-center p-8 hidden';
+    var spinnerIcon = document.createElement('span');
+    spinnerIcon.className = 'loading loading-spinner loading-lg';
+    spinnerEl.appendChild(spinnerIcon);
+    var spinnerText = document.createElement('p');
+    spinnerText.className = 'opacity-60 mt-4';
+    spinnerText.textContent = 'Proofreading content...';
+    spinnerEl.appendChild(spinnerText);
     modal.appendChild(spinnerEl);
 
     // Preview area — uses renderContentBody
     var previewArea = document.createElement('div');
-    previewArea.style.cssText = 'overflow-y:auto;flex:1;background:#f9fafb;padding:0.75rem;border-radius:4px;margin-bottom:0.75rem;min-height:150px;max-height:400px;display:none';
+    previewArea.className = 'overflow-y-auto flex-1 bg-base-200 p-3 rounded-lg mb-3 min-h-36 max-h-96 hidden';
     modal.appendChild(previewArea);
 
     // Actions
     var actions = document.createElement('div');
-    actions.style.cssText = 'display:none;gap:0.5rem';
+    actions.className = 'hidden gap-2';
     modal.appendChild(actions);
 
     // Cancel button is in the header row
@@ -924,17 +920,17 @@ function openContentModal(opts) {
     var pendingContent = '';
 
     function showPreview(contentJSON) {
-        previewArea.style.display = 'block';
+        previewArea.classList.remove('hidden');
         previewArea.textContent = '';
         renderContentBody(previewArea, platform, format, contentJSON);
         pendingContent = contentJSON;
         titleEl.textContent = mode === 'proofread' ? 'Proofread Complete' : 'New Version Ready';
 
         actions.textContent = '';
-        actions.style.display = 'flex';
+        actions.classList.remove('hidden'); actions.classList.add('flex');
 
         var acceptBtn = document.createElement('button');
-        acceptBtn.className = 'btn';
+        acceptBtn.className = 'btn btn-success btn-sm';
         acceptBtn.textContent = 'Accept';
         acceptBtn.onclick = function() {
             var form = document.createElement('form');
@@ -949,13 +945,13 @@ function openContentModal(opts) {
         actions.appendChild(acceptBtn);
 
         var rejectBtn = document.createElement('button');
-        rejectBtn.className = 'btn btn-secondary';
+        rejectBtn.className = 'btn btn-ghost btn-sm';
         rejectBtn.textContent = mode === 'improve' ? 'Try Again' : 'Reject';
         rejectBtn.onclick = function() {
             if (mode === 'improve') {
                 // Back to chat
-                previewArea.style.display = 'none';
-                actions.style.display = 'none';
+                previewArea.classList.add('hidden');
+                actions.classList.add('hidden');
                 titleEl.textContent = 'Improve Content';
                 textarea.focus();
             } else {
@@ -964,22 +960,22 @@ function openContentModal(opts) {
         };
         actions.appendChild(rejectBtn);
 
-        cancelBtn.style.display = 'none';
+        cancelBtn.classList.add('hidden');
     }
 
     // Start proofread immediately
     if (mode === 'proofread') {
-        spinnerEl.style.display = 'block';
+        spinnerEl.classList.remove('hidden');
         fetch(basePath + '/piece/' + pieceId + '/proofread', { signal: controller.signal })
             .then(function(res) { return res.json(); })
             .then(function(data) {
-                spinnerEl.style.display = 'none';
+                spinnerEl.classList.add('hidden');
                 showPreview(data.corrected);
             })
             .catch(function(err) {
-                spinnerEl.style.display = 'none';
+                spinnerEl.classList.add('hidden');
                 if (err.name !== 'AbortError') {
-                    previewArea.style.display = 'block';
+                    previewArea.classList.remove('hidden');
                     previewArea.textContent = 'Error: ' + err.message;
                 }
                 cancelBtn.textContent = 'Close';
@@ -1206,7 +1202,7 @@ function initCornerstonePipeline(projectID, runID) {
         var topicHeader = topicCard.querySelector('.board-card-header');
         var topicBrief = topicCard.querySelector('.topic-brief');
         var rightGroup = document.createElement('div');
-        rightGroup.style.cssText = 'display:flex;align-items:center;gap:0.3rem';
+        rightGroup.className = 'flex items-center gap-1';
         var toggleBtn = document.createElement('button');
         toggleBtn.className = 'step-toggle-btn';
         toggleBtn.textContent = '+';
@@ -1274,7 +1270,7 @@ function initCornerstonePipeline(projectID, runID) {
             var headerDiv = card.querySelector('.board-card-header');
             var badge = headerDiv.querySelector('.badge');
             var rightGroup = document.createElement('div');
-            rightGroup.style.cssText = 'display:flex;align-items:center;gap:0.3rem';
+            rightGroup.className = 'flex items-center gap-1';
             if (badge) {
                 badge.parentNode.removeChild(badge);
                 rightGroup.appendChild(badge);

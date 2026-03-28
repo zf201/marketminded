@@ -92,9 +92,8 @@ document.addEventListener('alpine:init', function() {
                 actions.className = 'proposal-block-actions';
 
                 var acceptBtn = document.createElement('button');
-                acceptBtn.className = 'btn';
+                acceptBtn.className = 'btn btn-success btn-sm';
                 acceptBtn.textContent = 'Accept';
-                acceptBtn.style.fontSize = '0.8rem';
                 acceptBtn.onclick = function() {
                     fetch('/projects/' + projectID + '/profile/sections/' + section, {
                         method: 'POST',
@@ -104,7 +103,7 @@ document.addEventListener('alpine:init', function() {
                         block.className = 'proposal-block proposal-block-accepted';
                         actions.remove();
                         var badge = document.createElement('div');
-                        badge.style.cssText = 'color:#059669;font-size:0.8rem;font-weight:600';
+                        badge.className = 'text-success font-semibold text-sm';
                         badge.textContent = 'Accepted';
                         block.appendChild(badge);
                         // Update card on the right
@@ -122,14 +121,13 @@ document.addEventListener('alpine:init', function() {
                 };
 
                 var rejectBtn = document.createElement('button');
-                rejectBtn.className = 'btn btn-secondary';
+                rejectBtn.className = 'btn btn-ghost btn-sm';
                 rejectBtn.textContent = 'Reject';
-                rejectBtn.style.fontSize = '0.8rem';
                 rejectBtn.onclick = function() {
                     block.className = 'proposal-block proposal-block-rejected';
                     actions.remove();
                     var badge = document.createElement('div');
-                    badge.style.cssText = 'color:#6b7280;font-size:0.8rem;font-weight:600';
+                    badge.className = 'text-neutral font-semibold text-sm';
                     badge.textContent = 'Rejected';
                     block.appendChild(badge);
                 };
@@ -169,19 +167,16 @@ document.addEventListener('alpine:init', function() {
 
                 contentEl.classList.add('profile-card-editing');
                 var ta = document.createElement('textarea');
-                ta.className = 'profile-card-editing';
+                ta.className = 'textarea textarea-bordered w-full text-sm mb-2';
                 ta.value = currentText;
-                ta.style.cssText = 'width:100%;min-height:80px;font-size:0.85rem;margin-bottom:0.5rem';
 
                 var saveBtn = document.createElement('button');
-                saveBtn.className = 'btn';
+                saveBtn.className = 'btn btn-primary btn-sm';
                 saveBtn.textContent = 'Save';
-                saveBtn.style.fontSize = '0.75rem';
 
                 var cancelBtn = document.createElement('button');
-                cancelBtn.className = 'btn btn-secondary';
+                cancelBtn.className = 'btn btn-ghost btn-sm ml-2';
                 cancelBtn.textContent = 'Cancel';
-                cancelBtn.style.cssText = 'font-size:0.75rem;margin-left:0.5rem';
 
                 contentEl.textContent = '';
                 contentEl.appendChild(ta);

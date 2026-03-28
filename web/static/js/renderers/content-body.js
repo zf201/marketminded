@@ -7,11 +7,10 @@ function renderPlan(el) {
 
     if (data.cornerstone) {
         var h = document.createElement('div');
-        h.style.cssText = 'font-weight:600;margin-bottom:0.5rem;font-size:0.95rem';
+        h.className = 'font-semibold text-base mb-2';
         h.textContent = 'Cornerstone: ' + (data.cornerstone.platform || '') + '/' + (data.cornerstone.format || '') + (data.cornerstone.title ? ' — ' + data.cornerstone.title : '');
         el.appendChild(h);
     }
-
 }
 
 // --- Content type renderers ---
@@ -21,7 +20,6 @@ function renderContentBody(el, platform, format, bodyText) {
     try {
         data = JSON.parse(bodyText);
     } catch (e) {
-        // Fallback: plain text
         el.textContent = bodyText;
         return;
     }
@@ -54,7 +52,6 @@ function renderContentBody(el, platform, format, bodyText) {
         el.textContent = bodyText;
     }
 
-    // Always render instructions if present (available on all types)
     if (data && data.instructions) {
         renderSection(el, 'Production Notes', data.instructions, { minor: true, markdown: true });
     }
@@ -65,9 +62,8 @@ function renderBlogPost(el, data) {
     renderSection(el, 'Body', data.body, { markdown: true });
     if (data.body) {
         var copyBtn = document.createElement('button');
-        copyBtn.className = 'btn btn-secondary';
+        copyBtn.className = 'btn btn-secondary btn-xs mt-1';
         copyBtn.textContent = 'Copy Markdown';
-        copyBtn.style.cssText = 'font-size:0.75rem;padding:0.2rem 0.5rem;margin-top:0.25rem';
         copyBtn.onclick = function() {
             navigator.clipboard.writeText(data.body).then(function() {
                 copyBtn.textContent = 'Copied!';
@@ -91,12 +87,16 @@ function renderXPost(el, data) {
 function renderXThread(el, data) {
     if (!data.tweets) return;
     var sec = renderSection(el, 'Tweets (' + data.tweets.length + ')', null, { force: true });
-    var items = document.createElement('div'); items.className = 'content-items';
+    var items = document.createElement('div');
+    items.className = 'space-y-1 text-sm';
     data.tweets.forEach(function(tweet, i) {
-        var item = document.createElement('div'); item.className = 'content-item';
-        var num = document.createElement('span'); num.className = 'content-item-num'; num.textContent = (i + 1) + '.';
+        var item = document.createElement('div');
+        item.className = 'flex gap-2';
+        var num = document.createElement('span');
+        num.className = 'font-semibold opacity-60';
+        num.textContent = (i + 1) + '.';
         item.appendChild(num);
-        item.appendChild(document.createTextNode(' ' + tweet));
+        item.appendChild(document.createTextNode(tweet));
         items.appendChild(item);
     });
     sec.appendChild(items);
@@ -106,10 +106,22 @@ function renderLinkedinCarousel(el, data) {
     if (data.slides) {
         var sec = renderSection(el, 'Slides (' + data.slides.length + ')', null, { force: true });
         data.slides.forEach(function(slide, i) {
-            var card = document.createElement('div'); card.className = 'slide-card';
-            var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1) + (slide.title ? ': ' + slide.title : '');
-            var body = document.createElement('div'); body.className = 'slide-card-body'; body.textContent = slide.body || '';
-            card.appendChild(title); card.appendChild(body); sec.appendChild(card);
+            var card = document.createElement('div');
+            card.className = 'card card-compact bg-base-200 mb-1';
+            var body = document.createElement('div');
+            body.className = 'card-body p-2';
+            var title = document.createElement('div');
+            title.className = 'font-semibold text-sm';
+            title.textContent = 'Slide ' + (i + 1) + (slide.title ? ': ' + slide.title : '');
+            body.appendChild(title);
+            if (slide.body) {
+                var text = document.createElement('div');
+                text.className = 'text-sm';
+                text.textContent = slide.body;
+                body.appendChild(text);
+            }
+            card.appendChild(body);
+            sec.appendChild(card);
         });
     }
     renderSection(el, 'Caption', data.caption);
@@ -119,10 +131,22 @@ function renderInstagramCarousel(el, data) {
     if (data.slides) {
         var sec = renderSection(el, 'Slides (' + data.slides.length + ')', null, { force: true });
         data.slides.forEach(function(slide, i) {
-            var card = document.createElement('div'); card.className = 'slide-card';
-            var title = document.createElement('div'); title.className = 'slide-card-title'; title.textContent = 'Slide ' + (i + 1);
-            var body = document.createElement('div'); body.className = 'slide-card-body'; body.textContent = slide.text || '';
-            card.appendChild(title); card.appendChild(body); sec.appendChild(card);
+            var card = document.createElement('div');
+            card.className = 'card card-compact bg-base-200 mb-1';
+            var body = document.createElement('div');
+            body.className = 'card-body p-2';
+            var title = document.createElement('div');
+            title.className = 'font-semibold text-sm';
+            title.textContent = 'Slide ' + (i + 1);
+            body.appendChild(title);
+            if (slide.text) {
+                var text = document.createElement('div');
+                text.className = 'text-sm';
+                text.textContent = slide.text;
+                body.appendChild(text);
+            }
+            card.appendChild(body);
+            sec.appendChild(card);
         });
     }
     renderSection(el, 'Caption', data.caption);
@@ -148,14 +172,22 @@ function renderYoutubeScript(el, data) {
     if (data.sections) {
         var sec = renderSection(el, 'Script Sections', null, { force: true });
         data.sections.forEach(function(s) {
-            var div = document.createElement('div'); div.className = 'content-field';
-            var heading = document.createElement('div'); heading.className = 'content-field-label-minor';
+            var div = document.createElement('div');
+            div.className = 'mb-2';
+            var heading = document.createElement('div');
+            heading.className = 'text-xs font-medium opacity-70 mb-0.5';
             heading.textContent = (s.timestamp ? '[' + s.timestamp + '] ' : '') + s.heading;
             div.appendChild(heading);
-            var content = document.createElement('div'); content.className = 'content-field-value';
+            var content = document.createElement('div');
+            content.className = 'text-sm';
             content.textContent = s.content;
             div.appendChild(content);
-            if (s.notes) { var n = document.createElement('div'); n.className = 'text-muted'; n.style.fontSize = '0.8rem'; n.textContent = '[' + s.notes + ']'; div.appendChild(n); }
+            if (s.notes) {
+                var n = document.createElement('div');
+                n.className = 'text-xs italic opacity-60';
+                n.textContent = '[' + s.notes + ']';
+                div.appendChild(n);
+            }
             sec.appendChild(div);
         });
     }
