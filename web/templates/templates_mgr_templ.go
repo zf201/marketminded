@@ -9,7 +9,10 @@ import "context"
 import "io"
 import "bytes"
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/zanfridau/marketminded/web/templates/components"
+)
 
 type TemplatesMgrData struct {
 	ProjectID   int64
@@ -43,53 +46,40 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex-between mb-4\"><h1>")
+			_, err = templBuffer.WriteString("<div class=\"card bg-base-100 shadow-sm border border-base-300 mb-6\"><div class=\"card-body\"><h3 class=\"card-title text-base\">")
 			if err != nil {
 				return err
 			}
-			var_3 := `Social Post Templates`
+			var_3 := `Add Template`
 			_, err = templBuffer.WriteString(var_3)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1><a href=\"")
+			_, err = templBuffer.WriteString("</h3><p class=\"text-base-content/60 text-sm mb-3\">")
 			if err != nil {
 				return err
 			}
-			var var_4 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_4)))
+			var_4 := `HTML templates must include `
+			_, err = templBuffer.WriteString(var_4)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary\">")
+			var var_5 string = "{{.Title}}"
+			_, err = templBuffer.WriteString(templ.EscapeString(var_5))
 			if err != nil {
 				return err
 			}
-			var_5 := `Back`
-			_, err = templBuffer.WriteString(var_5)
+			_, err = templBuffer.WriteString(" ")
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div> <div class=\"card mb-4\"><h3>")
-			if err != nil {
-				return err
-			}
-			var_6 := `Add Template`
+			var_6 := `and `
 			_, err = templBuffer.WriteString(var_6)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"text-muted mb-2\">")
-			if err != nil {
-				return err
-			}
-			var_7 := `HTML templates must include `
-			_, err = templBuffer.WriteString(var_7)
-			if err != nil {
-				return err
-			}
-			var var_8 string = "{{.Title}}"
-			_, err = templBuffer.WriteString(templ.EscapeString(var_8))
+			var var_7 string = "{{.Body}}"
+			_, err = templBuffer.WriteString(templ.EscapeString(var_7))
 			if err != nil {
 				return err
 			}
@@ -97,27 +87,13 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_9 := `and `
-			_, err = templBuffer.WriteString(var_9)
+			var_8 := `slots. Optional: `
+			_, err = templBuffer.WriteString(var_8)
 			if err != nil {
 				return err
 			}
-			var var_10 string = "{{.Body}}"
-			_, err = templBuffer.WriteString(templ.EscapeString(var_10))
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString(" ")
-			if err != nil {
-				return err
-			}
-			var_11 := `slots. Optional: `
-			_, err = templBuffer.WriteString(var_11)
-			if err != nil {
-				return err
-			}
-			var var_12 string = "{{.ImageURL}}"
-			_, err = templBuffer.WriteString(templ.EscapeString(var_12))
+			var var_9 string = "{{.ImageURL}}"
+			_, err = templBuffer.WriteString(templ.EscapeString(var_9))
 			if err != nil {
 				return err
 			}
@@ -129,85 +105,114 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\"><div class=\"form-group\"><label>")
+			_, err = templBuffer.WriteString("\">")
 			if err != nil {
 				return err
 			}
-			var_13 := `Name`
-			_, err = templBuffer.WriteString(var_13)
+			var_10 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+				templBuffer, templIsBuffer := w.(*bytes.Buffer)
+				if !templIsBuffer {
+					templBuffer = templ.GetBuffer()
+					defer templ.ReleaseBuffer(templBuffer)
+				}
+				_, err = templBuffer.WriteString("<input type=\"text\" name=\"name\" required placeholder=\"e.g. Instagram Square\" class=\"input input-bordered w-full\">")
+				if err != nil {
+					return err
+				}
+				if !templIsBuffer {
+					_, err = io.Copy(w, templBuffer)
+				}
+				return err
+			})
+			err = components.FormGroup("Name").Render(templ.WithChildren(ctx, var_10), templBuffer)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</label><input type=\"text\" name=\"name\" required placeholder=\"e.g. Instagram Square\"></div><div class=\"form-group\"><label>")
+			var_11 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+				templBuffer, templIsBuffer := w.(*bytes.Buffer)
+				if !templIsBuffer {
+					templBuffer = templ.GetBuffer()
+					defer templ.ReleaseBuffer(templBuffer)
+				}
+				_, err = templBuffer.WriteString("<select name=\"platform\" class=\"select select-bordered w-full\"><option value=\"instagram\">")
+				if err != nil {
+					return err
+				}
+				var_12 := `Instagram`
+				_, err = templBuffer.WriteString(var_12)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</option><option value=\"facebook\">")
+				if err != nil {
+					return err
+				}
+				var_13 := `Facebook`
+				_, err = templBuffer.WriteString(var_13)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</option><option value=\"linkedin\">")
+				if err != nil {
+					return err
+				}
+				var_14 := `LinkedIn`
+				_, err = templBuffer.WriteString(var_14)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</option></select>")
+				if err != nil {
+					return err
+				}
+				if !templIsBuffer {
+					_, err = io.Copy(w, templBuffer)
+				}
+				return err
+			})
+			err = components.FormGroup("Platform").Render(templ.WithChildren(ctx, var_11), templBuffer)
 			if err != nil {
 				return err
 			}
-			var_14 := `Platform`
-			_, err = templBuffer.WriteString(var_14)
+			var_15 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+				templBuffer, templIsBuffer := w.(*bytes.Buffer)
+				if !templIsBuffer {
+					templBuffer = templ.GetBuffer()
+					defer templ.ReleaseBuffer(templBuffer)
+				}
+				_, err = templBuffer.WriteString("<textarea name=\"html_content\" required placeholder=\"&lt;div&gt;{{.Title}}&lt;/div&gt;\" class=\"textarea textarea-bordered w-full font-mono\"></textarea>")
+				if err != nil {
+					return err
+				}
+				if !templIsBuffer {
+					_, err = io.Copy(w, templBuffer)
+				}
+				return err
+			})
+			err = components.FormGroup("HTML Content").Render(templ.WithChildren(ctx, var_15), templBuffer)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</label><select name=\"platform\"><option value=\"instagram\">")
+			err = components.SubmitButton("Add Template").Render(ctx, templBuffer)
 			if err != nil {
 				return err
 			}
-			var_15 := `Instagram`
-			_, err = templBuffer.WriteString(var_15)
+			_, err = templBuffer.WriteString("</form></div></div> <h2 class=\"text-xl font-bold mb-3\">")
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</option><option value=\"facebook\">")
-			if err != nil {
-				return err
-			}
-			var_16 := `Facebook`
+			var_16 := `Templates (`
 			_, err = templBuffer.WriteString(var_16)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</option><option value=\"linkedin\">")
+			var var_17 string = fmt.Sprintf("%d", len(data.Templates))
+			_, err = templBuffer.WriteString(templ.EscapeString(var_17))
 			if err != nil {
 				return err
 			}
-			var_17 := `LinkedIn`
-			_, err = templBuffer.WriteString(var_17)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</option></select></div><div class=\"form-group\"><label>")
-			if err != nil {
-				return err
-			}
-			var_18 := `HTML Content`
+			var_18 := `)`
 			_, err = templBuffer.WriteString(var_18)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</label><textarea name=\"html_content\" required style=\"font-family:monospace\" placeholder=\"&lt;div&gt;{{.Title}}&lt;/div&gt;\"></textarea></div><button type=\"submit\" class=\"btn\">")
-			if err != nil {
-				return err
-			}
-			var_19 := `Add Template`
-			_, err = templBuffer.WriteString(var_19)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</button></form></div> <h2 class=\"mb-2\">")
-			if err != nil {
-				return err
-			}
-			var_20 := `Templates (`
-			_, err = templBuffer.WriteString(var_20)
-			if err != nil {
-				return err
-			}
-			var var_21 string = fmt.Sprintf("%d", len(data.Templates))
-			_, err = templBuffer.WriteString(templ.EscapeString(var_21))
-			if err != nil {
-				return err
-			}
-			var_22 := `)`
-			_, err = templBuffer.WriteString(var_22)
 			if err != nil {
 				return err
 			}
@@ -216,12 +221,12 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 				return err
 			}
 			for _, tmpl := range data.Templates {
-				_, err = templBuffer.WriteString("<div class=\"card\"><div class=\"flex-between mb-1\"><div><span class=\"badge badge-ideating\">")
+				_, err = templBuffer.WriteString("<div class=\"card bg-base-100 shadow-sm border border-base-300 mb-2\"><div class=\"card-body\"><div class=\"flex items-center justify-between\"><div class=\"flex items-center gap-2\"><span class=\"badge badge-ghost\">")
 				if err != nil {
 					return err
 				}
-				var var_23 string = tmpl.Platform
-				_, err = templBuffer.WriteString(templ.EscapeString(var_23))
+				var var_19 string = tmpl.Platform
+				_, err = templBuffer.WriteString(templ.EscapeString(var_19))
 				if err != nil {
 					return err
 				}
@@ -229,8 +234,8 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_24 string = tmpl.Name
-				_, err = templBuffer.WriteString(templ.EscapeString(var_24))
+				var var_20 string = tmpl.Name
+				_, err = templBuffer.WriteString(templ.EscapeString(var_20))
 				if err != nil {
 					return err
 				}
@@ -242,25 +247,25 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\"><button type=\"submit\" class=\"btn btn-danger\" style=\"font-size:0.75rem;padding:0.25rem 0.5rem\">")
+				_, err = templBuffer.WriteString("\"><button type=\"submit\" class=\"btn btn-error btn-xs\">")
 				if err != nil {
 					return err
 				}
-				var_25 := `Delete`
-				_, err = templBuffer.WriteString(var_25)
+				var_21 := `Delete`
+				_, err = templBuffer.WriteString(var_21)
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</button></form></div><pre style=\"background:#f9f9f9;padding:0.5rem;border-radius:4px;font-size:0.75rem;overflow:auto;max-height:100px\">")
+				_, err = templBuffer.WriteString("</button></form></div><pre class=\"bg-base-200 p-3 rounded-lg text-xs overflow-auto max-h-24\">")
 				if err != nil {
 					return err
 				}
-				var var_26 string = tmpl.HTMLContent
-				_, err = templBuffer.WriteString(templ.EscapeString(var_26))
+				var var_22 string = tmpl.HTMLContent
+				_, err = templBuffer.WriteString(templ.EscapeString(var_22))
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</pre></div>")
+				_, err = templBuffer.WriteString("</pre></div></div>")
 				if err != nil {
 					return err
 				}
@@ -270,7 +275,11 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 			}
 			return err
 		})
-		err = Layout(data.ProjectName+" - Templates").Render(templ.WithChildren(ctx, var_2), templBuffer)
+		err = components.PageShell(data.ProjectName+" - Templates", []components.Breadcrumb{
+			{Label: "Projects", URL: "/projects"},
+			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+			{Label: "Templates"},
+		}).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}
