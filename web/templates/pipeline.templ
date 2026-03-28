@@ -1,6 +1,9 @@
 package templates
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/zanfridau/marketminded/web/templates/components"
+)
 
 type PipelineListData struct {
 	ProjectID   int64
@@ -25,33 +28,38 @@ type PipelineStepView struct {
 }
 
 templ PipelineListPage(data PipelineListData) {
-	@Layout(data.ProjectName + " - Pipeline") {
-		<div class="flex-between mb-4">
-			<h1>Pipeline Runs</h1>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+	@components.PageShell(data.ProjectName+" - Pipeline", []components.Breadcrumb{
+		{Label: "Projects", URL: "/projects"},
+		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+		{Label: "Pipeline"},
+	}) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">Pipeline Runs</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost">Back</a>
 		</div>
-		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="card mb-2">
-			<div class="form-group">
-				<label>Topic</label>
-				<input type="text" name="topic" required placeholder="What should the content be about?"/>
-			</div>
-			<button type="submit" class="btn">Start New Run</button>
-		</form>
-		if len(data.Runs) == 0 {
-			<p class="text-muted">No pipeline runs yet. Enter a topic above to start.</p>
-		}
-		for _, run := range data.Runs {
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, run.ID)) } class="card" style="text-decoration:none;color:inherit;display:block">
-				<div class="flex-between">
-					<div>
-						<strong>{ run.Topic }</strong>
-					</div>
-					<div>
-						<span class={ "badge badge-" + run.Status }>{ run.Status }</span>
-					</div>
+		@components.Card("") {
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) }>
+				@components.FormGroup("Topic") {
+					<input type="text" name="topic" required placeholder="What should the content be about?" class="input input-bordered w-full"/>
+				}
+				<div class="mt-4">
+					@components.SubmitButton("Start New Run")
 				</div>
-			</a>
+			</form>
 		}
+		<div class="mt-4 flex flex-col gap-3">
+			if len(data.Runs) == 0 {
+				<p class="text-base-content/60">No pipeline runs yet. Enter a topic above to start.</p>
+			}
+			for _, run := range data.Runs {
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d", data.ProjectID, run.ID)) } class="card bg-base-100 shadow-sm border border-base-300 no-underline text-inherit block hover:shadow-md transition-shadow">
+					<div class="card-body p-4 flex-row items-center justify-between">
+						<strong>{ run.Topic }</strong>
+						@components.StatusBadge(run.Status)
+					</div>
+				</a>
+			}
+		</div>
 	}
 }
 
@@ -95,6 +103,49 @@ func (d ProductionBoardData) hasPendingSteps() bool {
 	return false
 }
 
+func stepProgressClass(status string) string {
+	switch status {
+	case "completed":
+		return "step step-success"
+	case "running":
+		return "step step-warning"
+	case "failed":
+		return "step step-error"
+	default:
+		return "step"
+	}
+}
+
+func stepIcon(status string) string {
+	switch status {
+	case "completed":
+		return "✓"
+	case "running":
+		return "●"
+	case "failed":
+		return "✗"
+	default:
+		return ""
+	}
+}
+
+func pieceBorderClass(status string) string {
+	switch status {
+	case "pending":
+		return "border-l-4 border-l-base-300 opacity-75 border-dashed"
+	case "generating":
+		return "border-l-4 border-l-warning"
+	case "draft":
+		return "border-l-4 border-l-info"
+	case "approved":
+		return "border-l-4 border-l-success"
+	case "rejected":
+		return "border-l-4 border-l-error"
+	default:
+		return "border-l-4 border-l-base-300"
+	}
+}
+
 templ stepTypeLabel(stepType string) {
 	switch stepType {
 	case "research":
@@ -115,161 +166,182 @@ templ stepTypeLabel(stepType string) {
 }
 
 templ ProductionBoardPage(data ProductionBoardData) {
-	@Layout(fmt.Sprintf("Pipeline: %s", data.Topic)) {
+	@components.PageShell(fmt.Sprintf("Pipeline: %s", data.Topic), []components.Breadcrumb{
+		{Label: "Projects", URL: "/projects"},
+		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+		{Label: "Pipeline", URL: fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)},
+		{Label: data.Topic},
+	}) {
 		<div id="cornerstone-pipeline-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-run-id={ fmt.Sprintf("%d", data.RunID) } data-next-piece-id={ fmt.Sprintf("%d", data.NextPieceID) }>
-			<div class="board-header flex-between mb-4">
-				<div>
-					<h1>{ data.Topic }</h1>
-					<span class={ "badge badge-" + data.Status }>{ data.Status }</span>
+			<div class="flex items-center justify-between mb-6">
+				<div class="flex items-center gap-3">
+					<h1 class="text-2xl font-bold">{ data.Topic }</h1>
+					@components.StatusBadge(data.Status)
 				</div>
-				<div>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary">Back</a>
+				<div class="flex items-center gap-2">
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-ghost">Back</a>
 					if data.Status != "complete" && data.Status != "abandoned" {
-						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } style="display:inline">
-							<button type="submit" class="btn btn-danger" style="margin-left:0.5rem">Abandon</button>
+						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } class="inline-block">
+							<button type="submit" class="btn btn-error btn-sm">Abandon</button>
 						</form>
 					}
 					if data.Status == "abandoned" {
-						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/delete", data.ProjectID, data.RunID)) } style="display:inline" onsubmit="return confirm('Delete this pipeline run and all its content? This cannot be undone.')">
-							<button type="submit" class="btn btn-danger" style="margin-left:0.5rem">Delete</button>
+						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/delete", data.ProjectID, data.RunID)) } class="inline-block" onsubmit="return confirm('Delete this pipeline run and all its content? This cannot be undone.')">
+							<button type="submit" class="btn btn-error btn-sm">Delete</button>
 						</form>
 					}
 				</div>
 			</div>
 
 			if len(data.Steps) > 0 {
-				<div class="mb-4">
-					if data.Brief != "" {
-						<div class="board-card topic-card" data-collapsed="true">
-							<div class="board-card-header" style="margin-bottom:0">
-								<strong>Topic</strong>
-							</div>
-							<div class="topic-brief" style="display:none;white-space:pre-wrap;font-size:0.85rem;color:#555;margin-top:0.5rem">{ data.Brief }</div>
-						</div>
+				<!-- Step progress indicator -->
+				<ul class="steps steps-horizontal w-full mb-6">
+					for _, step := range data.Steps {
+						<li class={ stepProgressClass(step.Status) } data-content={ stepIcon(step.Status) }>
+							@stepTypeLabel(step.StepType)
+						</li>
 					}
+				</ul>
+
+				if data.Brief != "" {
+					@components.CollapsibleCard("Topic", false) {
+						<div class="whitespace-pre-wrap text-sm text-base-content/70">{ data.Brief }</div>
+					}
+				}
+
+				<div class="flex flex-col gap-3 mt-4">
 					for _, step := range data.Steps {
 						<div
-							class="step-card board-card"
+							class="step-card board-card card bg-base-100 shadow-sm border border-base-300"
 							data-step-id={ fmt.Sprintf("%d", step.ID) }
 							data-status={ step.Status }
 							data-tool-calls={ step.ToolCalls }
 						>
-							<div class="board-card-header">
-								<strong>@stepTypeLabel(step.StepType)</strong>
-								<span class={ "badge badge-" + step.Status }>{ step.Status }</span>
+							<div class="card-body p-4">
+								<div class="board-card-header flex items-center justify-between">
+									<strong>@stepTypeLabel(step.StepType)</strong>
+									@components.StatusBadge(step.Status)
+								</div>
+								<div class="step-tool-pills flex flex-wrap gap-1 mt-2"></div>
+								<div class="step-thinking-ticker font-mono text-xs max-h-24 overflow-y-auto mt-1"></div>
+								if step.Status == "completed" && step.Output != "" {
+									<div class="step-output mt-2">{ step.Output }</div>
+								} else if step.Status == "failed" && step.Output != "" {
+									<details class="mt-2">
+										<summary class="cursor-pointer text-sm text-error">View failed output</summary>
+										<div class="step-stream whitespace-pre-wrap text-xs mt-2 max-h-72 overflow-y-auto p-2 bg-error/5 border border-error/20 rounded">{ step.Output }</div>
+									</details>
+								} else {
+									<div class="step-stream whitespace-pre-wrap text-sm mt-2 max-h-72 overflow-y-auto"></div>
+									<div class="step-output mt-2"></div>
+								}
 							</div>
-							<div class="step-tool-pills" style="margin-top:0.5rem"></div>
-							<div class="step-thinking-ticker" style="margin-top:0.25rem"></div>
-							if step.Status == "completed" && step.Output != "" {
-								<div class="step-output" style="margin-top:0.5rem">{ step.Output }</div>
-							} else if step.Status == "failed" && step.Output != "" {
-								<details class="step-output-details" style="margin-top:0.5rem">
-									<summary style="cursor:pointer;font-size:0.85rem;color:#dc2626">View failed output</summary>
-									<div class="step-stream" style="white-space:pre-wrap;font-size:0.8rem;margin-top:0.5rem;max-height:300px;overflow-y:auto;padding:0.5rem;background:#fef2f2;border:1px solid #fecaca;border-radius:4px">{ step.Output }</div>
-								</details>
-							} else {
-								<div class="step-stream" style="white-space:pre-wrap;font-size:0.85rem;margin-top:0.5rem;max-height:300px;overflow-y:auto"></div>
-								<div class="step-output" style="margin-top:0.5rem"></div>
-							}
 						</div>
 					}
 				</div>
+
 				if data.hasPendingSteps() {
-				<div class="mb-4">
-					<button class="btn" id="run-pipeline-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Run Pipeline</button>
-				</div>
-			}
-			}
-
-			for _, piece := range data.Pieces {
-				if piece.IsCornerstone {
-					<div
-						class={ "board-card",
-							templ.KV("board-card-cornerstone", piece.IsCornerstone),
-							templ.KV("board-card-pending", piece.Status == "pending"),
-							templ.KV("board-card-generating", piece.Status == "generating"),
-							templ.KV("board-card-draft", piece.Status == "draft"),
-							templ.KV("board-card-approved", piece.Status == "approved"),
-							templ.KV("board-card-rejected", piece.Status == "rejected"),
-						}
-						data-piece-id={ fmt.Sprintf("%d", piece.ID) }
-					>
-						<div class="board-card-header">
-							<div>
-								<span class="badge badge-planning">{ piece.Platform }/{ piece.Format }</span>
-								<span class="badge badge-approved" style="margin-left:0.25rem">cornerstone</span>
-								if piece.Title != "" {
-									<strong style="margin-left:0.5rem">{ piece.Title }</strong>
-								}
-							</div>
-							<span class={ "badge badge-" + piece.Status }>{ piece.Status }</span>
-						</div>
-
-						<div class={ "board-card-body", templ.KV("collapsed", piece.Status == "approved") } id={ fmt.Sprintf("piece-body-%d", piece.ID) } data-platform={ piece.Platform } data-format={ piece.Format }>
-							if piece.Body != "" {
-								{ piece.Body }
-							} else if piece.Status == "pending" {
-								<p class="text-muted">Waiting to be generated...</p>
-							}
-						</div>
-
-						if piece.RejectionReason != "" && piece.Status == "rejected" {
-							<p style="color:#dc2626;font-size:0.85rem;margin-bottom:0.5rem">Rejected: { piece.RejectionReason }</p>
-						}
-
-						<div class="board-card-actions" id={ fmt.Sprintf("piece-actions-%d", piece.ID) }>
-							if piece.Status == "generating" {
-								<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/abort", data.ProjectID, data.RunID, piece.ID)) } style="display:inline">
-									<button type="submit" class="btn btn-danger">Abort</button>
-								</form>
-							}
-							if piece.Status == "draft" {
-								<button class="btn piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>
-								<button class="btn btn-danger piece-reject-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Reject</button>
-								<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
-								<button class="btn btn-secondary proofread-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Proofread</button>
-							}
-							if piece.Status == "approved" {
-								<button class="btn btn-secondary piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
-								<button class="btn btn-secondary proofread-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Proofread</button>
-							}
-						</div>
+					<div class="mt-4">
+						<button class="btn btn-primary" id="run-pipeline-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Run Pipeline</button>
 					</div>
 				}
 			}
 
+			<div class="flex flex-col gap-3 mt-4">
+				for _, piece := range data.Pieces {
+					if piece.IsCornerstone {
+						<div
+							class={ "board-card card bg-base-100 shadow-sm border border-base-300",
+								pieceBorderClass(piece.Status),
+								templ.KV("board-card-cornerstone", piece.IsCornerstone),
+								templ.KV("board-card-pending", piece.Status == "pending"),
+								templ.KV("board-card-generating", piece.Status == "generating"),
+								templ.KV("board-card-draft", piece.Status == "draft"),
+								templ.KV("board-card-approved", piece.Status == "approved"),
+								templ.KV("board-card-rejected", piece.Status == "rejected"),
+							}
+							data-piece-id={ fmt.Sprintf("%d", piece.ID) }
+						>
+							<div class="card-body p-4">
+								<div class="board-card-header flex items-center justify-between">
+									<div class="flex items-center gap-2">
+										<span class="badge badge-outline">{ piece.Platform }/{ piece.Format }</span>
+										<span class="badge badge-success">cornerstone</span>
+										if piece.Title != "" {
+											<strong>{ piece.Title }</strong>
+										}
+									</div>
+									@components.StatusBadge(piece.Status)
+								</div>
+
+								<div class={ "board-card-body whitespace-pre-wrap text-sm mt-2", templ.KV("collapsed", piece.Status == "approved") } id={ fmt.Sprintf("piece-body-%d", piece.ID) } data-platform={ piece.Platform } data-format={ piece.Format }>
+									if piece.Body != "" {
+										{ piece.Body }
+									} else if piece.Status == "pending" {
+										<p class="text-base-content/60">Waiting to be generated...</p>
+									}
+								</div>
+
+								if piece.RejectionReason != "" && piece.Status == "rejected" {
+									<p class="text-error text-sm mt-2">Rejected: { piece.RejectionReason }</p>
+								}
+
+								<div class="board-card-actions flex gap-2 flex-wrap mt-3" id={ fmt.Sprintf("piece-actions-%d", piece.ID) }>
+									if piece.Status == "generating" {
+										<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/piece/%d/abort", data.ProjectID, data.RunID, piece.ID)) } class="inline-block">
+											<button type="submit" class="btn btn-error btn-sm">Abort</button>
+										</form>
+									}
+									if piece.Status == "draft" {
+										<button class="btn btn-success btn-sm piece-approve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Approve</button>
+										<button class="btn btn-error btn-sm piece-reject-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Reject</button>
+										<button class="btn btn-ghost btn-sm piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
+										<button class="btn btn-ghost btn-sm proofread-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Proofread</button>
+									}
+									if piece.Status == "approved" {
+										<button class="btn btn-ghost btn-sm piece-improve-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Improve</button>
+										<button class="btn btn-ghost btn-sm proofread-btn" data-piece-id={ fmt.Sprintf("%d", piece.ID) }>Proofread</button>
+									}
+								</div>
+							</div>
+						</div>
+					}
+				}
+			</div>
 		</div>
 	}
 }
 
-
 templ ContentEditPage(data ContentEditData) {
-	@Layout("Edit Content") {
-		<div class="flex-between mb-4">
-			<h1>Edit Content</h1>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-secondary">Back</a>
+	@components.PageShell("Edit Content", []components.Breadcrumb{
+		{Label: "Projects", URL: "/projects"},
+		{Label: "Content"},
+	}) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">Edit Content</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)) } class="btn btn-ghost">Back</a>
 		</div>
 
-		<div class="card">
-			<div class="flex-between mb-2">
-				<span class="badge badge-planning">{ data.Piece.Platform }/{ data.Piece.Format }</span>
-				<span class={ "badge badge-" + data.Piece.Status }>{ data.Piece.Status }</span>
+		@components.Card("") {
+			<div class="flex items-center justify-between mb-4">
+				<span class="badge badge-outline">{ data.Piece.Platform }/{ data.Piece.Format }</span>
+				@components.StatusBadge(data.Piece.Status)
 			</div>
 
 			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/content/%d", data.ProjectID, data.Piece.ID)) }>
-				<div class="form-group">
-					<label>Title</label>
-					<input type="text" name="title" value={ data.Piece.Title }/>
-				</div>
-				<div class="form-group">
-					<label>Body</label>
-					<textarea name="body" style="min-height:400px">{ data.Piece.Body }</textarea>
-				</div>
-				<button type="submit" class="btn">Save</button>
-				if data.Piece.Status == "draft" {
-					<button type="submit" name="action" value="approve" class="btn" style="margin-left:0.5rem;background:#059669">Approve</button>
+				@components.FormGroup("Title") {
+					<input type="text" name="title" value={ data.Piece.Title } class="input input-bordered w-full"/>
 				}
+				@components.FormGroup("Body") {
+					<textarea name="body" class="textarea textarea-bordered w-full min-h-96">{ data.Piece.Body }</textarea>
+				}
+				<div class="flex gap-2 mt-4">
+					<button type="submit" class="btn btn-primary">Save</button>
+					if data.Piece.Status == "draft" {
+						<button type="submit" name="action" value="approve" class="btn btn-success">Approve</button>
+					}
+				</div>
 			</form>
-		</div>
+		}
 	}
 }
