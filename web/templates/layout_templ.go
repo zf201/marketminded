@@ -22,7 +22,7 @@ func Layout(title string) templ.Component {
 			var_1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		_, err = templBuffer.WriteString("<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>")
+		_, err = templBuffer.WriteString("<!doctype html><html lang=\"en\" data-theme=\"business\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>")
 		if err != nil {
 			return err
 		}
@@ -40,7 +40,7 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
-		_, err = templBuffer.WriteString("</title><link rel=\"stylesheet\" href=\"/static/style.css\"><script defer src=\"https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js\">")
+		_, err = templBuffer.WriteString("</title><link rel=\"stylesheet\" href=\"/static/style.css\"><link rel=\"stylesheet\" href=\"/static/output.css\"><script defer src=\"https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js\">")
 		if err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
-		_, err = templBuffer.WriteString("</script><script src=\"/static/app.js\" defer>")
+		_, err = templBuffer.WriteString("</script><script src=\"/static/js/renderers/markdown.js\">")
 		if err != nil {
 			return err
 		}
@@ -67,12 +67,66 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/js/renderers/step-output.js\">")
+		if err != nil {
+			return err
+		}
+		var_7 := ``
+		_, err = templBuffer.WriteString(var_7)
+		if err != nil {
+			return err
+		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/js/renderers/content-body.js\">")
+		if err != nil {
+			return err
+		}
+		var_8 := ``
+		_, err = templBuffer.WriteString(var_8)
+		if err != nil {
+			return err
+		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/js/alpine-components/chat.js\">")
+		if err != nil {
+			return err
+		}
+		var_9 := ``
+		_, err = templBuffer.WriteString(var_9)
+		if err != nil {
+			return err
+		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/js/alpine-components/pipeline.js\">")
+		if err != nil {
+			return err
+		}
+		var_10 := ``
+		_, err = templBuffer.WriteString(var_10)
+		if err != nil {
+			return err
+		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/js/alpine-components/content-piece.js\">")
+		if err != nil {
+			return err
+		}
+		var_11 := ``
+		_, err = templBuffer.WriteString(var_11)
+		if err != nil {
+			return err
+		}
+		_, err = templBuffer.WriteString("</script><script src=\"/static/app.js\" defer>")
+		if err != nil {
+			return err
+		}
+		var_12 := ``
+		_, err = templBuffer.WriteString(var_12)
+		if err != nil {
+			return err
+		}
 		_, err = templBuffer.WriteString("</script></head><body><nav class=\"flex-between\"><a href=\"/\">")
 		if err != nil {
 			return err
 		}
-		var_7 := `MarketMinded`
-		_, err = templBuffer.WriteString(var_7)
+		var_13 := `MarketMinded`
+		_, err = templBuffer.WriteString(var_13)
 		if err != nil {
 			return err
 		}
@@ -80,8 +134,8 @@ func Layout(title string) templ.Component {
 		if err != nil {
 			return err
 		}
-		var_8 := `Settings`
-		_, err = templBuffer.WriteString(var_8)
+		var_14 := `Settings`
+		_, err = templBuffer.WriteString(var_14)
 		if err != nil {
 			return err
 		}
