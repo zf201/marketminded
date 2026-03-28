@@ -8,8 +8,12 @@ import (
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/config"
+	"github.com/zanfridau/marketminded/internal/pipeline"
+	"github.com/zanfridau/marketminded/internal/pipeline/steps"
+	"github.com/zanfridau/marketminded/internal/prompt"
 	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
+	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/web/handlers"
 )
 
@@ -51,10 +55,29 @@ func main() {
 		return cfg.ModelIdeation
 	}
 
+	// Prompt builder
+	promptBuilder, err := prompt.NewBuilder("prompts")
+	if err != nil {
+		log.Fatalf("prompts: %v", err)
+	}
+
+	// Tool registry and orchestrator
+	toolRegistry := tools.NewRegistry(braveClient)
+
+	orchestrator := pipeline.NewOrchestrator(
+		queries,
+		&steps.ResearchStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
+		&steps.BrandEnricherStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, ProjectSettings: queries, Model: contentModel},
+		&steps.FactcheckStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
+		&steps.ToneAnalyzerStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, ProjectSettings: queries, Model: contentModel},
+		&steps.EditorStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Pipeline: queries, ProjectSettings: queries, Model: contentModel},
+		&steps.WriterStep{AI: aiClient, Prompt: promptBuilder, Content: queries, Pipeline: queries, Model: copywritingModel},
+	)
+
 	// Handlers
 	dashboardHandler := handlers.NewDashboardHandler(queries)
 	projectHandler := handlers.NewProjectHandler(queries)
-	pipelineHandler := handlers.NewPipelineHandler(queries, aiClient, braveClient, contentModel, copywritingModel)
+	pipelineHandler := handlers.NewPipelineHandler(queries, orchestrator, aiClient, copywritingModel, promptBuilder)
 	contentHandler := handlers.NewContentHandler(queries)
 	templateHandler := handlers.NewTemplateHandler(queries)
 	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)

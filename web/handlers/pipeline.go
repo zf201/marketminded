@@ -7,45 +7,27 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/content"
-	"github.com/zanfridau/marketminded/internal/search"
+	"github.com/zanfridau/marketminded/internal/pipeline"
+	"github.com/zanfridau/marketminded/internal/prompt"
+	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
-	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
-const antiAIRules = `
-
-## Anti-AI writing rules (CRITICAL)
-
-NEVER use em dashes (—). They are the #1 marker of AI writing. Use commas, colons, or parentheses instead.
-No emoji in blog posts or scripts.
-
-Banned verbs: delve, leverage, optimize, utilize, facilitate, foster, bolster, underscore, unveil, navigate, streamline, enhance, endeavour, ascertain, elucidate
-Banned adjectives: robust, comprehensive, pivotal, crucial, vital, transformative, cutting-edge, groundbreaking, innovative, seamless, intricate, nuanced, multifaceted, holistic
-Banned transitions: furthermore, moreover, notwithstanding, "that being said", "at its core", "it is worth noting", "in the realm of", "in today's [anything]"
-Banned openings: "In today's fast-paced world", "In today's digital age", "In an era of", "In the ever-evolving landscape", "Let's delve into", "Imagine a world where"
-Banned conclusions: "In conclusion", "To sum up", "At the end of the day", "All things considered", "In the final analysis"
-Banned patterns: "Whether you're a X, Y, or Z", "It's not just X, it's also Y", starting sentences with "By" + gerund ("By understanding X, you can Y")
-Banned filler: absolutely, basically, certainly, clearly, definitely, essentially, extremely, fundamentally, incredibly, interestingly, naturally, obviously, quite, really, significantly, simply, surely, truly, ultimately, undoubtedly, very
-
-Use natural transitions instead: "Here's the thing", "But", "So", "Also", "Plus", "On top of that", "That said", "However"
-Vary sentence length. Read it aloud. If it sounds like a press release, rewrite it.`
-
 type PipelineHandler struct {
-	queries        *store.Queries
-	aiClient       *ai.Client
-	braveClient    *search.BraveClient
-	model          func() string
-	writerModel    func() string
+	queries       *store.Queries
+	orchestrator  *pipeline.Orchestrator
+	aiClient      *ai.Client
+	writerModel   func() string
+	promptBuilder *prompt.Builder
 }
 
-func NewPipelineHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string, writerModel func() string) *PipelineHandler {
-	return &PipelineHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model, writerModel: writerModel}
+func NewPipelineHandler(q *store.Queries, orchestrator *pipeline.Orchestrator, aiClient *ai.Client, writerModel func() string, promptBuilder *prompt.Builder) *PipelineHandler {
+	return &PipelineHandler{queries: q, orchestrator: orchestrator, aiClient: aiClient, writerModel: writerModel, promptBuilder: promptBuilder}
 }
 
 func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -210,39 +192,54 @@ func (h *PipelineHandler) deleteRun(w http.ResponseWriter, r *http.Request, proj
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline", projectID), http.StatusSeeOther)
 }
 
-// --- Piece generation ---
+// --- Step streaming (delegates to orchestrator) ---
 
-func (h *PipelineHandler) buildPiecePrompt(projectID int64, piece *store.ContentPiece, run *store.PipelineRun, profile string) string {
-	ct, ok := content.LookupType(piece.Platform, piece.Format)
+type httpStepStream struct{ sse *sse.Stream }
 
-	var promptText string
-	if ok {
-		promptText, _ = content.LoadPrompt(ct.PromptFile)
-	}
-	if promptText == "" {
-		// Fallback if prompt file not found
-		promptText = fmt.Sprintf("You are writing a %s %s.", piece.Platform, piece.Format)
-	}
-
-	prompt := fmt.Sprintf("Today's date: %s\n\n%s\n\n## Client profile\n%s\n",
-		time.Now().Format("January 2, 2006"), promptText, profile)
-
-	// Cornerstone — inject storytelling framework if set
-	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
-		if fw := content.FrameworkByKey(fwKey); fw != nil {
-			prompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\n", fw.Name, fw.Attribution, fw.PromptInstruction)
-		}
-	}
-	prompt += fmt.Sprintf("\n## Topic brief\n%s\n", run.Brief)
-
-	if piece.RejectionReason != "" {
-		prompt += fmt.Sprintf("\nPrevious version was rejected. Feedback: %s. Address this.\n", piece.RejectionReason)
-	}
-
-	prompt += antiAIRules
-
-	return prompt
+func (s *httpStepStream) SendChunk(chunk string) error {
+	s.sse.SendData(map[string]string{"type": "chunk", "chunk": chunk})
+	return nil
 }
+func (s *httpStepStream) SendThinking(chunk string) error {
+	s.sse.SendData(map[string]string{"type": "thinking", "chunk": chunk})
+	return nil
+}
+func (s *httpStepStream) SendEvent(v any) { s.sse.SendData(v) }
+func (s *httpStepStream) SendError(msg string) {
+	s.sse.SendData(map[string]string{"type": "error", "error": msg})
+}
+func (s *httpStepStream) SendDone() {
+	s.sse.SendData(map[string]string{"type": "done"})
+}
+
+func (h *PipelineHandler) streamStep(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	stepID := h.parseStepID(rest)
+
+	run, err := h.queries.GetPipelineRun(runID)
+	if err != nil {
+		http.Error(w, "Run not found", http.StatusNotFound)
+		return
+	}
+
+	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
+
+	sseStream, err := sse.New(w)
+	if err != nil {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	stream := &httpStepStream{sse: sseStream}
+
+	if err := h.orchestrator.RunStep(r.Context(), stepID, run, profile, stream); err != nil {
+		stream.SendError(err.Error())
+	}
+
+	stream.SendDone()
+}
+
+// --- Piece generation ---
 
 func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	runID := h.parseRunID(rest)
@@ -259,26 +256,73 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	run, _ := h.queries.GetPipelineRun(runID)
 	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
 
-	systemPrompt := h.buildPiecePrompt(projectID, piece, run, profile)
+	ct, ctOk := content.LookupType(piece.Platform, piece.Format)
+
+	var promptFile string
+	if ctOk {
+		promptFile = ct.PromptFile
+	}
+
+	var frameworkBlock string
+	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
+		if fw := content.FrameworkByKey(fwKey); fw != nil {
+			frameworkBlock = fmt.Sprintf("## Storytelling framework\nFramework: %s (%s)\n%s", fw.Name, fw.Attribution, fw.PromptInstruction)
+		}
+	}
+
+	systemPrompt := h.promptBuilder.ForPiece(promptFile, profile, run.Brief, frameworkBlock, piece.RejectionReason)
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: fmt.Sprintf("Write the %s %s now.", piece.Platform, piece.Format)},
 	}
 
-	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
+	sseStream, err := sse.New(w)
+	if err != nil {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	toolList, executor := h.buildTools(pieceID)
-	var tc []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID, &tc)
+	sendEvent := func(v any) { sseStream.SendData(v) }
+	sendChunk := func(chunk string) error {
+		sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
+		return nil
+	}
+	sendThinking := func(chunk string) error {
+		sseStream.SendData(map[string]string{"type": "thinking", "chunk": chunk})
+		return nil
+	}
+	sendDone := func() { sseStream.SendData(map[string]string{"type": "done"}) }
+	sendError := func(msg string) { sseStream.SendData(map[string]string{"type": "error", "error": msg}) }
 
-	// Add the content type's write tool
-	ct, ctOk := content.LookupType(piece.Platform, piece.Format)
+	// Write tool — saves content piece body directly
+	var toolList []ai.Tool
 	if ctOk {
 		toolList = append(toolList, ct.Tool)
+	}
+
+	executor := func(ctx context.Context, name, args string) (string, error) {
+		if content.IsWriteTool(name) && pieceID > 0 {
+			h.queries.UpdateContentPieceBody(pieceID, "", args)
+			h.queries.SetContentPieceStatus(pieceID, "draft")
+			return "Content saved successfully. The user will review it.", ai.ErrToolDone
+		}
+		return "", fmt.Errorf("unknown tool: %s", name)
+	}
+
+	onToolEvent := func(event ai.ToolEvent) {
+		if event.Type == "tool_result" && content.IsWriteTool(event.Tool) && pieceID > 0 {
+			p, err := h.queries.GetContentPiece(pieceID)
+			if err == nil {
+				sendEvent(map[string]any{
+					"type":     "content_written",
+					"platform": p.Platform,
+					"format":   p.Format,
+					"data":     json.RawMessage(p.Body),
+				})
+			}
+			sendDone()
+		}
 	}
 
 	temp := 0.3
@@ -392,10 +436,19 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
 	}
 
-	flusher, sendEvent, sendChunk, _, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
+	sseStream, err := sse.New(w)
+	if err != nil {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
+
+	sendEvent := func(v any) { sseStream.SendData(v) }
+	sendChunk := func(chunk string) error {
+		sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
+		return nil
+	}
+	sendDone := func() { sseStream.SendData(map[string]string{"type": "done"}) }
+	sendError := func(msg string) { sseStream.SendData(map[string]string{"type": "error", "error": msg}) }
 
 	// Only the write tool — no fetch/search for improve (minimal context)
 	var toolList []ai.Tool
@@ -410,8 +463,21 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
-	var tc2 []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, pieceID, &tc2)
+
+	onToolEvent := func(event ai.ToolEvent) {
+		if event.Type == "tool_result" && content.IsWriteTool(event.Tool) && pieceID > 0 {
+			p, err := h.queries.GetContentPiece(pieceID)
+			if err == nil {
+				sendEvent(map[string]any{
+					"type":     "content_written",
+					"platform": p.Platform,
+					"format":   p.Format,
+					"data":     json.RawMessage(p.Body),
+				})
+			}
+			sendDone()
+		}
+	}
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
@@ -442,142 +508,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 	sendDone()
 }
 
-// --- Helpers ---
-
-func (h *PipelineHandler) setupSSE(w http.ResponseWriter) (http.Flusher, func(any), func(string) error, func(string) error, func(), func(string)) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return nil, nil, nil, nil, nil, nil
-	}
-
-	sendEvent := func(v any) {
-		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
-	}
-
-	sendChunk := func(chunk string) error {
-		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
-		return nil
-	}
-
-	sendThinking := func(chunk string) error {
-		sendEvent(map[string]string{"type": "thinking", "chunk": chunk})
-		return nil
-	}
-
-	sendDone := func() {
-		sendEvent(map[string]string{"type": "done"})
-	}
-
-	sendError := func(errMsg string) {
-		sendEvent(map[string]string{"type": "error", "error": errMsg})
-	}
-
-	return flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError
-}
-
-func (h *PipelineHandler) buildTools(pieceID int64) ([]ai.Tool, ai.ToolExecutor) {
-	toolList := []ai.Tool{
-		tools.NewFetchTool(),
-		tools.NewSearchTool(),
-	}
-
-	searchExec := tools.NewSearchExecutor(h.braveClient)
-
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		switch name {
-		case "fetch_url":
-			return tools.ExecuteFetch(ctx, args)
-		case "web_search":
-			return searchExec(ctx, args)
-		default:
-			if content.IsWriteTool(name) && pieceID > 0 {
-				// Save structured content to piece body
-				h.queries.UpdateContentPieceBody(pieceID, "", args)
-				h.queries.SetContentPieceStatus(pieceID, "draft")
-				return "Content saved successfully. The user will review it.", ai.ErrToolDone
-			}
-			return "", fmt.Errorf("unknown tool: %s", name)
-		}
-	}
-
-	return toolList, executor
-}
-
-type toolCallRecord struct {
-	Type  string `json:"type"`
-	Value string `json:"value"`
-}
-
-func (h *PipelineHandler) buildToolEventCallback(sendEvent func(any), pieceID int64, toolCalls *[]toolCallRecord) ai.ToolEventFn {
-	return func(event ai.ToolEvent) {
-		switch event.Type {
-		case "tool_start":
-			if content.IsWriteTool(event.Tool) || event.Tool == "submit_production_plan" {
-				return
-			}
-			summary := ""
-			switch event.Tool {
-			case "fetch_url":
-				summary = tools.FetchSummary(event.Args)
-				// Extract URL for pill display
-				var args struct{ URL string `json:"url"` }
-				if json.Unmarshal([]byte(event.Args), &args) == nil && args.URL != "" {
-					*toolCalls = append(*toolCalls, toolCallRecord{Type: "fetch", Value: args.URL})
-				}
-			case "web_search":
-				summary = tools.SearchSummary(event.Args)
-				// Extract query for pill display
-				var args struct{ Query string `json:"query"` }
-				if json.Unmarshal([]byte(event.Args), &args) == nil && args.Query != "" {
-					*toolCalls = append(*toolCalls, toolCallRecord{Type: "search", Value: args.Query})
-				}
-			}
-			evt := map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary}
-			if event.Tool == "fetch_url" {
-				var a struct{ URL string `json:"url"` }
-				if json.Unmarshal([]byte(event.Args), &a) == nil { evt["url"] = a.URL }
-			} else if event.Tool == "web_search" {
-				var a struct{ Query string `json:"query"` }
-				if json.Unmarshal([]byte(event.Args), &a) == nil { evt["query"] = a.Query }
-			}
-			sendEvent(evt)
-		case "tool_result":
-			if content.IsWriteTool(event.Tool) && pieceID > 0 {
-				piece, err := h.queries.GetContentPiece(pieceID)
-				if err == nil {
-					sendEvent(map[string]any{
-						"type":     "content_written",
-						"platform": piece.Platform,
-						"format":   piece.Format,
-						"data":     json.RawMessage(piece.Body),
-					})
-				}
-				sendEvent(map[string]string{"type": "done"})
-				return
-			}
-			summary := event.Summary
-			if len(summary) > 200 {
-				summary = summary[:200] + "..."
-			}
-			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
-		}
-	}
-}
-
-func toolCallsJSON(calls []toolCallRecord) string {
-	if len(calls) == 0 {
-		return ""
-	}
-	data, _ := json.Marshal(calls)
-	return string(data)
-}
+// --- Proofread ---
 
 func (h *PipelineHandler) proofread(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	pieceID := h.parsePieceID(rest)
@@ -628,6 +559,8 @@ func (h *PipelineHandler) saveProofread(w http.ResponseWriter, r *http.Request, 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
 }
 
+// --- URL parsing helpers ---
+
 func (h *PipelineHandler) parseRunID(rest string) int64 {
 	// rest = "pipeline/123" or "pipeline/123/..."
 	parts := strings.Split(strings.TrimPrefix(rest, "pipeline/"), "/")
@@ -658,1050 +591,3 @@ func (h *PipelineHandler) parseStepID(rest string) int64 {
 	}
 	return 0
 }
-
-// --- Researcher agent ---
-
-func (h *PipelineHandler) researchTool() ai.Tool {
-	return ai.Tool{
-		Type: "function",
-		Function: ai.ToolFunction{
-			Name:        "submit_research",
-			Description: "Submit your research findings. Call this when you have gathered sufficient sources and are ready to write the research brief.",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"sources": {
-						"type": "array",
-						"description": "List of sources found during research",
-						"items": {
-							"type": "object",
-							"properties": {
-								"url": {"type": "string", "description": "Source URL"},
-								"title": {"type": "string", "description": "Source title"},
-								"summary": {"type": "string", "description": "What this source contributes"},
-								"date": {"type": "string", "description": "Publication date if known"}
-							},
-							"required": ["url", "title", "summary"]
-						}
-					},
-					"brief": {
-						"type": "string",
-						"description": "A comprehensive research brief synthesizing all findings. Include key facts, angles, statistics, and anything the writer needs to produce an authoritative piece."
-					}
-				},
-				"required": ["sources", "brief"]
-			}`),
-		},
-	}
-}
-
-func (h *PipelineHandler) streamResearch(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun) {
-	ok, err := h.queries.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		http.Error(w, "Step already running or completed", http.StatusConflict)
-		return
-	}
-
-	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
-
-	systemPrompt := fmt.Sprintf(`Today's date: %s
-
-You are a research specialist. Your job is to gather reliable, up-to-date information on a topic so a writer can produce an authoritative piece.
-
-Client profile:
-%s
-
-Topic brief:
-%s
-
-Search the web thoroughly. Look for:
-- Key facts, data, and statistics
-- Recent developments (last 12 months preferred)
-- Expert opinions and quotes if available
-- Relevant angles and sub-topics
-- Anything that makes this topic interesting or surprising
-
-Fetch pages when search snippets are insufficient. Aim for at least 3-5 solid sources.
-
-When you have gathered enough material, call submit_research with your sources and a comprehensive brief.`, time.Now().Format("January 2, 2006"), profile, run.Brief)
-
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: "Begin researching this topic now."},
-	}
-
-	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
-		return
-	}
-
-	toolList, baseExecutor := h.buildTools(0)
-	toolList = append(toolList, h.researchTool())
-
-	var thinkingBuf strings.Builder
-	var savedOutput string
-
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if name == "submit_research" {
-			savedOutput = args
-			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
-			return "Research saved successfully.", ai.ErrToolDone
-		}
-		return baseExecutor(ctx, name, args)
-	}
-
-	origSendThinking := sendThinking
-	capturingSendThinking := func(chunk string) error {
-		thinkingBuf.WriteString(chunk)
-		return origSendThinking(chunk)
-	}
-
-	var toolCallsList []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
-
-	var chunkBuf strings.Builder
-	captureChunk := func(chunk string) error {
-		chunkBuf.WriteString(chunk)
-		return sendChunk(chunk)
-	}
-
-	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp, 25)
-	if err != nil {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError(err.Error())
-		return
-	}
-
-	if savedOutput == "" {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError("Researcher did not submit findings via tool call. Try again.")
-		return
-	}
-
-	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-	h.queries.UpdatePipelineStepStatus(stepID, "completed")
-	sendDone()
-}
-
-// --- Fact-checker agent ---
-
-func (h *PipelineHandler) factcheckTool() ai.Tool {
-	return ai.Tool{
-		Type: "function",
-		Function: ai.ToolFunction{
-			Name:        "submit_factcheck",
-			Description: "Submit your fact-check results. Call this when you have verified the research and are ready to provide the enriched brief.",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"issues_found": {
-						"type": "array",
-						"description": "List of issues found during fact-checking (may be empty if everything checks out)",
-						"items": {
-							"type": "object",
-							"properties": {
-								"claim": {"type": "string", "description": "The claim that was checked"},
-								"problem": {"type": "string", "description": "What is wrong or uncertain"},
-								"resolution": {"type": "string", "description": "How to address this in the final content"}
-							},
-							"required": ["claim", "problem", "resolution"]
-						}
-					},
-					"enriched_brief": {
-						"type": "string",
-						"description": "The research brief, corrected and enriched with any additional context from fact-checking. This is what the writer will use."
-					},
-					"sources": {
-						"type": "array",
-						"description": "Verified sources to cite in the final piece",
-						"items": {
-							"type": "object",
-							"properties": {
-								"url": {"type": "string"},
-								"title": {"type": "string"},
-								"summary": {"type": "string"},
-								"date": {"type": "string"}
-							},
-							"required": ["url", "title", "summary"]
-						}
-					}
-				},
-				"required": ["issues_found", "enriched_brief", "sources"]
-			}`),
-		},
-	}
-}
-
-func (h *PipelineHandler) streamFactcheck(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, researchOutput string) {
-	ok, err := h.queries.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		http.Error(w, "Step already running or completed", http.StatusConflict)
-		return
-	}
-
-	systemPrompt := fmt.Sprintf(`Today's date: %s
-
-You are a fact-checker. Verify the key claims in the research brief below, then call submit_factcheck with your findings.
-
-## Research output to verify
-%s
-
-## Workflow
-1. Identify the 3-5 most important claims that could be wrong (prices, dates, statistics, percentages)
-2. Do focused searches to verify those specific claims — do NOT try to verify everything
-3. Correct anything wrong, add caveats where needed
-4. Call submit_factcheck with the enriched brief and complete sources list
-
-## Rules
-- Be efficient. 3-5 targeted searches, not 15+ scattered ones.
-- Focus on claims that would embarrass the brand if wrong (prices, percentages, dates).
-- Accept reasonable claims from credible sources without re-verifying.
-- Your sources list MUST include ALL sources from the input above, plus any new ones. Never drop sources.
-- Call submit_factcheck when done. This is your only way to deliver results.`, time.Now().Format("January 2, 2006"), researchOutput)
-
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: "Begin fact-checking now."},
-	}
-
-	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
-		return
-	}
-
-	toolList, baseExecutor := h.buildTools(0)
-	toolList = append(toolList, h.factcheckTool())
-
-	var savedOutput string
-
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if name == "submit_factcheck" {
-			savedOutput = args
-			h.queries.UpdatePipelineStepOutput(stepID, args, "")
-			return "Fact-check saved successfully.", ai.ErrToolDone
-		}
-		return baseExecutor(ctx, name, args)
-	}
-
-	var toolCallsList []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
-
-	var chunkBuf strings.Builder
-	captureChunk := func(chunk string) error {
-		chunkBuf.WriteString(chunk)
-		return sendChunk(chunk)
-	}
-
-	temp := 0.2
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, sendThinking, &temp, 20)
-	if err != nil {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError(err.Error())
-		return
-	}
-
-	if savedOutput == "" {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), "")
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError("Fact-checker did not submit results via tool call. Try again.")
-		return
-	}
-
-	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-	h.queries.UpdatePipelineStepStatus(stepID, "completed")
-	sendDone()
-}
-
-// --- Source collection helper ---
-
-type pipelineSource struct {
-	URL, Title, Summary, Date string
-}
-
-func collectSources(steps []store.PipelineStep) []pipelineSource {
-	seen := map[string]bool{}
-	var sources []pipelineSource
-	for _, s := range steps {
-		if s.Output == "" {
-			continue
-		}
-		var parsed struct {
-			Sources []struct {
-				URL     string `json:"url"`
-				Title   string `json:"title"`
-				Summary string `json:"summary"`
-				Date    string `json:"date"`
-			} `json:"sources"`
-		}
-		if json.Unmarshal([]byte(s.Output), &parsed) == nil {
-			for _, src := range parsed.Sources {
-				if src.URL != "" && !seen[src.URL] {
-					seen[src.URL] = true
-					sources = append(sources, pipelineSource{src.URL, src.Title, src.Summary, src.Date})
-				}
-			}
-		}
-	}
-	return sources
-}
-
-func formatSourcesText(sources []pipelineSource) string {
-	if len(sources) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("\n## Sources (from research, brand analysis, and fact-checking)\n")
-	for _, s := range sources {
-		line := fmt.Sprintf("- [%s](%s): %s", s.Title, s.URL, s.Summary)
-		if s.Date != "" {
-			line += fmt.Sprintf(" (%s)", s.Date)
-		}
-		b.WriteString(line + "\n")
-	}
-	return b.String()
-}
-
-// --- Editor agent ---
-
-func (h *PipelineHandler) editorOutlineTool() ai.Tool {
-	return ai.Tool{
-		Type: "function",
-		Function: ai.ToolFunction{
-			Name:        "submit_editorial_outline",
-			Description: "Submit the structured editorial outline for the writer. Call this when you have determined the narrative structure.",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"angle": {
-						"type": "string",
-						"description": "The core narrative angle in one sentence"
-					},
-					"sections": {
-						"type": "array",
-						"description": "Ordered sections of the article",
-						"items": {
-							"type": "object",
-							"properties": {
-								"heading": {"type": "string", "description": "Suggested section heading"},
-								"framework_beat": {"type": "string", "description": "Storytelling framework beat this maps to, if any"},
-								"key_points": {
-									"type": "array",
-									"items": {"type": "string"},
-									"description": "Specific points to make, with data/stats where relevant"
-								},
-								"sources_to_use": {
-									"type": "array",
-									"items": {"type": "string"},
-									"description": "Source URLs that back the points in this section"
-								},
-								"editorial_notes": {"type": "string", "description": "Tone and approach guidance for this section"}
-							},
-							"required": ["heading", "key_points"]
-						}
-					},
-					"conclusion_strategy": {
-						"type": "string",
-						"description": "How to close: what ties back, what CTA, what feeling to leave"
-					}
-				},
-				"required": ["angle", "sections", "conclusion_strategy"]
-			}`),
-		},
-	}
-}
-
-func (h *PipelineHandler) streamEditor(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, factcheckOutput string) {
-	ok, err := h.queries.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		http.Error(w, "Step already running or completed", http.StatusConflict)
-		return
-	}
-
-	var factcheck struct {
-		EnrichedBrief string `json:"enriched_brief"`
-	}
-	_ = json.Unmarshal([]byte(factcheckOutput), &factcheck)
-
-	steps, _ := h.queries.ListPipelineSteps(run.ID)
-	allSources := collectSources(steps)
-	sourcesText := formatSourcesText(allSources)
-
-	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
-
-	brief := factcheck.EnrichedBrief
-	if brief == "" {
-		brief = run.Brief
-	}
-
-	systemPrompt := fmt.Sprintf(`Today's date: %s
-
-You are an editorial director. You receive research, sources, and brand context about a topic. Your job is to craft a structured editorial outline that a copywriter will use to write the final article.
-
-Your job is narrative reasoning:
-- Analyze the research and determine the strongest angle/hook
-- Decide what facts to include, what to cut, and how to order them for maximum impact
-- Build a logical throughline so the conclusion feels inevitable, not forced
-- Specify which sources back which points
-- Produce a tight outline the writer can execute without needing the raw research
-
-Do NOT write the article. Produce only the structural outline via the tool.
-
-## Client profile
-%s
-
-## Research brief
-%s
-%s`, time.Now().Format("January 2, 2006"), profile, brief, sourcesText)
-
-	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
-		if fw := content.FrameworkByKey(fwKey); fw != nil {
-			systemPrompt += fmt.Sprintf("\n## Storytelling framework\nFramework: %s (%s)\n%s\nMap the framework beats to the article sections in your outline.\n", fw.Name, fw.Attribution, fw.PromptInstruction)
-		}
-	}
-
-	for _, s := range steps {
-		if s.StepType == "tone_analyzer" && s.Status == "completed" && s.Output != "" {
-			var toneResult struct {
-				ToneGuide string `json:"tone_guide"`
-			}
-			if json.Unmarshal([]byte(s.Output), &toneResult) == nil && toneResult.ToneGuide != "" {
-				systemPrompt += "\n## Tone & style reference\nKeep this voice in mind when choosing the angle and editorial notes.\n\n"
-				systemPrompt += toneResult.ToneGuide + "\n"
-			}
-			break
-		}
-	}
-
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: "Create the editorial outline now."},
-	}
-
-	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
-		return
-	}
-
-	toolList := []ai.Tool{h.editorOutlineTool()}
-
-	var thinkingBuf strings.Builder
-	var savedOutput string
-
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if name == "submit_editorial_outline" {
-			savedOutput = args
-			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
-			return "Editorial outline saved successfully.", ai.ErrToolDone
-		}
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
-
-	origSendThinking := sendThinking
-	capturingSendThinking := func(chunk string) error {
-		thinkingBuf.WriteString(chunk)
-		return origSendThinking(chunk)
-	}
-
-	var toolCallsList []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
-
-	var chunkBuf strings.Builder
-	captureChunk := func(chunk string) error {
-		chunkBuf.WriteString(chunk)
-		return sendChunk(chunk)
-	}
-
-	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, capturingSendThinking, &temp, 5)
-	if err != nil {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError(err.Error())
-		return
-	}
-
-	if savedOutput == "" {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError("Editor did not submit outline via tool call. Try again.")
-		return
-	}
-
-	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-	h.queries.UpdatePipelineStepStatus(stepID, "completed")
-	sendDone()
-}
-
-// --- Writer agent ---
-
-func (h *PipelineHandler) streamWrite(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, editorOutput string) {
-	ok, err := h.queries.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		http.Error(w, "Step already running or completed", http.StatusConflict)
-		return
-	}
-
-	// Defaults for cornerstone
-	platform := "blog"
-	format := "post"
-
-	ct, ctOk := content.LookupType(platform, format)
-	var promptText string
-	if ctOk {
-		promptText, _ = content.LoadPrompt(ct.PromptFile)
-	}
-	if promptText == "" {
-		promptText = fmt.Sprintf("You are writing a %s %s.", platform, format)
-	}
-
-	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
-
-	systemPrompt := fmt.Sprintf("Today's date: %s\n\n%s\n\n## Client profile\n%s\n",
-		time.Now().Format("January 2, 2006"), promptText, profile)
-
-	// Editorial outline is the primary input
-	systemPrompt += fmt.Sprintf("\n## Editorial outline\nFollow this outline closely. It defines the angle, structure, and key points. Your job is to write compelling prose that brings this outline to life.\n\n%s\n", editorOutput)
-
-	// Check for rejected cornerstone piece — include rejection reason for re-runs
-	pieces, _ := h.queries.ListContentByPipelineRun(run.ID)
-	for _, p := range pieces {
-		if p.ParentID == nil && p.Status == "rejected" && p.RejectionReason != "" {
-			systemPrompt += fmt.Sprintf("\n## Previous rejection feedback\n%s. Address this in the new version.\n", p.RejectionReason)
-			break
-		}
-	}
-
-	// Inject tone reference from tone_analyzer step (if it ran)
-	steps, _ := h.queries.ListPipelineSteps(run.ID)
-	for _, s := range steps {
-		if s.StepType == "tone_analyzer" && s.Status == "completed" && s.Output != "" {
-			var toneResult struct {
-				ToneGuide string `json:"tone_guide"`
-				Posts     []struct {
-					Title string `json:"title"`
-					URL   string `json:"url"`
-				} `json:"posts"`
-			}
-			if json.Unmarshal([]byte(s.Output), &toneResult) == nil && toneResult.ToneGuide != "" {
-				systemPrompt += "\n## Tone & style reference (from company blog)\nUse this ONLY to match the writing tone, voice, and style. Do NOT use any factual information from the blog posts — all facts must come from the editorial outline above.\n\n"
-				systemPrompt += toneResult.ToneGuide + "\n"
-			}
-			break
-		}
-	}
-
-	systemPrompt += antiAIRules
-
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: "Write the cornerstone blog post now."},
-	}
-
-	flusher, sendEvent, sendChunk, sendThinking, _, sendError := h.setupSSE(w)
-	if flusher == nil {
-		return
-	}
-
-	// Writer only gets the write tool — no fetch/search
-	var toolList []ai.Tool
-	if ctOk {
-		toolList = []ai.Tool{ct.Tool}
-	}
-
-	var savedPieceID int64
-
-	ctx := r.Context()
-
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if content.IsWriteTool(name) {
-			// Parse title from args
-			var writeArgs struct {
-				Title string `json:"title"`
-			}
-			_ = json.Unmarshal([]byte(args), &writeArgs)
-			title := writeArgs.Title
-			if title == "" {
-				title = run.Topic
-			}
-
-			// Create cornerstone ContentPiece (sort_order=0, nil parent)
-			piece, err := h.queries.CreateContentPiece(projectID, run.ID, platform, format, title, 0, nil)
-			if err != nil {
-				return "", fmt.Errorf("failed to create content piece: %w", err)
-			}
-			savedPieceID = piece.ID
-
-			// Update pipeline run title with the article title
-			h.queries.UpdatePipelineTopic(run.ID, title)
-
-			// Save body and set status
-			h.queries.UpdateContentPieceBody(piece.ID, title, args)
-			h.queries.SetContentPieceStatus(piece.ID, "draft")
-
-			// Update step output and status
-			h.queries.UpdatePipelineStepOutput(stepID, args, "")
-			h.queries.UpdatePipelineStepStatus(stepID, "completed")
-
-			return "Content piece created successfully.", ai.ErrToolDone
-		}
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
-
-	onToolEvent := func(event ai.ToolEvent) {
-		if event.Type == "tool_result" && content.IsWriteTool(event.Tool) && savedPieceID > 0 {
-			piece, err := h.queries.GetContentPiece(savedPieceID)
-			if err == nil {
-				sendEvent(map[string]any{
-					"type":     "content_written",
-					"platform": piece.Platform,
-					"format":   piece.Format,
-					"data":     json.RawMessage(piece.Body),
-				})
-			}
-			sendEvent(map[string]string{"type": "done"})
-		}
-	}
-
-	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(ctx, h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
-	if err != nil && savedPieceID == 0 {
-		// Only mark failed if the write tool wasn't called (context cancel after tool is expected)
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError(err.Error())
-		return
-	}
-
-	if savedPieceID == 0 {
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError("Writer did not submit content via tool call. Try again.")
-		return
-	}
-
-	// Step was already marked completed and done sent by the tool event callback
-}
-
-// --- Step dispatcher ---
-
-func (h *PipelineHandler) streamStep(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	runID := h.parseRunID(rest)
-	stepID := h.parseStepID(rest)
-
-	step, err := h.queries.GetPipelineStep(stepID)
-	if err != nil {
-		http.Error(w, "Step not found", http.StatusNotFound)
-		return
-	}
-
-	run, err := h.queries.GetPipelineRun(runID)
-	if err != nil {
-		http.Error(w, "Run not found", http.StatusNotFound)
-		return
-	}
-
-	steps, _ := h.queries.ListPipelineSteps(runID)
-
-	// Helper to find completed step output
-	findOutput := func(stepType string) (string, bool) {
-		for _, s := range steps {
-			if s.StepType == stepType {
-				if s.Status != "completed" {
-					return "", false
-				}
-				return s.Output, true
-			}
-		}
-		return "", false
-	}
-
-	switch step.StepType {
-	case "research":
-		h.streamResearch(w, r, projectID, stepID, run)
-
-	case "brand_enricher":
-		researchOutput, ok := findOutput("research")
-		if !ok {
-			http.Error(w, "Research step not completed yet", http.StatusConflict)
-			return
-		}
-		h.streamBrandEnricher(w, r, projectID, stepID, run, researchOutput)
-
-	case "factcheck":
-		// Fact-checker receives the brand-enriched research
-		enricherOutput, ok := findOutput("brand_enricher")
-		if !ok {
-			http.Error(w, "Brand enricher step not completed yet", http.StatusConflict)
-			return
-		}
-		h.streamFactcheck(w, r, projectID, stepID, run, enricherOutput)
-
-	case "tone_analyzer":
-		h.streamToneAnalyzer(w, r, projectID, stepID, run)
-
-	case "editor":
-		factcheckOutput, ok := findOutput("factcheck")
-		if !ok {
-			http.Error(w, "Factcheck step not completed yet", http.StatusConflict)
-			return
-		}
-		h.streamEditor(w, r, projectID, stepID, run, factcheckOutput)
-
-	case "write":
-		editorOutput, ok := findOutput("editor")
-		if !ok {
-			http.Error(w, "Editor step not completed yet", http.StatusConflict)
-			return
-		}
-		h.streamWrite(w, r, projectID, stepID, run, editorOutput)
-
-	default:
-		http.Error(w, "Unknown step type: "+step.StepType, http.StatusBadRequest)
-	}
-}
-
-// --- Brand Enricher agent ---
-
-func (h *PipelineHandler) brandEnricherTool() ai.Tool {
-	return ai.Tool{
-		Type: "function",
-		Function: ai.ToolFunction{
-			Name:        "submit_brand_enrichment",
-			Description: "Submit the enriched research brief. You MUST call this tool to deliver your results.",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"enriched_brief": {"type": "string", "description": "The complete research brief rewritten with brand context woven in — product names, pricing, features, messaging. Include everything the writer needs."},
-					"sources": {
-						"type": "array",
-						"description": "ALL sources: original research sources plus brand URLs you fetched",
-						"items": {
-							"type": "object",
-							"properties": {
-								"url": {"type": "string"},
-								"title": {"type": "string"},
-								"summary": {"type": "string"}
-							},
-							"required": ["url", "title"]
-						}
-					}
-				},
-				"required": ["enriched_brief", "sources"]
-			}`),
-		},
-	}
-}
-
-func (h *PipelineHandler) streamBrandEnricher(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun, researchOutput string) {
-	ok, err := h.queries.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		http.Error(w, "Step already running or completed", http.StatusConflict)
-		return
-	}
-
-	// Collect brand URLs and their usage notes
-	settings, _ := h.queries.AllProjectSettings(projectID)
-	type brandURL struct {
-		URL   string
-		Notes string
-		Label string
-	}
-	var urls []brandURL
-	if v := settings["company_website"]; v != "" {
-		for _, u := range splitURLs(v) {
-			urls = append(urls, brandURL{URL: u, Notes: settings["website_notes"], Label: "Company Website"})
-		}
-	}
-	if v := settings["company_pricing"]; v != "" {
-		for _, u := range splitURLs(v) {
-			urls = append(urls, brandURL{URL: u, Notes: settings["pricing_notes"], Label: "Pricing Page"})
-		}
-	}
-	if len(urls) == 0 {
-		// No brand URLs configured — pass research through unchanged
-		h.queries.UpdatePipelineStepOutput(stepID, researchOutput, "")
-		h.queries.UpdatePipelineStepStatus(stepID, "completed")
-		flusher, _, _, _, sendDone, _ := h.setupSSE(w)
-		if flusher == nil {
-			return
-		}
-		sendDone()
-		return
-	}
-
-	// Build the URL list for the prompt
-	var urlList strings.Builder
-	for _, u := range urls {
-		fmt.Fprintf(&urlList, "- %s: %s", u.Label, u.URL)
-		if u.Notes != "" {
-			fmt.Fprintf(&urlList, " (Usage notes: %s)", u.Notes)
-		}
-		urlList.WriteString("\n")
-	}
-
-	profile, _ := h.queries.BuildProfileStringExcluding(projectID, []string{"content_strategy"})
-
-	systemPrompt := fmt.Sprintf(`Today's date: %s
-
-You are a brand enricher. You receive market research about a specific topic and company brand URLs. Your job is to connect the research topic to the brand's actual offerings.
-
-## Workflow
-
-1. Read the research brief carefully — understand what specific topic the article is about
-2. Fetch each company URL below
-3. Critically evaluate what you find: only extract information that is directly relevant to the article's topic. A page may contain 20 products but only 2 matter for this article. Ignore the rest.
-4. Enrich the research brief with the relevant brand context — specific product names, pricing, features, value propositions that connect to the topic
-5. Call submit_brand_enrichment with the enriched brief and complete sources list
-
-## Client profile
-%s
-
-## Research to enrich
-%s
-
-## Company URLs to fetch
-%s
-
-## Rules
-- Fetch ALL URLs above, but be selective about what you extract. More is not better — relevance is.
-- Ask yourself: "Would a writer need this specific detail for THIS article?" If not, leave it out.
-- Include specific numbers (pricing, terms, features) that strengthen the article's argument.
-- Your sources list MUST include ALL sources from the original research, plus the brand URLs you fetched. Never drop sources.
-- When done, call submit_brand_enrichment. This is your only way to deliver results.`,
-		time.Now().Format("January 2, 2006"), profile, researchOutput, urlList.String())
-
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: "Fetch the brand URLs and enrich the research with brand context."},
-	}
-
-	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
-		return
-	}
-
-	// Brand enricher gets fetch_url tool + the submit tool
-	toolList := []ai.Tool{
-		tools.NewFetchTool(),
-		h.brandEnricherTool(),
-	}
-
-	searchExec := tools.NewSearchExecutor(h.braveClient)
-	var savedOutput string
-	var thinkingBuf strings.Builder
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if name == "submit_brand_enrichment" {
-			savedOutput = args
-			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
-			h.queries.UpdatePipelineStepStatus(stepID, "completed")
-			return "Brand enrichment saved successfully.", ai.ErrToolDone
-		}
-		if name == "fetch_url" {
-			return tools.ExecuteFetch(ctx, args)
-		}
-		if name == "web_search" {
-			return searchExec(ctx, args)
-		}
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
-	var toolCallsList []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
-
-	captureThinking := func(chunk string) error {
-		thinkingBuf.WriteString(chunk)
-		return sendThinking(chunk)
-	}
-
-	var chunkBuf strings.Builder
-	captureChunk := func(chunk string) error {
-		chunkBuf.WriteString(chunk)
-		return sendChunk(chunk)
-	}
-
-	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp, 12)
-	if err != nil {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError(err.Error())
-		return
-	}
-
-	if savedOutput == "" {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError("Brand enricher did not submit results via tool call. Try again.")
-		return
-	}
-	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-	sendDone()
-}
-
-// splitURLs splits a comma-separated URL string into trimmed individual URLs.
-func splitURLs(s string) []string {
-	parts := strings.Split(s, ",")
-	var urls []string
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			urls = append(urls, p)
-		}
-	}
-	return urls
-}
-
-// --- Tone Analyzer agent ---
-
-func (h *PipelineHandler) toneAnalyzerTool() ai.Tool {
-	return ai.Tool{
-		Type: "function",
-		Function: ai.ToolFunction{
-			Name:        "submit_tone_analysis",
-			Description: "Submit the tone and style guide based on the company's existing blog posts.",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"tone_guide": {"type": "string", "description": "A concise guide describing the writing tone, voice, style patterns, sentence structure, vocabulary level, and formatting conventions observed in the blog posts. The writer will use this to match the brand's voice."},
-					"posts": {
-						"type": "array",
-						"description": "The blog posts that were analyzed",
-						"items": {
-							"type": "object",
-							"properties": {
-								"title": {"type": "string"},
-								"url": {"type": "string"},
-								"excerpt": {"type": "string", "description": "A short excerpt showing the post's typical writing style"}
-							},
-							"required": ["title", "url"]
-						}
-					}
-				},
-				"required": ["tone_guide", "posts"]
-			}`),
-		},
-	}
-}
-
-func (h *PipelineHandler) streamToneAnalyzer(w http.ResponseWriter, r *http.Request, projectID int64, stepID int64, run *store.PipelineRun) {
-	ok, err := h.queries.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		http.Error(w, "Step already running or completed", http.StatusConflict)
-		return
-	}
-
-	// Check if blog URL is configured
-	settings, _ := h.queries.AllProjectSettings(projectID)
-	blogURL := settings["company_blog"]
-	if blogURL == "" {
-		// No blog URL — skip this step
-		h.queries.UpdatePipelineStepOutput(stepID, `{"tone_guide":"","posts":[]}`, "")
-		h.queries.UpdatePipelineStepStatus(stepID, "completed")
-		flusher, _, _, _, sendDone, _ := h.setupSSE(w)
-		if flusher == nil {
-			return
-		}
-		sendDone()
-		return
-	}
-
-	blogURLs := splitURLs(blogURL)
-
-	systemPrompt := fmt.Sprintf(`Today's date: %s
-
-You are a tone analyzer. Your job is to read 3-5 recent blog posts from the company's blog and create a tone/style guide for the content writer.
-
-Blog URL(s) to start from:
-%s
-
-Steps:
-1. Fetch the blog listing page(s) above
-2. Find links to 3-5 recent individual blog posts
-3. Fetch each post and read the full content
-4. Analyze the writing patterns across all posts
-
-Create a tone guide covering:
-- Voice and tone (formal/informal, authoritative/conversational, etc.)
-- Typical sentence structure and length
-- Vocabulary level and any recurring phrases or expressions
-- How they address the reader (you/vi, formal/informal)
-- Formatting patterns (headings, lists, CTAs, etc.)
-- Language (what language the posts are written in)
-
-IMPORTANT: You are analyzing STYLE only, not content. The writer will use your guide to match the brand's voice, not to copy facts.
-
-You MUST call submit_tone_analysis with your findings.`, time.Now().Format("January 2, 2006"), strings.Join(blogURLs, "\n"))
-
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: "Fetch the blog posts and analyze the writing tone."},
-	}
-
-	flusher, sendEvent, sendChunk, sendThinking, sendDone, sendError := h.setupSSE(w)
-	if flusher == nil {
-		return
-	}
-
-	toolList := []ai.Tool{
-		tools.NewFetchTool(),
-		h.toneAnalyzerTool(),
-	}
-
-	var savedOutput string
-	var thinkingBuf strings.Builder
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if name == "submit_tone_analysis" {
-			savedOutput = args
-			h.queries.UpdatePipelineStepOutput(stepID, args, thinkingBuf.String())
-			h.queries.UpdatePipelineStepStatus(stepID, "completed")
-			return "Tone analysis saved.", ai.ErrToolDone
-		}
-		if name == "fetch_url" {
-			return tools.ExecuteFetch(ctx, args)
-		}
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
-	var toolCallsList []toolCallRecord
-	onToolEvent := h.buildToolEventCallback(sendEvent, 0, &toolCallsList)
-
-	captureThinking := func(chunk string) error {
-		thinkingBuf.WriteString(chunk)
-		return sendThinking(chunk)
-	}
-
-	var chunkBuf strings.Builder
-	captureChunk := func(chunk string) error {
-		chunkBuf.WriteString(chunk)
-		return sendChunk(chunk)
-	}
-
-	temp := 0.3
-	_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, captureChunk, captureThinking, &temp, 10)
-	if err != nil {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError(err.Error())
-		return
-	}
-
-	if savedOutput == "" {
-		h.queries.UpdatePipelineStepOutput(stepID, chunkBuf.String(), thinkingBuf.String())
-		h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-		h.queries.UpdatePipelineStepStatus(stepID, "failed")
-		sendError("Tone analyzer did not submit results via tool call. Try again.")
-		return
-	}
-	h.queries.UpdatePipelineStepToolCalls(stepID, toolCallsJSON(toolCallsList))
-	sendDone()
-}
-
