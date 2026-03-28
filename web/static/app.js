@@ -1002,28 +1002,18 @@ function initCornerstonePipeline(projectID, runID) {
         if (!pillsEl) return;
         if (type === 'search') {
             var pill = document.createElement('span');
-            pill.className = 'tool-pill tool-pill-search';
-            var icon = document.createElement('span');
-            icon.textContent = '\uD83D\uDD0D';
-            icon.style.opacity = '0.5';
-            pill.appendChild(icon);
-            var text = document.createTextNode(' ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value));
-            pill.appendChild(text);
+            pill.className = 'badge badge-sm badge-secondary gap-1';
+            pill.textContent = '\uD83D\uDD0D ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value);
             pill.title = value;
             pillsEl.appendChild(pill);
         } else if (type === 'fetch') {
             var a = document.createElement('a');
-            a.className = 'tool-pill tool-pill-fetch';
+            a.className = 'badge badge-sm badge-accent gap-1';
             a.href = value;
             a.target = '_blank';
-            var icon = document.createElement('span');
-            icon.textContent = '\uD83C\uDF10';
-            icon.style.opacity = '0.6';
-            a.appendChild(icon);
             var host = value;
             try { host = new URL(value).hostname; } catch(e) { host = value.substring(0, 25); }
-            var text = document.createTextNode(' ' + host);
-            a.appendChild(text);
+            a.textContent = '\uD83C\uDF10 ' + host;
             a.title = value;
             pillsEl.appendChild(a);
         }
@@ -1196,29 +1186,6 @@ function initCornerstonePipeline(projectID, runID) {
         }
     });
 
-    // Topic card expand/collapse
-    var topicCard = document.querySelector('.topic-card');
-    if (topicCard) {
-        var topicHeader = topicCard.querySelector('.board-card-header');
-        var topicBrief = topicCard.querySelector('.topic-brief');
-        var rightGroup = document.createElement('div');
-        rightGroup.className = 'flex items-center gap-1';
-        var toggleBtn = document.createElement('button');
-        toggleBtn.className = 'step-toggle-btn';
-        toggleBtn.textContent = '+';
-        toggleBtn.title = 'Expand';
-        rightGroup.appendChild(toggleBtn);
-        topicHeader.appendChild(rightGroup);
-        toggleBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var isCollapsed = topicCard.dataset.collapsed === 'true';
-            if (topicBrief) topicBrief.style.display = isCollapsed ? '' : 'none';
-            topicCard.dataset.collapsed = isCollapsed ? 'false' : 'true';
-            toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
-            topicHeader.style.marginBottom = isCollapsed ? '' : '0';
-        });
-    }
-
     // Render tool pills from data attribute on page load
     document.querySelectorAll('.step-card[data-tool-calls]').forEach(function(card) {
         var raw = card.dataset.toolCalls;
@@ -1266,22 +1233,12 @@ function initCornerstonePipeline(projectID, runID) {
             if (pills) pills.style.display = 'none';
             card.dataset.collapsed = 'true';
 
-            // Wrap badge + toggle button in a container for right alignment
             var headerDiv = card.querySelector('.board-card-header');
-            var badge = headerDiv.querySelector('.badge');
-            var rightGroup = document.createElement('div');
-            rightGroup.className = 'flex items-center gap-1';
-            if (badge) {
-                badge.parentNode.removeChild(badge);
-                rightGroup.appendChild(badge);
-            }
             var toggleBtn = document.createElement('button');
-            toggleBtn.className = 'step-toggle-btn';
+            toggleBtn.className = 'btn btn-secondary btn-xs';
             toggleBtn.textContent = '+';
             toggleBtn.title = 'Expand';
-            rightGroup.appendChild(toggleBtn);
-            headerDiv.appendChild(rightGroup);
-            headerDiv.style.marginBottom = '0';
+            headerDiv.insertBefore(toggleBtn, headerDiv.firstChild);
 
             toggleBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1293,7 +1250,6 @@ function initCornerstonePipeline(projectID, runID) {
                 card.dataset.collapsed = isCollapsed ? 'false' : 'true';
                 toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
                 toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
-                headerDiv.style.marginBottom = isCollapsed ? '' : '0';
             });
         }
     });

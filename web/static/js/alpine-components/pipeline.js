@@ -30,28 +30,18 @@ document.addEventListener('alpine:init', function() {
                 if (!pillsEl) return;
                 if (type === 'search') {
                     var pill = document.createElement('span');
-                    pill.className = 'tool-pill tool-pill-search';
-                    var icon = document.createElement('span');
-                    icon.textContent = '\uD83D\uDD0D';
-                    icon.style.opacity = '0.5';
-                    pill.appendChild(icon);
-                    var text = document.createTextNode(' ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value));
-                    pill.appendChild(text);
+                    pill.className = 'badge badge-sm badge-secondary gap-1';
+                    pill.textContent = '\uD83D\uDD0D ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value);
                     pill.title = value;
                     pillsEl.appendChild(pill);
                 } else if (type === 'fetch') {
                     var a = document.createElement('a');
-                    a.className = 'tool-pill tool-pill-fetch';
+                    a.className = 'badge badge-sm badge-accent gap-1';
                     a.href = value;
                     a.target = '_blank';
-                    var icon = document.createElement('span');
-                    icon.textContent = '\uD83C\uDF10';
-                    icon.style.opacity = '0.6';
-                    a.appendChild(icon);
                     var host = value;
                     try { host = new URL(value).hostname; } catch(e) { host = value.substring(0, 25); }
-                    var text = document.createTextNode(' ' + host);
-                    a.appendChild(text);
+                    a.textContent = '\uD83C\uDF10 ' + host;
                     a.title = value;
                     pillsEl.appendChild(a);
                 }
@@ -430,7 +420,7 @@ document.addEventListener('alpine:init', function() {
                         var rightGroup = document.createElement('div');
                         rightGroup.className = 'flex items-center gap-1';
                         var toggleBtn = document.createElement('button');
-                        toggleBtn.className = 'step-toggle-btn';
+                        toggleBtn.className = 'btn btn-secondary btn-xs';
                         toggleBtn.textContent = '+';
                         toggleBtn.title = 'Expand';
                         rightGroup.appendChild(toggleBtn);
@@ -501,7 +491,7 @@ document.addEventListener('alpine:init', function() {
                                 rightGroup.appendChild(badge);
                             }
                             var toggleBtn = document.createElement('button');
-                            toggleBtn.className = 'step-toggle-btn';
+                            toggleBtn.className = 'btn btn-secondary btn-xs';
                             toggleBtn.textContent = '+';
                             toggleBtn.title = 'Expand';
                             rightGroup.appendChild(toggleBtn);
