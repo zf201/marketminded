@@ -1,6 +1,7 @@
 package templates
 
 import "fmt"
+import "github.com/zanfridau/marketminded/web/templates/components"
 
 type ProjectDetail struct {
 	ID             int64
@@ -19,81 +20,91 @@ type ContextItemView struct {
 }
 
 templ ProjectOverview(p ProjectDetail) {
-	@Layout(p.Name) {
-		<div class="flex-between mb-4">
-			<h1>{ p.Name }</h1>
-			<div>
-				<a href="/" class="btn btn-secondary">Back</a>
+	@components.PageShell(p.Name, []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: p.Name}}) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">{ p.Name }</h1>
+			<a href="/" class="btn btn-ghost">Back</a>
+		</div>
+		<p class="text-base-content/60 mb-6">{ p.Description }</p>
+
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+			<div class="card bg-base-100 shadow-sm border border-base-300">
+				<div class="card-body">
+					<h3 class="card-title text-base">Client Profile</h3>
+					<p class="mb-2">
+						Profile:
+						if p.HasProfile {
+							@components.StatusBadge("approved")
+						} else {
+							@components.StatusBadge("draft")
+						}
+					</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", p.ID)) } class="btn btn-primary btn-sm">Manage Profile</a>
+				</div>
+			</div>
+
+			<div class="card bg-base-100 shadow-sm border border-base-300">
+				<div class="card-body">
+					<h3 class="card-title text-base">Settings</h3>
+					<p class="mb-2">
+						if p.Language != "" {
+							Language: <strong>{ p.Language }</strong>
+						} else {
+							@components.StatusBadge("draft")
+						}
+					</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-primary btn-sm">Manage Settings</a>
+				</div>
+			</div>
+
+			<div class="card bg-base-100 shadow-sm border border-base-300">
+				<div class="card-body">
+					<h3 class="card-title text-base">Content Pipeline</h3>
+					<p class="mb-2 text-base-content/60">{ fmt.Sprintf("%d pipeline runs", p.RunCount) }</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn btn-ghost btn-sm">Pipeline Runs</a>
+				</div>
+			</div>
+
+			<div class="card bg-base-100 shadow-sm border border-base-300">
+				<div class="card-body">
+					<h3 class="card-title text-base">Chat</h3>
+					<p class="mb-2 text-base-content/60">Brainstorm content ideas with AI</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-primary btn-sm">Open Chat</a>
+				</div>
+			</div>
+
+			<div class="card bg-base-100 shadow-sm border border-base-300">
+				<div class="card-body">
+					<h3 class="card-title text-base">Templates</h3>
+					<p class="mb-2 text-base-content/60">HTML templates for social posts</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-primary btn-sm">Manage Templates</a>
+				</div>
 			</div>
 		</div>
-		<p class="text-muted mb-4">{ p.Description }</p>
 
-		<div class="grid">
-			<div class="card">
-				<h3>Client Profile</h3>
-				<p class="mb-2">
-					Profile:
-					if p.HasProfile {
-						<span class="badge badge-approved">Configured</span>
-					} else {
-						<span class="badge badge-draft">Not set</span>
-					}
-				</p>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", p.ID)) } class="btn btn-secondary">Manage Profile</a>
-			</div>
-
-			<div class="card">
-				<h3>Settings</h3>
-				<p class="mb-2">
-					if p.Language != "" {
-						Language: <strong>{ p.Language }</strong>
-					} else {
-						<span class="badge badge-draft">Not set</span>
-					}
-				</p>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-secondary">Manage Settings</a>
-			</div>
-
-			<div class="card">
-				<h3>Content Pipeline</h3>
-				<p class="mb-2 text-muted">{ fmt.Sprintf("%d pipeline runs", p.RunCount) }</p>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn">Pipeline Runs</a>
-			</div>
-
-			<div class="card">
-				<h3>Chat</h3>
-				<p class="mb-2 text-muted">Brainstorm content ideas with AI</p>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-secondary">Open Chat</a>
-			</div>
-
-			<div class="card">
-				<h3>Templates</h3>
-				<p class="mb-2 text-muted">HTML templates for social posts</p>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-secondary">Manage Templates</a>
-			</div>
-		</div>
-
-		<div class="flex-between mt-2 mb-2">
-			<h2>Context</h2>
-			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID)) } style="display:inline">
-				<button type="submit" class="btn">Add Context</button>
+		<div class="flex items-center justify-between mt-6 mb-4">
+			<h2 class="text-xl font-bold">Context</h2>
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID)) } class="inline-block">
+				<button type="submit" class="btn btn-primary btn-sm">Add Context</button>
 			</form>
 		</div>
 		if len(p.ContextItems) == 0 {
-			<p class="text-muted">No context items yet. Add info about campaigns, announcements, competitor intel, etc.</p>
+			<p class="text-base-content/60">No context items yet. Add info about campaigns, announcements, competitor intel, etc.</p>
 		}
 		for _, item := range p.ContextItems {
-			<div class="card mb-1">
-				<div class="flex-between">
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID)) } style="text-decoration:none;color:inherit">
-						<strong>{ item.Title }</strong>
-						if item.Preview != "" {
-							<span class="text-muted" style="margin-left:0.5rem">{ item.Preview }</span>
-						}
-					</a>
-					<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d/delete", p.ID, item.ID)) } style="display:inline">
-						<button type="submit" class="btn btn-danger" style="font-size:0.7rem;padding:0.2rem 0.5rem">Delete</button>
-					</form>
+			<div class="card bg-base-100 shadow-sm border border-base-300 mb-2">
+				<div class="card-body py-3">
+					<div class="flex items-center justify-between">
+						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID)) } class="no-underline text-inherit">
+							<strong>{ item.Title }</strong>
+							if item.Preview != "" {
+								<span class="text-base-content/60 ml-2">{ item.Preview }</span>
+							}
+						</a>
+						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d/delete", p.ID, item.ID)) } class="inline-block">
+							<button type="submit" class="btn btn-error btn-xs">Delete</button>
+						</form>
+					</div>
 				</div>
 			</div>
 		}

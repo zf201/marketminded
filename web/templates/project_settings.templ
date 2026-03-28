@@ -1,6 +1,7 @@
 package templates
 
 import "fmt"
+import "github.com/zanfridau/marketminded/web/templates/components"
 
 type FrameworkOption struct {
 	Key         string
@@ -25,97 +26,93 @@ type ProjectSettingsData struct {
 }
 
 templ ProjectSettingsPage(data ProjectSettingsData) {
-	@Layout(data.ProjectName + " - Settings") {
-		<div class="flex-between mb-4">
-			<h1>Project Settings</h1>
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-secondary">Back</a>
+	@components.PageShell(data.ProjectName + " - Settings", []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)}, {Label: "Settings"}}) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">Project Settings</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost">Back</a>
 		</div>
 
 		if data.Saved {
-			<div class="card" style="background:#d1fae5;border-color:#059669;margin-bottom:1rem">
-				<p style="color:#065f46">Settings saved.</p>
+			<div class="alert alert-success mb-4">
+				<p>Settings saved.</p>
 			</div>
 		}
 
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", data.ProjectID)) }>
-			<div class="card mb-2">
-				<h3 style="margin-bottom:1rem">Memory</h3>
-				<p class="text-muted" style="font-size:0.75rem;margin-bottom:0.75rem">Facts, corrections, and instructions that every AI agent in the pipeline will see. Use this for things the AI keeps getting wrong, important rules, or context that isn't in the profile.</p>
-				<div class="form-group">
-					<textarea name="memory" style="min-height:120px" placeholder="e.g. Our free tier includes 1000 API calls, not unlimited.&#10;&#10;Never mention competitor X by name.&#10;&#10;Pricing on the website is excluding VAT.">{ data.Memory }</textarea>
-				</div>
-			</div>
-
-			<div class="card mb-2">
-				<h3 style="margin-bottom:1rem">Language</h3>
-				<div class="form-group">
-					<label>Content Language</label>
-					<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..."/>
-					<p class="text-muted" style="font-size:0.75rem">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
-				</div>
-			</div>
-
-			<div class="card mb-2">
-				<h3 style="margin-bottom:1rem">Company URLs</h3>
-
-				<p class="text-muted" style="font-size:0.75rem;margin-bottom:1rem">These URLs are fetched by the Brand Enricher during pipeline runs to ground content in your actual brand info. Use commas to separate multiple URLs.</p>
-
-				<div class="form-group">
-					<label>Company Website</label>
-					<input type="text" name="company_website" value={ data.CompanyWebsite } placeholder="https://example.com, https://example.com/about"/>
-				</div>
-				<div class="form-group">
-					<label>Website Usage Notes</label>
-					<textarea name="website_notes" placeholder="How should AI use this? e.g. Link to homepage in blog CTAs, reference for brand info...">{ data.WebsiteNotes }</textarea>
-				</div>
-
-				<div class="form-group">
-					<label>Pricing Page</label>
-					<input type="text" name="company_pricing" value={ data.CompanyPricing } placeholder="https://example.com/pricing, https://example.com/plans"/>
-				</div>
-				<div class="form-group">
-					<label>Pricing Usage Notes</label>
-					<textarea name="pricing_notes" placeholder="e.g. Link to pricing in conversion-focused content, mention free tier...">{ data.PricingNotes }</textarea>
-				</div>
-
-				<div class="form-group">
-					<label>Blog URL</label>
-					<input type="text" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog"/>
-				</div>
-				<div class="form-group">
-					<label>Blog Usage Notes</label>
-					<textarea name="blog_notes" placeholder="e.g. Link to blog from social posts, reference existing posts for internal linking...">{ data.BlogNotes }</textarea>
-				</div>
-			</div>
-
-			<div class="card mb-2">
-				<h3 style="margin-bottom:1rem">Storytelling Framework</h3>
-				<p class="text-muted" style="font-size:0.75rem;margin-bottom:1rem">Guides how the AI structures the narrative in cornerstone content.</p>
-				<div class="form-group">
-					<select name="storytelling_framework" style="width:100%;padding:0.5rem;border:1px solid #d1d5db;border-radius:4px">
-						if data.StorytellingFramework == "" {
-							<option value="" selected>None (free-form)</option>
-						} else {
-							<option value="">None (free-form)</option>
-						}
-						for _, fw := range data.Frameworks {
-							if fw.Key == data.StorytellingFramework {
-								<option value={ fw.Key } selected>{ fw.Name }</option>
-							} else {
-								<option value={ fw.Key }>{ fw.Name }</option>
-							}
-						}
-					</select>
-				</div>
-				for _, fw := range data.Frameworks {
-					<div style="margin-bottom:0.5rem;padding:0.5rem;background:#f9fafb;border-radius:4px;font-size:0.8rem">
-						<strong>{ fw.Name }</strong>
-						<span class="text-muted"> — { fw.Description }</span>
-					</div>
+			<div class="mb-4">
+				@components.Card("Memory") {
+					<p class="text-base-content/60 text-xs mt-1 mb-3">Facts, corrections, and instructions that every AI agent in the pipeline will see. Use this for things the AI keeps getting wrong, important rules, or context that isn't in the profile.</p>
+					@components.FormGroup("") {
+						<textarea name="memory" class="textarea textarea-bordered w-full min-h-[120px]" placeholder="e.g. Our free tier includes 1000 API calls, not unlimited.&#10;&#10;Never mention competitor X by name.&#10;&#10;Pricing on the website is excluding VAT.">{ data.Memory }</textarea>
+					}
 				}
 			</div>
 
-			<button type="submit" class="btn">Save Settings</button>
+			<div class="mb-4">
+				@components.Card("Language") {
+					@components.FormGroup("Content Language") {
+						<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..." class="input input-bordered w-full"/>
+						<p class="text-base-content/60 text-xs mt-1">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
+					}
+				}
+			</div>
+
+			<div class="mb-4">
+				@components.Card("Company URLs") {
+					<p class="text-base-content/60 text-xs mt-1 mb-3">These URLs are fetched by the Brand Enricher during pipeline runs to ground content in your actual brand info. Use commas to separate multiple URLs.</p>
+
+					@components.FormGroup("Company Website") {
+						<input type="text" name="company_website" value={ data.CompanyWebsite } placeholder="https://example.com, https://example.com/about" class="input input-bordered w-full"/>
+					}
+					@components.FormGroup("Website Usage Notes") {
+						<textarea name="website_notes" class="textarea textarea-bordered w-full" placeholder="How should AI use this? e.g. Link to homepage in blog CTAs, reference for brand info...">{ data.WebsiteNotes }</textarea>
+					}
+
+					@components.FormGroup("Pricing Page") {
+						<input type="text" name="company_pricing" value={ data.CompanyPricing } placeholder="https://example.com/pricing, https://example.com/plans" class="input input-bordered w-full"/>
+					}
+					@components.FormGroup("Pricing Usage Notes") {
+						<textarea name="pricing_notes" class="textarea textarea-bordered w-full" placeholder="e.g. Link to pricing in conversion-focused content, mention free tier...">{ data.PricingNotes }</textarea>
+					}
+
+					@components.FormGroup("Blog URL") {
+						<input type="text" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog" class="input input-bordered w-full"/>
+					}
+					@components.FormGroup("Blog Usage Notes") {
+						<textarea name="blog_notes" class="textarea textarea-bordered w-full" placeholder="e.g. Link to blog from social posts, reference existing posts for internal linking...">{ data.BlogNotes }</textarea>
+					}
+				}
+			</div>
+
+			<div class="mb-4">
+				@components.Card("Storytelling Framework") {
+					<p class="text-base-content/60 text-xs mt-1 mb-3">Guides how the AI structures the narrative in cornerstone content.</p>
+					@components.FormGroup("") {
+						<select name="storytelling_framework" class="select select-bordered w-full">
+							if data.StorytellingFramework == "" {
+								<option value="" selected>None (free-form)</option>
+							} else {
+								<option value="">None (free-form)</option>
+							}
+							for _, fw := range data.Frameworks {
+								if fw.Key == data.StorytellingFramework {
+									<option value={ fw.Key } selected>{ fw.Name }</option>
+								} else {
+									<option value={ fw.Key }>{ fw.Name }</option>
+								}
+							}
+						</select>
+					}
+					for _, fw := range data.Frameworks {
+						<div class="bg-base-200 rounded-lg p-3 mb-2 text-sm">
+							<strong>{ fw.Name }</strong>
+							<span class="text-base-content/60"> — { fw.Description }</span>
+						</div>
+					}
+				}
+			</div>
+
+			@components.SubmitButton("Save Settings")
 		</form>
 	}
 }
