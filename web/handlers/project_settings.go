@@ -42,7 +42,6 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 	templates.ProjectSettingsPage(templates.ProjectSettingsData{
 		ProjectID:             projectID,
 		ProjectName:           project.Name,
-		Memory:                settings["memory"],
 		Language:              settings["language"],
 		CompanyWebsite:        settings["company_website"],
 		WebsiteNotes:          settings["website_notes"],
@@ -58,7 +57,6 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 
 func (h *ProjectSettingsHandler) save(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
-	h.queries.SetProjectSetting(projectID, "memory", r.FormValue("memory"))
 	h.queries.SetProjectSetting(projectID, "language", r.FormValue("language"))
 	h.queries.SetProjectSetting(projectID, "company_website", r.FormValue("company_website"))
 	h.queries.SetProjectSetting(projectID, "website_notes", r.FormValue("website_notes"))

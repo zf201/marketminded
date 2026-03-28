@@ -4,48 +4,57 @@ import "fmt"
 import "github.com/zanfridau/marketminded/web/templates/components"
 
 type ProjectDetail struct {
-	ID             int64
-	Name           string
-	Description    string
-	HasProfile     bool
-	RunCount       int
-	ContextItems   []ContextItemView
-	Language       string // from project settings
-}
-
-type ContextItemView struct {
-	ID      int64
-	Title   string
-	Preview string
+	ID          int64
+	Name        string
+	Description string
+	HasProfile  bool
+	RunCount    int
+	Language    string
+	HasContext  bool
+	HasMemory   bool
 }
 
 templ ProjectOverview(p ProjectDetail) {
 	@components.PageShell(p.Name, []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: p.Name}}) {
 		<div class="flex items-center justify-between mb-6">
 			<h1 class="text-2xl font-bold">{ p.Name }</h1>
-			<a href="/" class="btn btn-ghost">Back</a>
 		</div>
-		<p class="text-base-content/60 mb-6">{ p.Description }</p>
+		if p.Description != "" {
+			<p class="text-base-content/60 mb-6">{ p.Description }</p>
+		}
 
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body">
-					<h3 class="card-title text-base">Client Profile</h3>
+				<div class="card-body p-4">
+					<h3 class="font-semibold text-base">Client Profile</h3>
 					<p class="mb-2">
-						Profile:
 						if p.HasProfile {
 							@components.StatusBadge("approved")
 						} else {
 							@components.StatusBadge("draft")
 						}
 					</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", p.ID)) } class="btn btn-primary btn-sm">Manage Profile</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", p.ID)) } class="btn btn-secondary btn-sm">Manage Profile</a>
 				</div>
 			</div>
 
 			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body">
-					<h3 class="card-title text-base">Settings</h3>
+				<div class="card-body p-4">
+					<h3 class="font-semibold text-base">Context & Memories</h3>
+					<p class="mb-2">
+						if p.HasContext || p.HasMemory {
+							@components.StatusBadge("approved")
+						} else {
+							@components.StatusBadge("draft")
+						}
+					</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context-memory", p.ID)) } class="btn btn-secondary btn-sm">Manage</a>
+				</div>
+			</div>
+
+			<div class="card bg-base-100 shadow-sm border border-base-300">
+				<div class="card-body p-4">
+					<h3 class="font-semibold text-base">Settings</h3>
 					<p class="mb-2">
 						if p.Language != "" {
 							Language: <strong>{ p.Language }</strong>
@@ -53,60 +62,33 @@ templ ProjectOverview(p ProjectDetail) {
 							@components.StatusBadge("draft")
 						}
 					</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-primary btn-sm">Manage Settings</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-secondary btn-sm">Manage Settings</a>
 				</div>
 			</div>
 
 			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body">
-					<h3 class="card-title text-base">Content Pipeline</h3>
+				<div class="card-body p-4">
+					<h3 class="font-semibold text-base">Content Pipeline</h3>
 					<p class="mb-2 text-base-content/60">{ fmt.Sprintf("%d pipeline runs", p.RunCount) }</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn btn-ghost btn-sm">Pipeline Runs</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn btn-secondary btn-sm">Pipeline Runs</a>
 				</div>
 			</div>
 
 			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body">
-					<h3 class="card-title text-base">Chat</h3>
+				<div class="card-body p-4">
+					<h3 class="font-semibold text-base">Chat</h3>
 					<p class="mb-2 text-base-content/60">Brainstorm content ideas with AI</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-primary btn-sm">Open Chat</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-secondary btn-sm">Open Chat</a>
 				</div>
 			</div>
 
 			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body">
-					<h3 class="card-title text-base">Templates</h3>
+				<div class="card-body p-4">
+					<h3 class="font-semibold text-base">Templates</h3>
 					<p class="mb-2 text-base-content/60">HTML templates for social posts</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-primary btn-sm">Manage Templates</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-secondary btn-sm">Manage Templates</a>
 				</div>
 			</div>
 		</div>
-
-		<div class="flex items-center justify-between mt-6 mb-4">
-			<h2 class="text-xl font-bold">Context</h2>
-			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", p.ID)) } class="inline-block">
-				<button type="submit" class="btn btn-primary btn-sm">Add Context</button>
-			</form>
-		</div>
-		if len(p.ContextItems) == 0 {
-			<p class="text-base-content/60">No context items yet. Add info about campaigns, announcements, competitor intel, etc.</p>
-		}
-		for _, item := range p.ContextItems {
-			<div class="card bg-base-100 shadow-sm border border-base-300 mb-2">
-				<div class="card-body py-3">
-					<div class="flex items-center justify-between">
-						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d", p.ID, item.ID)) } class="no-underline text-inherit">
-							<strong>{ item.Title }</strong>
-							if item.Preview != "" {
-								<span class="text-base-content/60 ml-2">{ item.Preview }</span>
-							}
-						</a>
-						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d/delete", p.ID, item.ID)) } class="inline-block">
-							<button type="submit" class="btn btn-error btn-xs">Delete</button>
-						</form>
-					</div>
-				</div>
-			</div>
-		}
 	}
 }

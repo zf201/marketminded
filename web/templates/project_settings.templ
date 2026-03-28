@@ -12,7 +12,6 @@ type FrameworkOption struct {
 type ProjectSettingsData struct {
 	ProjectID            int64
 	ProjectName          string
-	Memory               string
 	Language             string
 	CompanyWebsite       string
 	WebsiteNotes         string
@@ -39,15 +38,6 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 		}
 
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", data.ProjectID)) }>
-			<div class="mb-4">
-				@components.Card("Memory") {
-					<p class="text-base-content/60 text-xs mt-1 mb-3">Facts, corrections, and instructions that every AI agent in the pipeline will see. Use this for things the AI keeps getting wrong, important rules, or context that isn't in the profile.</p>
-					@components.FormGroup("") {
-						<textarea name="memory" class="textarea textarea-bordered w-full min-h-[120px]" placeholder="e.g. Our free tier includes 1000 API calls, not unlimited.&#10;&#10;Never mention competitor X by name.&#10;&#10;Pricing on the website is excluding VAT.">{ data.Memory }</textarea>
-					}
-				}
-			</div>
-
 			<div class="mb-4">
 				@components.Card("Language") {
 					@components.FormGroup("Content Language") {

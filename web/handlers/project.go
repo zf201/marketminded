@@ -86,32 +86,47 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 	sections, _ := h.queries.ListProfileSections(id)
 	hasProfile := len(sections) > 0
 
-	contextItems, _ := h.queries.ListContextItems(id)
-	ctxViews := make([]templates.ContextItemView, len(contextItems))
-	for i, c := range contextItems {
-		preview := c.Content
-		if len(preview) > 80 {
-			preview = preview[:80] + "..."
-		}
-		ctxViews[i] = templates.ContextItemView{
-			ID:      c.ID,
-			Title:   c.Title,
-			Preview: preview,
-		}
-	}
-
 	settings, _ := h.queries.AllProjectSettings(id)
+
 	detail := templates.ProjectDetail{
-		ID:            project.ID,
-		Name:          project.Name,
-		Description:   project.Description,
-		HasProfile:    hasProfile,
-		RunCount:      len(runs),
-		ContextItems:  ctxViews,
-		Language:      settings["language"],
+		ID:          project.ID,
+		Name:        project.Name,
+		Description: project.Description,
+		HasProfile:  hasProfile,
+		RunCount:    len(runs),
+		Language:    settings["language"],
+		HasContext:  settings["context"] != "",
+		HasMemory:   settings["memory"] != "",
 	}
 
 	templates.ProjectOverview(detail).Render(r.Context(), w)
+}
+
+// HandleContextMemory serves the Context & Memories page (GET) and saves (POST).
+func (h *ProjectHandler) HandleContextMemory(w http.ResponseWriter, r *http.Request, projectID int64) {
+	if r.Method == "POST" {
+		r.ParseForm()
+		h.queries.SetProjectSetting(projectID, "context", r.FormValue("context"))
+		h.queries.SetProjectSetting(projectID, "memory", r.FormValue("memory"))
+		http.Redirect(w, r, fmt.Sprintf("/projects/%d/context-memory?saved=1", projectID), http.StatusSeeOther)
+		return
+	}
+
+	project, err := h.queries.GetProject(projectID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	settings, _ := h.queries.AllProjectSettings(projectID)
+
+	templates.ContextMemoryPage(templates.ContextMemoryData{
+		ProjectID:   projectID,
+		ProjectName: project.Name,
+		Context:     settings["context"],
+		Memory:      settings["memory"],
+		Saved:       r.URL.Query().Get("saved") == "1",
+	}).Render(r.Context(), w)
 }
 
 // ParseProjectID extracts the project ID from a URL path like /projects/123/...

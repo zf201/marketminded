@@ -125,6 +125,8 @@ func main() {
 			brainstormHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "profile"):
 			profileHandler.Handle(w, r, projectID, rest)
+		case rest == "context-memory" || rest == "context-memory/":
+			projectHandler.HandleContextMemory(w, r, projectID)
 		case strings.HasPrefix(rest, "context"):
 			contextHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "storytelling"):
