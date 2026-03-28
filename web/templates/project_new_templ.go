@@ -9,6 +9,8 @@ import "context"
 import "io"
 import "bytes"
 
+import "github.com/zanfridau/marketminded/web/templates/components"
+
 func ProjectNew() templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		templBuffer, templIsBuffer := w.(*bytes.Buffer)
@@ -28,7 +30,7 @@ func ProjectNew() templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<h1>")
+			_, err = templBuffer.WriteString("<h1 class=\"text-2xl font-bold mb-6\">")
 			if err != nil {
 				return err
 			}
@@ -37,34 +39,80 @@ func ProjectNew() templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1> <form method=\"POST\" action=\"/projects\"><div class=\"form-group\"><label for=\"name\">")
+			_, err = templBuffer.WriteString("</h1> <form method=\"POST\" action=\"/projects\">")
 			if err != nil {
 				return err
 			}
-			var_4 := `Project Name`
-			_, err = templBuffer.WriteString(var_4)
+			var_4 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+				templBuffer, templIsBuffer := w.(*bytes.Buffer)
+				if !templIsBuffer {
+					templBuffer = templ.GetBuffer()
+					defer templ.ReleaseBuffer(templBuffer)
+				}
+				var_5 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+					templBuffer, templIsBuffer := w.(*bytes.Buffer)
+					if !templIsBuffer {
+						templBuffer = templ.GetBuffer()
+						defer templ.ReleaseBuffer(templBuffer)
+					}
+					_, err = templBuffer.WriteString("<input type=\"text\" id=\"name\" name=\"name\" required placeholder=\"e.g. Acme Corp\" class=\"input input-bordered w-full\">")
+					if err != nil {
+						return err
+					}
+					if !templIsBuffer {
+						_, err = io.Copy(w, templBuffer)
+					}
+					return err
+				})
+				err = components.FormGroup("Project Name").Render(templ.WithChildren(ctx, var_5), templBuffer)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(" ")
+				if err != nil {
+					return err
+				}
+				var_6 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+					templBuffer, templIsBuffer := w.(*bytes.Buffer)
+					if !templIsBuffer {
+						templBuffer = templ.GetBuffer()
+						defer templ.ReleaseBuffer(templBuffer)
+					}
+					_, err = templBuffer.WriteString("<textarea id=\"description\" name=\"description\" placeholder=\"Brief description of the client/project\" class=\"textarea textarea-bordered w-full\"></textarea>")
+					if err != nil {
+						return err
+					}
+					if !templIsBuffer {
+						_, err = io.Copy(w, templBuffer)
+					}
+					return err
+				})
+				err = components.FormGroup("Description").Render(templ.WithChildren(ctx, var_6), templBuffer)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(" <div class=\"mt-4\">")
+				if err != nil {
+					return err
+				}
+				err = components.SubmitButton("Create Project").Render(ctx, templBuffer)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</div>")
+				if err != nil {
+					return err
+				}
+				if !templIsBuffer {
+					_, err = io.Copy(w, templBuffer)
+				}
+				return err
+			})
+			err = components.Card("").Render(templ.WithChildren(ctx, var_4), templBuffer)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</label><input type=\"text\" id=\"name\" name=\"name\" required placeholder=\"e.g. Acme Corp\"></div><div class=\"form-group\"><label for=\"description\">")
-			if err != nil {
-				return err
-			}
-			var_5 := `Description`
-			_, err = templBuffer.WriteString(var_5)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</label><textarea id=\"description\" name=\"description\" placeholder=\"Brief description of the client/project\"></textarea></div><button type=\"submit\" class=\"btn\">")
-			if err != nil {
-				return err
-			}
-			var_6 := `Create Project`
-			_, err = templBuffer.WriteString(var_6)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</button></form>")
+			_, err = templBuffer.WriteString("</form>")
 			if err != nil {
 				return err
 			}
@@ -73,7 +121,7 @@ func ProjectNew() templ.Component {
 			}
 			return err
 		})
-		err = Layout("New Project").Render(templ.WithChildren(ctx, var_2), templBuffer)
+		err = components.PageShell("New Project", []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: "New Project"}}).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}

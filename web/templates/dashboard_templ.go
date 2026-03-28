@@ -9,7 +9,10 @@ import "context"
 import "io"
 import "bytes"
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/zanfridau/marketminded/web/templates/components"
+)
 
 func Dashboard(projects []DashboardProject) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
@@ -30,7 +33,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex-between mb-4\"><h1>")
+			_, err = templBuffer.WriteString("<div class=\"flex items-center justify-between mb-6\"><h1 class=\"text-2xl font-bold\">")
 			if err != nil {
 				return err
 			}
@@ -39,7 +42,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1><a href=\"/projects/new\" class=\"btn\">")
+			_, err = templBuffer.WriteString("</h1><a href=\"/projects/new\" class=\"btn btn-primary\">")
 			if err != nil {
 				return err
 			}
@@ -53,7 +56,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				return err
 			}
 			if len(projects) == 0 {
-				_, err = templBuffer.WriteString("<p class=\"text-muted\">")
+				_, err = templBuffer.WriteString("<p class=\"text-base-content/60\">")
 				if err != nil {
 					return err
 				}
@@ -67,7 +70,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 					return err
 				}
 			}
-			_, err = templBuffer.WriteString(" <div class=\"grid\">")
+			_, err = templBuffer.WriteString(" <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4\">")
 			if err != nil {
 				return err
 			}
@@ -81,7 +84,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\" class=\"card\" style=\"text-decoration:none;color:inherit\"><h3>")
+				_, err = templBuffer.WriteString("\" class=\"card bg-base-100 shadow-sm border border-base-300 hover:border-primary transition-colors no-underline text-inherit\"><div class=\"card-body\"><h3 class=\"card-title text-base\">")
 				if err != nil {
 					return err
 				}
@@ -90,7 +93,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</h3><p class=\"text-muted\">")
+				_, err = templBuffer.WriteString("</h3><p class=\"text-base-content/60\">")
 				if err != nil {
 					return err
 				}
@@ -99,7 +102,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</p></a>")
+				_, err = templBuffer.WriteString("</p></div></a>")
 				if err != nil {
 					return err
 				}
@@ -113,7 +116,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 			}
 			return err
 		})
-		err = Layout("Dashboard").Render(templ.WithChildren(ctx, var_2), templBuffer)
+		err = components.PageShell("Dashboard", []components.Breadcrumb{{Label: "Projects"}}).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}
