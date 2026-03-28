@@ -34,6 +34,10 @@ func (h *BrainstormHandler) Handle(w http.ResponseWriter, r *http.Request, proje
 		h.list(w, r, projectID)
 	case rest == "brainstorm" && r.Method == "POST":
 		h.createChat(w, r, projectID)
+	case rest == "brainstorm/list-json":
+		h.listJSON(w, r, projectID)
+	case strings.HasSuffix(rest, "/messages-json"):
+		h.messagesJSON(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/message") && r.Method == "POST":
 		h.saveMessage(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/stream"):
@@ -303,6 +307,63 @@ func (h *BrainstormHandler) pushToPipeline(w http.ResponseWriter, r *http.Reques
 	h.queries.CreatePipelineStep(run.ID, "write", 4)
 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, run.ID), http.StatusSeeOther)
+}
+
+// JSON endpoints for the chat drawer
+
+func (h *BrainstormHandler) listJSON(w http.ResponseWriter, r *http.Request, projectID int64) {
+	chats, _ := h.queries.ListBrainstormChats(projectID)
+
+	type chatJSON struct {
+		ID      int64  `json:"id"`
+		Title   string `json:"title"`
+		Preview string `json:"preview"`
+	}
+
+	result := make([]chatJSON, 0)
+	for _, c := range chats {
+		if c.Section != "" || c.ContentPieceID != nil {
+			continue
+		}
+		preview := ""
+		msgs, _ := h.queries.ListBrainstormMessages(c.ID)
+		for _, m := range msgs {
+			if m.Role == "user" {
+				preview = m.Content
+				if len(preview) > 120 {
+					preview = preview[:120] + "..."
+				}
+				break
+			}
+		}
+		result = append(result, chatJSON{ID: c.ID, Title: c.Title, Preview: preview})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (h *BrainstormHandler) messagesJSON(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	chatID := h.parseChatID(rest)
+	if chatID == 0 {
+		http.Error(w, "Invalid chat ID", http.StatusBadRequest)
+		return
+	}
+
+	msgs, _ := h.queries.ListBrainstormMessages(chatID)
+
+	type msgJSON struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+
+	result := make([]msgJSON, len(msgs))
+	for i, m := range msgs {
+		result[i] = msgJSON{Role: m.Role, Content: m.Content}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 func (h *BrainstormHandler) parseChatID(rest string) int64 {

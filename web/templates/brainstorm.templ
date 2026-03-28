@@ -18,11 +18,11 @@ type BrainstormChatView struct {
 }
 
 templ BrainstormListPage(data BrainstormListData) {
-	@components.PageShell(data.ProjectName+" - Chat", []components.Breadcrumb{
+	@components.ProjectPageShell(data.ProjectName+" - Chat", []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Chat"},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">Chat</h1>
 			<div class="flex items-center gap-2">
@@ -63,12 +63,12 @@ type BrainstormMsgView struct {
 }
 
 templ BrainstormChatPage(data BrainstormChatData) {
-	@components.PageShell(data.ChatTitle, []components.Breadcrumb{
+	@components.ProjectPageShell(data.ChatTitle, []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Chat", URL: fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)},
 		{Label: data.ChatTitle},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">{ data.ChatTitle }</h1>
 			<div class="flex items-center gap-2">

@@ -15,11 +15,11 @@ type StorytellingData struct {
 }
 
 templ StorytellingPage(data StorytellingData) {
-	@components.PageShell(data.ProjectName+" - Storytelling Framework", []components.Breadcrumb{
+	@components.ProjectPageShell(data.ProjectName+" - Storytelling Framework", []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Storytelling"},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">Storytelling Framework</h1>
 		</div>

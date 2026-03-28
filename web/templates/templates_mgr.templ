@@ -19,11 +19,11 @@ type TemplateMgrView struct {
 }
 
 templ TemplatesMgrPage(data TemplatesMgrData) {
-	@components.PageShell(data.ProjectName+" - Templates", []components.Breadcrumb{
+	@components.ProjectPageShell(data.ProjectName+" - Templates", []components.Breadcrumb{
 		{Label: "Projects", URL: "/projects"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Templates"},
-	}) {
+	}, data.ProjectID) {
 		<div class="card bg-base-100 shadow-sm border border-base-300 mb-6">
 			<div class="card-body">
 				<h3 class="card-title text-base">Add Template</h3>

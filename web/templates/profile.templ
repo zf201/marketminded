@@ -20,11 +20,11 @@ type ProfileCardView struct {
 }
 
 templ ProfilePage(data ProfilePageData) {
-	@components.PageShell(data.ProjectName+" - Profile", []components.Breadcrumb{
+	@components.ProjectPageShell(data.ProjectName+" - Profile", []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Profile"},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">{ data.ProjectName } Profile</h1>
 		</div>
@@ -80,12 +80,12 @@ type ProfileMsgView struct {
 }
 
 templ ProfileSectionChatPage(data ProfileSectionChatData) {
-	@components.PageShell(data.SectionTitle, []components.Breadcrumb{
+	@components.ProjectPageShell(data.SectionTitle, []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Profile", URL: fmt.Sprintf("/projects/%d/profile", data.ProjectID)},
 		{Label: data.SectionTitle},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">{ data.SectionTitle }</h1>
 		</div>

@@ -204,11 +204,11 @@ func PipelineListPage(data PipelineListData) templ.Component {
 			}
 			return err
 		})
-		err = components.PageShell(data.ProjectName+" - Pipeline", []components.Breadcrumb{
+		err = components.ProjectPageShell(data.ProjectName+" - Pipeline", []components.Breadcrumb{
 			{Label: "Projects", URL: "/projects"},
 			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 			{Label: "Pipeline"},
-		}).Render(templ.WithChildren(ctx, var_2), templBuffer)
+		}, data.ProjectID).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}
@@ -1032,12 +1032,12 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 			}
 			return err
 		})
-		err = components.PageShell(fmt.Sprintf("Pipeline: %s", data.Topic), []components.Breadcrumb{
+		err = components.ProjectPageShell(fmt.Sprintf("Pipeline: %s", data.Topic), []components.Breadcrumb{
 			{Label: "Projects", URL: "/projects"},
 			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 			{Label: "Pipeline", URL: fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)},
 			{Label: data.Topic},
-		}).Render(templ.WithChildren(ctx, var_20), templBuffer)
+		}, data.ProjectID).Render(templ.WithChildren(ctx, var_20), templBuffer)
 		if err != nil {
 			return err
 		}
@@ -1244,10 +1244,10 @@ func ContentEditPage(data ContentEditData) templ.Component {
 			}
 			return err
 		})
-		err = components.PageShell("Edit Content", []components.Breadcrumb{
+		err = components.ProjectPageShell("Edit Content", []components.Breadcrumb{
 			{Label: "Projects", URL: "/projects"},
 			{Label: "Content"},
-		}).Render(templ.WithChildren(ctx, var_51), templBuffer)
+		}, data.ProjectID).Render(templ.WithChildren(ctx, var_51), templBuffer)
 		if err != nil {
 			return err
 		}

@@ -11,11 +11,11 @@ type ContextNewData struct {
 }
 
 templ ContextNewPage(data ContextNewData) {
-	@components.PageShell("Add Context", []components.Breadcrumb{
+	@components.ProjectPageShell("Add Context", []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Add Context"},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">Add Context</h1>
 			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost btn-sm">Cancel</a>
@@ -46,11 +46,11 @@ type ContextMsgView struct {
 }
 
 templ ContextItemPage(data ContextItemData) {
-	@components.PageShell(data.Title, []components.Breadcrumb{
+	@components.ProjectPageShell(data.Title, []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: data.Title},
-	}) {
+	}, data.ProjectID) {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">{ data.Title }</h1>
 			<div class="flex items-center gap-2">

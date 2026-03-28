@@ -160,11 +160,11 @@ func BrainstormListPage(data BrainstormListData) templ.Component {
 			}
 			return err
 		})
-		err = components.PageShell(data.ProjectName+" - Chat", []components.Breadcrumb{
+		err = components.ProjectPageShell(data.ProjectName+" - Chat", []components.Breadcrumb{
 			{Label: "Projects", URL: "/"},
 			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 			{Label: "Chat"},
-		}).Render(templ.WithChildren(ctx, var_2), templBuffer)
+		}, data.ProjectID).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}
@@ -489,12 +489,12 @@ func BrainstormChatPage(data BrainstormChatData) templ.Component {
 			}
 			return err
 		})
-		err = components.PageShell(data.ChatTitle, []components.Breadcrumb{
+		err = components.ProjectPageShell(data.ChatTitle, []components.Breadcrumb{
 			{Label: "Projects", URL: "/"},
 			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 			{Label: "Chat", URL: fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)},
 			{Label: data.ChatTitle},
-		}).Render(templ.WithChildren(ctx, var_12), templBuffer)
+		}, data.ProjectID).Render(templ.WithChildren(ctx, var_12), templBuffer)
 		if err != nil {
 			return err
 		}

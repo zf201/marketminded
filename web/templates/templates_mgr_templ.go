@@ -275,11 +275,11 @@ func TemplatesMgrPage(data TemplatesMgrData) templ.Component {
 			}
 			return err
 		})
-		err = components.PageShell(data.ProjectName+" - Templates", []components.Breadcrumb{
+		err = components.ProjectPageShell(data.ProjectName+" - Templates", []components.Breadcrumb{
 			{Label: "Projects", URL: "/projects"},
 			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 			{Label: "Templates"},
-		}).Render(templ.WithChildren(ctx, var_2), templBuffer)
+		}, data.ProjectID).Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}

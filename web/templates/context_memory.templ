@@ -12,11 +12,11 @@ type ContextMemoryData struct {
 }
 
 templ ContextMemoryPage(data ContextMemoryData) {
-	@components.PageShell(data.ProjectName+" - Context & Memories", []components.Breadcrumb{
+	@components.ProjectPageShell(data.ProjectName+" - Context & Memories", []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Context & Memories"},
-	}) {
+	}, data.ProjectID) {
 		<h1 class="text-2xl font-bold mb-6">Context & Memories</h1>
 
 		if data.Saved {

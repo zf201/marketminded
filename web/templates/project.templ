@@ -15,7 +15,7 @@ type ProjectDetail struct {
 }
 
 templ ProjectOverview(p ProjectDetail) {
-	@components.PageShell(p.Name, []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: p.Name}}) {
+	@components.ProjectPageShell(p.Name, []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: p.Name}}, p.ID) {
 		<div class="flex items-center justify-between mb-6">
 			<h1 class="text-2xl font-bold">{ p.Name }</h1>
 		</div>
@@ -71,14 +71,6 @@ templ ProjectOverview(p ProjectDetail) {
 					<h3 class="font-semibold text-base">Content Pipeline</h3>
 					<p class="mb-2 text-base-content/60">{ fmt.Sprintf("%d pipeline runs", p.RunCount) }</p>
 					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn btn-secondary btn-sm">Pipeline Runs</a>
-				</div>
-			</div>
-
-			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body p-4">
-					<h3 class="font-semibold text-base">Chat</h3>
-					<p class="mb-2 text-base-content/60">Brainstorm content ideas with AI</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", p.ID)) } class="btn btn-secondary btn-sm">Open Chat</a>
 				</div>
 			</div>
 
