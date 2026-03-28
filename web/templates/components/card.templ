@@ -1,0 +1,33 @@
+package components
+
+templ Card(title string) {
+	<div class="card bg-base-100 shadow-sm border border-base-300">
+		<div class="card-body">
+			if title != "" {
+				<h3 class="card-title text-base">{ title }</h3>
+			}
+			{ children... }
+		</div>
+	</div>
+}
+
+templ CollapsibleCard(title string, defaultOpen bool) {
+	<div class="card bg-base-100 shadow-sm border border-base-300" x-data={ collapseInit(defaultOpen) }>
+		<div class="card-body">
+			<div class="flex items-center justify-between cursor-pointer" @click="open = !open">
+				<h3 class="card-title text-base">{ title }</h3>
+				<button class="btn btn-ghost btn-xs" x-text="open ? '−' : '+'"></button>
+			</div>
+			<div x-show="open" x-collapse>
+				{ children... }
+			</div>
+		</div>
+	</div>
+}
+
+func collapseInit(defaultOpen bool) string {
+	if defaultOpen {
+		return "{ open: true }"
+	}
+	return "{ open: false }"
+}

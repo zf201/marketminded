@@ -1,0 +1,20 @@
+package components
+
+templ FormGroup(label string) {
+	<div class="form-control w-full">
+		if label != "" {
+			<label class="label">
+				<span class="label-text">{ label }</span>
+			</label>
+		}
+		{ children... }
+	</div>
+}
+
+templ Button(text, variant string) {
+	<button type="button" class={ "btn btn-" + variant }>{ text }</button>
+}
+
+templ SubmitButton(text string) {
+	<button type="submit" class="btn btn-primary">{ text }</button>
+}
