@@ -1,9 +1,12 @@
 include .env
 export
 
-.PHONY: generate build run dev start restart test clean reset
+.PHONY: generate build run dev start restart test clean reset css
 
-generate:
+css:
+	npx tailwindcss -i web/static/input.css -o web/static/output.css
+
+generate: css
 	~/go/bin/templ generate ./web/templates/
 
 build: generate
