@@ -150,6 +150,10 @@ func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, pro
 		http.NotFound(w, r)
 		return
 	}
+	if section == "audience" || section == "voice_and_tone" {
+		http.NotFound(w, r)
+		return
+	}
 
 	var body struct {
 		Content string `json:"content"`
@@ -228,6 +232,10 @@ func (h *ProfileHandler) getContext(w http.ResponseWriter, r *http.Request, proj
 func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	sectionName := h.parseSectionFromRest(rest)
 	if !isValidSection(sectionName) {
+		http.NotFound(w, r)
+		return
+	}
+	if sectionName == "audience" || sectionName == "voice_and_tone" {
 		http.NotFound(w, r)
 		return
 	}
@@ -368,6 +376,10 @@ Write the section content now. Output ONLY the section content, no headers or me
 func (h *ProfileHandler) listVersions(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	section := h.parseSectionFromRest(rest)
 	if !isValidSection(section) {
+		http.NotFound(w, r)
+		return
+	}
+	if section == "audience" || section == "voice_and_tone" {
 		http.NotFound(w, r)
 		return
 	}
