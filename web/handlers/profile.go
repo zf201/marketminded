@@ -85,6 +85,9 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 				json.Unmarshal([]byte(ps.SourceURLs), &card.SourceURLs)
 			}
 		}
+		if card.HasSourceURLs {
+			card.ContextNotes, _ = h.queries.GetProjectSetting(projectID, "profile_context_"+name)
+		}
 		cardViews[i] = card
 	}
 
@@ -128,7 +131,8 @@ func (h *ProfileHandler) saveContext(w http.ResponseWriter, r *http.Request, pro
 	}
 
 	var body struct {
-		URLs []store.SourceURL `json:"urls"`
+		URLs  []store.SourceURL `json:"urls"`
+		Notes string            `json:"notes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
@@ -148,6 +152,7 @@ func (h *ProfileHandler) saveContext(w http.ResponseWriter, r *http.Request, pro
 	}
 
 	h.queries.UpsertProfileSectionFull(projectID, section, content, string(urlsJSON))
+	h.queries.SetProjectSetting(projectID, "profile_context_"+section, body.Notes)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -164,10 +169,13 @@ func (h *ProfileHandler) getContext(w http.ResponseWriter, r *http.Request, proj
 		json.Unmarshal([]byte(ps.SourceURLs), &urls)
 	}
 
+	notes, _ := h.queries.GetProjectSetting(projectID, "profile_context_"+section)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"content": func() string { if err == nil { return ps.Content } else { return "" } }(),
 		"urls":    urls,
+		"notes":   notes,
 	})
 }
 
@@ -236,6 +244,9 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 		memorySetting = mem
 	}
 
+	// Get context notes
+	contextNotes, _ := h.queries.GetProjectSetting(projectID, "profile_context_"+sectionName)
+
 	// Build other profile sections for context
 	var profileContext strings.Builder
 	for _, name := range allSections {
@@ -267,6 +278,10 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 
 	if existingContent != "" {
 		fmt.Fprintf(&systemPrompt, "## Current content for this section (improve upon this)\n%s\n\n", existingContent)
+	}
+
+	if contextNotes != "" {
+		fmt.Fprintf(&systemPrompt, "## Additional context notes\n%s\n\n", contextNotes)
 	}
 
 	if memorySetting != "" {

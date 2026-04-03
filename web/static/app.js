@@ -486,16 +486,18 @@ function initProfilePage(projectId) {
             var modal = document.getElementById('context-modal');
             var container = document.getElementById('context-urls-container');
             var title = document.getElementById('context-modal-title');
-            title.textContent = btn.dataset.title + ' — Context';
+            var notesArea = document.getElementById('context-notes');
+            title.textContent = btn.dataset.title + ' — Edit Context';
             container.textContent = '';
+            notesArea.value = '';
 
-            // Fetch current URLs
             fetch('/projects/' + projectId + '/profile/' + activeSection + '/context')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var urls = data.urls || [];
                     if (urls.length === 0) urls = [{url: '', notes: ''}];
                     urls.forEach(function(u) { addContextURLRow(container, u.url || '', u.notes || ''); });
+                    notesArea.value = data.notes || '';
                 });
             modal.showModal();
         });
@@ -513,10 +515,11 @@ function initProfilePage(projectId) {
             var url = inputs[0].value.trim();
             if (url) urls.push({url: url, notes: inputs[1].value.trim()});
         });
+        var notes = document.getElementById('context-notes').value.trim();
         fetch('/projects/' + projectId + '/profile/' + activeSection + '/save-context', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({urls: urls})
+            body: JSON.stringify({urls: urls, notes: notes})
         }).then(function() { location.reload(); });
     });
 
@@ -562,13 +565,23 @@ function initProfilePage(projectId) {
                             summary.appendChild(p);
                         });
                     }
+                    if (data.notes) {
+                        var nh = document.createElement('p');
+                        nh.className = 'text-sm font-semibold mt-2 mb-1';
+                        nh.textContent = 'Additional notes:';
+                        summary.appendChild(nh);
+                        var np = document.createElement('p');
+                        np.className = 'text-xs text-base-content/70';
+                        np.textContent = data.notes;
+                        summary.appendChild(np);
+                    }
                     if (data.content) {
                         var note = document.createElement('p');
                         note.className = 'text-sm text-base-content/60 mt-2';
                         note.textContent = 'Existing content will be used as a base to improve upon.';
                         summary.appendChild(note);
                     }
-                    if (!urls.length && !data.content) {
+                    if (!urls.length && !data.content && !data.notes) {
                         var empty = document.createElement('p');
                         empty.className = 'text-sm text-base-content/60';
                         empty.textContent = 'No context available. Add source URLs first for better results.';
