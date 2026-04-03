@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
@@ -29,17 +30,29 @@ var sectionDescriptions = map[string]string{
 }
 
 type ProfileHandler struct {
-	queries  *store.Queries
-	aiClient *ai.Client
-	model    func() string
+	queries         *store.Queries
+	aiClient        *ai.Client
+	braveClient     *search.BraveClient
+	model           func() string
+	audienceHandler *AudienceHandler
 }
 
-func NewProfileHandler(q *store.Queries, aiClient *ai.Client, model func() string) *ProfileHandler {
-	return &ProfileHandler{queries: q, aiClient: aiClient, model: model}
+func NewProfileHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *ProfileHandler {
+	return &ProfileHandler{
+		queries:         q,
+		aiClient:        aiClient,
+		braveClient:     braveClient,
+		model:           model,
+		audienceHandler: NewAudienceHandler(q, aiClient, braveClient, model),
+	}
 }
 
 func (h *ProfileHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	switch {
+	case strings.HasPrefix(rest, "profile/audience/"):
+		audienceRest := strings.TrimPrefix(rest, "profile/audience/")
+		h.audienceHandler.Handle(w, r, projectID, audienceRest)
+		return
 	case rest == "profile" && r.Method == "GET":
 		h.show(w, r, projectID)
 	case strings.HasSuffix(rest, "/save") && r.Method == "POST":
@@ -87,6 +100,12 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 		}
 		if card.HasSourceURLs {
 			card.ContextNotes, _ = h.queries.GetProjectSetting(projectID, "profile_context_"+name)
+		}
+		if name == "audience" {
+			card.IsAudience = true
+			card.Personas, _ = h.queries.ListAudiencePersonas(projectID)
+			card.AudienceLocation, _ = h.queries.GetProjectSetting(projectID, "audience_location")
+			card.ContextNotes, _ = h.queries.GetProjectSetting(projectID, "audience_notes")
 		}
 		cardViews[i] = card
 	}

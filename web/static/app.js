@@ -788,6 +788,360 @@ function initProfilePage(projectId) {
         document.getElementById('history-modal').close();
         document.getElementById('edit-modal').showModal();
     });
+
+    // --- Audience Context modal ---
+    document.querySelectorAll('.audience-context-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = document.getElementById('audience-context-modal');
+            var locInput = document.getElementById('audience-location');
+            var notesArea = document.getElementById('audience-notes');
+            locInput.value = '';
+            notesArea.value = '';
+
+            fetch('/projects/' + projectId + '/profile/audience/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    locInput.value = data.location || '';
+                    notesArea.value = data.notes || '';
+                });
+            modal.showModal();
+        });
+    });
+
+    document.getElementById('audience-context-save-btn').addEventListener('click', function() {
+        var loc = document.getElementById('audience-location').value.trim();
+        var notes = document.getElementById('audience-notes').value.trim();
+        fetch('/projects/' + projectId + '/profile/audience/save-context', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({location: loc, notes: notes})
+        }).then(function() { window.location.reload(); });
+    });
+
+    document.getElementById('audience-context-cancel-btn').addEventListener('click', function() {
+        document.getElementById('audience-context-modal').close();
+    });
+
+    // --- Audience Build modal ---
+    var audienceGeneratedPersonas = [];
+
+    document.querySelectorAll('.audience-build-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = document.getElementById('audience-build-modal');
+            var contextDiv = document.getElementById('audience-build-context');
+            var actions = document.getElementById('audience-build-actions');
+            var results = document.getElementById('audience-build-results');
+            var resultActions = document.getElementById('audience-build-result-actions');
+            var genBtn = document.getElementById('audience-generate-btn');
+            var container = document.getElementById('audience-personas-container');
+
+            contextDiv.textContent = '';
+            container.textContent = '';
+            results.classList.add('hidden');
+            resultActions.classList.add('hidden');
+            actions.classList.remove('hidden');
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate';
+            audienceGeneratedPersonas = [];
+
+            // Show context summary
+            fetch('/projects/' + projectId + '/profile/audience/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.location) {
+                        var p = document.createElement('p');
+                        p.className = 'text-sm';
+                        p.textContent = 'Location: ' + data.location;
+                        contextDiv.appendChild(p);
+                    }
+                    if (data.notes) {
+                        var np = document.createElement('p');
+                        np.className = 'text-sm text-base-content/70 mt-1';
+                        np.textContent = 'Notes: ' + data.notes;
+                        contextDiv.appendChild(np);
+                    }
+                    if (!data.location && !data.notes) {
+                        var empty = document.createElement('p');
+                        empty.className = 'text-sm text-base-content/60';
+                        empty.textContent = 'No audience context set. Add context for better results.';
+                        contextDiv.appendChild(empty);
+                    }
+                });
+
+            modal.showModal();
+        });
+    });
+
+    document.getElementById('audience-generate-btn').addEventListener('click', function() {
+        var genBtn = document.getElementById('audience-generate-btn');
+        var actions = document.getElementById('audience-build-actions');
+        var results = document.getElementById('audience-build-results');
+        var resultActions = document.getElementById('audience-build-result-actions');
+        var container = document.getElementById('audience-personas-container');
+
+        genBtn.disabled = true;
+        genBtn.textContent = 'Generating...';
+        container.textContent = '';
+        audienceGeneratedPersonas = [];
+
+        var source = new EventSource('/projects/' + projectId + '/profile/audience/generate');
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            switch (d.type) {
+            case 'status':
+                genBtn.textContent = d.status;
+                break;
+            case 'personas':
+                var parsed = typeof d.data === 'string' ? JSON.parse(d.data) : d.data;
+                var personas = parsed.personas || [];
+                audienceGeneratedPersonas = personas;
+                container.textContent = '';
+                personas.forEach(function(persona, idx) {
+                    var card = buildAudienceResultCard(persona, idx);
+                    container.appendChild(card);
+                });
+                break;
+            case 'error':
+                source.close();
+                genBtn.disabled = false;
+                genBtn.textContent = 'Retry';
+                break;
+            case 'done':
+                source.close();
+                if (audienceGeneratedPersonas.length > 0) {
+                    actions.classList.add('hidden');
+                    results.classList.remove('hidden');
+                    resultActions.classList.remove('hidden');
+                } else {
+                    genBtn.disabled = false;
+                    genBtn.textContent = 'Retry';
+                }
+                break;
+            }
+        };
+        source.onerror = function() {
+            source.close();
+            genBtn.disabled = false;
+            genBtn.textContent = 'Retry';
+        };
+    });
+
+    function buildAudienceResultCard(persona, idx) {
+        var statusColors = {new: 'success', updated: 'warning', unchanged: 'ghost', removed: 'error'};
+        var card = document.createElement('div');
+        card.className = 'card bg-base-200 border border-base-300';
+        card.dataset.idx = idx;
+
+        var body = document.createElement('div');
+        body.className = 'card-body p-3';
+
+        var header = document.createElement('div');
+        header.className = 'flex justify-between items-center';
+
+        var left = document.createElement('div');
+        left.className = 'flex items-center gap-2';
+
+        var label = document.createElement('strong');
+        label.textContent = persona.label || '';
+        left.appendChild(label);
+
+        var badge = document.createElement('span');
+        badge.className = 'badge badge-sm badge-' + (statusColors[persona.status] || 'ghost');
+        badge.textContent = persona.status || '';
+        left.appendChild(badge);
+
+        var toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'btn btn-ghost btn-xs persona-toggle-btn';
+        toggleBtn.dataset.accepted = 'true';
+        toggleBtn.textContent = 'Accepted';
+        toggleBtn.addEventListener('click', function() {
+            var accepted = toggleBtn.dataset.accepted === 'true';
+            toggleBtn.dataset.accepted = accepted ? 'false' : 'true';
+            toggleBtn.textContent = accepted ? 'Rejected' : 'Accepted';
+            card.classList.toggle('opacity-50', accepted);
+        });
+
+        header.appendChild(left);
+        header.appendChild(toggleBtn);
+        body.appendChild(header);
+
+        var desc = document.createElement('p');
+        desc.className = 'text-sm text-base-content/80 mt-1';
+        var descText = persona.description || '';
+        desc.textContent = descText.length > 200 ? descText.substring(0, 200) + '...' : descText;
+        body.appendChild(desc);
+
+        card.appendChild(body);
+        return card;
+    }
+
+    document.getElementById('audience-save-generated-btn').addEventListener('click', function() {
+        var container = document.getElementById('audience-personas-container');
+        var cards = container.querySelectorAll('.card');
+        var accepted = [];
+        cards.forEach(function(card) {
+            var idx = parseInt(card.dataset.idx);
+            var toggleBtn = card.querySelector('.persona-toggle-btn');
+            if (toggleBtn && toggleBtn.dataset.accepted === 'true') {
+                accepted.push(audienceGeneratedPersonas[idx]);
+            }
+        });
+        fetch('/projects/' + projectId + '/profile/audience/save-generated', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({personas: accepted})
+        }).then(function() { window.location.reload(); });
+    });
+
+    document.getElementById('audience-discard-btn').addEventListener('click', function() {
+        document.getElementById('audience-build-modal').close();
+    });
+
+    // --- Audience Edit Persona modal ---
+    var editingPersonaId = null;
+
+    document.querySelectorAll('.audience-edit-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            editingPersonaId = parseInt(btn.dataset.personaId);
+            var modal = document.getElementById('audience-edit-modal');
+            var title = document.getElementById('audience-edit-title');
+            var fieldsContainer = document.getElementById('audience-edit-fields');
+
+            title.textContent = 'Edit Persona';
+            fieldsContainer.textContent = '';
+
+            fetch('/projects/' + projectId + '/profile/audience/personas')
+                .then(function(r) { return r.json(); })
+                .then(function(personas) {
+                    var persona = null;
+                    for (var i = 0; i < personas.length; i++) {
+                        if (personas[i].ID === editingPersonaId) {
+                            persona = personas[i];
+                            break;
+                        }
+                    }
+                    if (!persona) return;
+
+                    title.textContent = 'Edit: ' + persona.Label;
+
+                    var mandatoryFields = [
+                        {key: 'Label', label: 'Label', type: 'input'},
+                        {key: 'Description', label: 'Description', type: 'textarea', rows: 4},
+                        {key: 'PainPoints', label: 'Pain Points', type: 'textarea', rows: 3},
+                        {key: 'Push', label: 'Push', type: 'textarea', rows: 2},
+                        {key: 'Pull', label: 'Pull', type: 'textarea', rows: 2},
+                        {key: 'Anxiety', label: 'Anxiety', type: 'textarea', rows: 2},
+                        {key: 'Habit', label: 'Habit', type: 'textarea', rows: 2}
+                    ];
+
+                    var optionalFields = [
+                        {key: 'Role', label: 'Role', type: 'input'},
+                        {key: 'Demographics', label: 'Demographics', type: 'input'},
+                        {key: 'CompanyInfo', label: 'Company Info', type: 'input'},
+                        {key: 'ContentHabits', label: 'Content Habits', type: 'textarea', rows: 2},
+                        {key: 'BuyingTriggers', label: 'Buying Triggers', type: 'textarea', rows: 2}
+                    ];
+
+                    mandatoryFields.forEach(function(f) {
+                        fieldsContainer.appendChild(buildEditField(f, persona[f.key] || ''));
+                    });
+
+                    var optionalContainer = document.createElement('div');
+                    optionalContainer.className = 'mt-2';
+                    var hasHidden = false;
+
+                    optionalFields.forEach(function(f) {
+                        var wrapper = buildEditField(f, persona[f.key] || '');
+                        if (!persona[f.key]) {
+                            wrapper.classList.add('hidden');
+                            wrapper.dataset.optional = 'true';
+                            hasHidden = true;
+                        }
+                        optionalContainer.appendChild(wrapper);
+                    });
+
+                    fieldsContainer.appendChild(optionalContainer);
+
+                    if (hasHidden) {
+                        var addBtn = document.createElement('button');
+                        addBtn.type = 'button';
+                        addBtn.className = 'btn btn-ghost btn-sm mt-2';
+                        addBtn.textContent = '+ Add field';
+                        addBtn.addEventListener('click', function() {
+                            var hidden = optionalContainer.querySelectorAll('[data-optional="true"].hidden');
+                            if (hidden.length > 0) {
+                                hidden[0].classList.remove('hidden');
+                            }
+                            if (optionalContainer.querySelectorAll('[data-optional="true"].hidden').length === 0) {
+                                addBtn.classList.add('hidden');
+                            }
+                        });
+                        fieldsContainer.appendChild(addBtn);
+                    }
+                });
+
+            modal.showModal();
+        });
+    });
+
+    function buildEditField(field, value) {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'mb-3';
+
+        var lbl = document.createElement('label');
+        lbl.className = 'label';
+        var span = document.createElement('span');
+        span.className = 'label-text font-semibold text-sm';
+        span.textContent = field.label;
+        lbl.appendChild(span);
+        wrapper.appendChild(lbl);
+
+        var input;
+        if (field.type === 'textarea') {
+            input = document.createElement('textarea');
+            input.className = 'textarea textarea-bordered w-full text-sm';
+            input.rows = field.rows || 2;
+        } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'input input-bordered w-full text-sm';
+        }
+        input.value = value;
+        input.dataset.field = field.key;
+        wrapper.appendChild(input);
+
+        return wrapper;
+    }
+
+    document.getElementById('audience-edit-save-btn').addEventListener('click', function() {
+        var fieldsContainer = document.getElementById('audience-edit-fields');
+        var inputs = fieldsContainer.querySelectorAll('[data-field]');
+        var data = {ID: editingPersonaId};
+        inputs.forEach(function(input) {
+            data[input.dataset.field] = input.value;
+        });
+        fetch('/projects/' + projectId + '/profile/audience/personas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        }).then(function() { window.location.reload(); });
+    });
+
+    document.getElementById('audience-edit-cancel-btn').addEventListener('click', function() {
+        document.getElementById('audience-edit-modal').close();
+    });
+
+    // --- Audience Delete ---
+    document.querySelectorAll('.audience-delete-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!confirm('Delete this persona?')) return;
+            var id = btn.dataset.personaId;
+            fetch('/projects/' + projectId + '/profile/audience/personas/' + id, {
+                method: 'DELETE'
+            }).then(function() { window.location.reload(); });
+        });
+    });
 }
 
 function addContextURLRow(container, url, notes) {
