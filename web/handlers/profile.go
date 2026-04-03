@@ -45,7 +45,7 @@ func NewProfileHandler(q *store.Queries, aiClient *ai.Client, braveClient *searc
 		braveClient:      braveClient,
 		model:            model,
 		audienceHandler:  NewAudienceHandler(q, aiClient, braveClient, model),
-		voiceToneHandler: NewVoiceToneHandler(q, aiClient, braveClient, model),
+		voiceToneHandler: NewVoiceToneHandler(q, aiClient, model),
 	}
 }
 

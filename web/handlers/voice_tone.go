@@ -9,21 +9,19 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
-	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
 )
 
 type VoiceToneHandler struct {
-	queries     *store.Queries
-	aiClient    *ai.Client
-	braveClient *search.BraveClient
-	model       func() string
+	queries  *store.Queries
+	aiClient *ai.Client
+	model    func() string
 }
 
-func NewVoiceToneHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *VoiceToneHandler {
-	return &VoiceToneHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
+func NewVoiceToneHandler(q *store.Queries, aiClient *ai.Client, model func() string) *VoiceToneHandler {
+	return &VoiceToneHandler{queries: q, aiClient: aiClient, model: model}
 }
 
 func (h *VoiceToneHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -315,11 +313,8 @@ Call submit_voice_tone with 5 sections:
 
 	toolList := []ai.Tool{
 		tools.NewFetchTool(),
-		tools.NewSearchTool(),
 		submitVoiceToneTool,
 	}
-
-	searchExec := tools.NewSearchExecutor(h.braveClient)
 
 	var submittedResult string
 
@@ -327,8 +322,6 @@ Call submit_voice_tone with 5 sections:
 		switch name {
 		case "fetch_url":
 			return tools.ExecuteFetch(r.Context(), args)
-		case "web_search":
-			return searchExec(ctx, args)
 		case "submit_voice_tone":
 			submittedResult = args
 			return "Voice & tone profile submitted successfully.", ai.ErrToolDone
@@ -343,8 +336,6 @@ Call submit_voice_tone with 5 sections:
 			switch event.Tool {
 			case "fetch_url":
 				summary = tools.FetchSummary(event.Args)
-			case "web_search":
-				summary = tools.SearchSummary(event.Args)
 			case "submit_voice_tone":
 				summary = "Submitting voice & tone profile..."
 			}
@@ -364,7 +355,7 @@ Call submit_voice_tone with 5 sections:
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt.String()},
-		{Role: "user", Content: "Analyze the provided sources and build a structured voice & tone profile for this brand. Use web_search if you need more information, then submit your analysis."},
+		{Role: "user", Content: "Analyze the provided sources and build a structured voice & tone profile for this brand. Use fetch_url to read individual blog posts from the listing pages, then submit your analysis."},
 	}
 
 	temp := 0.3
