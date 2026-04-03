@@ -156,7 +156,7 @@ func (q *Queries) BuildProfileString(projectID int64) (string, error) {
 	var b strings.Builder
 	q.prependMemory(projectID, &b)
 	for _, s := range sections {
-		if s.Content == "" || s.Section == "audience" {
+		if s.Content == "" || s.Section == "audience" || s.Section == "voice_and_tone" {
 			continue
 		}
 		fmt.Fprintf(&b, "## %s\n%s\n\n", sectionTitle(s.Section), s.Content)
@@ -166,6 +166,11 @@ func (q *Queries) BuildProfileString(projectID int64) (string, error) {
 	audienceStr, _ := q.BuildAudienceString(projectID)
 	if audienceStr != "" {
 		fmt.Fprintf(&b, "## Audience\n%s\n", audienceStr)
+	}
+
+	vtStr, _ := q.BuildVoiceToneString(projectID)
+	if vtStr != "" {
+		fmt.Fprintf(&b, "## Voice & Tone\n%s", vtStr)
 	}
 
 	return b.String(), nil
@@ -183,7 +188,7 @@ func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string)
 	var b strings.Builder
 	q.prependMemory(projectID, &b)
 	for _, s := range sections {
-		if s.Content == "" || excludeMap[s.Section] || s.Section == "audience" {
+		if s.Content == "" || excludeMap[s.Section] || s.Section == "audience" || s.Section == "voice_and_tone" {
 			continue
 		}
 		fmt.Fprintf(&b, "## %s\n%s\n\n", sectionTitle(s.Section), s.Content)
@@ -193,6 +198,13 @@ func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string)
 		audienceStr, _ := q.BuildAudienceString(projectID)
 		if audienceStr != "" {
 			fmt.Fprintf(&b, "## Audience\n%s\n", audienceStr)
+		}
+	}
+
+	if !excludeMap["voice_and_tone"] {
+		vtStr, _ := q.BuildVoiceToneString(projectID)
+		if vtStr != "" {
+			fmt.Fprintf(&b, "## Voice & Tone\n%s", vtStr)
 		}
 	}
 

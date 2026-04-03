@@ -51,7 +51,7 @@ func TestBuildProfileString(t *testing.T) {
 	q := testDB(t)
 	p, _ := q.CreateProject("Test", "test")
 
-	q.UpsertProfileSection(p.ID, "voice_and_tone", "Bold voice, casual tone")
+	q.UpsertVoiceToneProfile(p.ID, VoiceToneProfile{VoiceAnalysis: "Bold voice, casual tone"})
 	q.UpsertProfileSection(p.ID, "audience", "") // empty, should be skipped
 
 	profile, _ := q.BuildProfileString(p.ID)

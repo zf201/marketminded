@@ -44,6 +44,14 @@ type AudienceStore interface {
 	BuildAudienceString(projectID int64) (string, error)
 }
 
+// VoiceToneStore handles structured voice & tone profiles.
+type VoiceToneStore interface {
+	UpsertVoiceToneProfile(projectID int64, vt VoiceToneProfile) error
+	GetVoiceToneProfile(projectID int64) (*VoiceToneProfile, error)
+	DeleteVoiceToneProfile(projectID int64) error
+	BuildVoiceToneString(projectID int64) (string, error)
+}
+
 // ProfileStore handles brand profile sections and string building.
 type ProfileStore interface {
 	UpsertProfileSection(projectID int64, section, content string) error
@@ -112,3 +120,4 @@ var _ ProjectSettingsStore = (*Queries)(nil)
 var _ BrainstormStore = (*Queries)(nil)
 var _ ContextStore = (*Queries)(nil)
 var _ AudienceStore = (*Queries)(nil)
+var _ VoiceToneStore = (*Queries)(nil)
