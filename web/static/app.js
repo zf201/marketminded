@@ -1169,6 +1169,300 @@ function initProfilePage(projectId) {
             }).then(function() { window.location.reload(); });
         });
     });
+
+    // --- Voice & Tone Context modal ---
+    document.querySelectorAll('.vt-context-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = document.getElementById('vt-context-modal');
+            var blogContainer = document.getElementById('vt-blog-urls');
+            var likedContainer = document.getElementById('vt-liked-articles');
+            var inspirationContainer = document.getElementById('vt-inspiration');
+            var notesArea = document.getElementById('vt-context-notes');
+
+            blogContainer.textContent = '';
+            likedContainer.textContent = '';
+            inspirationContainer.textContent = '';
+            notesArea.value = '';
+
+            fetch('/projects/' + projectId + '/profile/voice_and_tone/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var blogs = data.blog_urls || [];
+                    if (blogs.length === 0) blogs = [{url: '', notes: ''}];
+                    blogs.forEach(function(u) { addContextURLRow(blogContainer, u.url || '', u.notes || ''); });
+
+                    var liked = data.liked_articles || [];
+                    if (liked.length === 0) liked = [{url: '', notes: ''}];
+                    liked.forEach(function(u) { addContextURLRow(likedContainer, u.url || '', u.notes || ''); });
+
+                    var insp = data.inspiration || [];
+                    if (insp.length === 0) insp = [{url: '', notes: ''}];
+                    insp.forEach(function(u) { addContextURLRow(inspirationContainer, u.url || '', u.notes || ''); });
+
+                    notesArea.value = data.notes || '';
+                });
+            modal.showModal();
+        });
+    });
+
+    document.querySelector('.vt-add-blog-url').addEventListener('click', function() {
+        addContextURLRow(document.getElementById('vt-blog-urls'), '', '');
+    });
+    document.querySelector('.vt-add-liked-url').addEventListener('click', function() {
+        addContextURLRow(document.getElementById('vt-liked-articles'), '', '');
+    });
+    document.querySelector('.vt-add-inspiration-url').addEventListener('click', function() {
+        addContextURLRow(document.getElementById('vt-inspiration'), '', '');
+    });
+
+    function collectURLsFromContainer(container) {
+        var rows = container.querySelectorAll('.source-url-row');
+        var urls = [];
+        rows.forEach(function(row) {
+            var inputs = row.querySelectorAll('input');
+            var url = inputs[0].value.trim();
+            if (url) urls.push({url: url, notes: inputs[1].value.trim()});
+        });
+        return urls;
+    }
+
+    document.getElementById('vt-context-save-btn').addEventListener('click', function() {
+        var blogURLs = collectURLsFromContainer(document.getElementById('vt-blog-urls'));
+        var likedArticles = collectURLsFromContainer(document.getElementById('vt-liked-articles'));
+        var inspiration = collectURLsFromContainer(document.getElementById('vt-inspiration'));
+        var notes = document.getElementById('vt-context-notes').value.trim();
+        fetch('/projects/' + projectId + '/profile/voice_and_tone/save-context', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({blog_urls: blogURLs, liked_articles: likedArticles, inspiration: inspiration, notes: notes})
+        }).then(function() { location.reload(); });
+    });
+
+    document.getElementById('vt-context-cancel-btn').addEventListener('click', function() {
+        document.getElementById('vt-context-modal').close();
+    });
+
+    // --- Voice & Tone Build modal ---
+    var vtGeneratedResult = null;
+
+    document.querySelectorAll('.vt-build-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = document.getElementById('vt-build-modal');
+            var contextDiv = document.getElementById('vt-build-context');
+            var actions = document.getElementById('vt-build-actions');
+            var textarea = document.getElementById('vt-build-content');
+            var resultActions = document.getElementById('vt-build-result-actions');
+            var genBtn = document.getElementById('vt-generate-btn');
+
+            contextDiv.textContent = '';
+            textarea.value = '';
+            textarea.classList.add('hidden');
+            resultActions.classList.add('hidden');
+            actions.classList.remove('hidden');
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate';
+            vtGeneratedResult = null;
+
+            // Show context summary
+            fetch('/projects/' + projectId + '/profile/voice_and_tone/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var blogs = data.blog_urls || [];
+                    var liked = data.liked_articles || [];
+                    var insp = data.inspiration || [];
+                    var hasContext = blogs.length > 0 || liked.length > 0 || insp.length > 0 || data.notes;
+
+                    if (blogs.length > 0) {
+                        var h = document.createElement('p');
+                        h.className = 'text-sm font-semibold mb-1';
+                        h.textContent = 'Blog URLs (' + blogs.length + '):';
+                        contextDiv.appendChild(h);
+                        blogs.forEach(function(u) {
+                            var p = document.createElement('p');
+                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.textContent = u.url + (u.notes ? ' - ' + u.notes : '');
+                            contextDiv.appendChild(p);
+                        });
+                    }
+                    if (liked.length > 0) {
+                        var h2 = document.createElement('p');
+                        h2.className = 'text-sm font-semibold mt-2 mb-1';
+                        h2.textContent = 'Liked Articles (' + liked.length + '):';
+                        contextDiv.appendChild(h2);
+                        liked.forEach(function(u) {
+                            var p = document.createElement('p');
+                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.textContent = u.url + (u.notes ? ' - ' + u.notes : '');
+                            contextDiv.appendChild(p);
+                        });
+                    }
+                    if (insp.length > 0) {
+                        var h3 = document.createElement('p');
+                        h3.className = 'text-sm font-semibold mt-2 mb-1';
+                        h3.textContent = 'Inspiration (' + insp.length + '):';
+                        contextDiv.appendChild(h3);
+                        insp.forEach(function(u) {
+                            var p = document.createElement('p');
+                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.textContent = u.url + (u.notes ? ' - ' + u.notes : '');
+                            contextDiv.appendChild(p);
+                        });
+                    }
+                    if (data.notes) {
+                        var nh = document.createElement('p');
+                        nh.className = 'text-sm font-semibold mt-2 mb-1';
+                        nh.textContent = 'Additional notes:';
+                        contextDiv.appendChild(nh);
+                        var np = document.createElement('p');
+                        np.className = 'text-xs text-base-content/70';
+                        np.textContent = data.notes;
+                        contextDiv.appendChild(np);
+                    }
+                    if (!hasContext) {
+                        var empty = document.createElement('p');
+                        empty.className = 'text-sm text-base-content/60';
+                        empty.textContent = 'No context available. Add blog URLs, liked articles, or inspiration sources for better results.';
+                        contextDiv.appendChild(empty);
+                    }
+                });
+
+            modal.showModal();
+        });
+    });
+
+    document.getElementById('vt-generate-btn').addEventListener('click', function() {
+        var genBtn = document.getElementById('vt-generate-btn');
+        var actions = document.getElementById('vt-build-actions');
+        var textarea = document.getElementById('vt-build-content');
+        var resultActions = document.getElementById('vt-build-result-actions');
+
+        genBtn.disabled = true;
+        genBtn.textContent = 'Generating...';
+        textarea.value = '';
+        textarea.classList.remove('hidden');
+        textarea.readOnly = true;
+        vtGeneratedResult = null;
+
+        var source = new EventSource('/projects/' + projectId + '/profile/voice_and_tone/generate');
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            switch (d.type) {
+            case 'status':
+                genBtn.textContent = d.status;
+                break;
+            case 'result':
+                var parsed = typeof d.data === 'string' ? JSON.parse(d.data) : d.data;
+                vtGeneratedResult = parsed;
+                // Format into textarea with headers
+                var text = '';
+                if (parsed.voice_analysis) text += '## Voice Analysis\n' + parsed.voice_analysis + '\n\n';
+                if (parsed.content_types) text += '## Content Types\n' + parsed.content_types + '\n\n';
+                if (parsed.should_avoid) text += '## Should Avoid\n' + parsed.should_avoid + '\n\n';
+                if (parsed.should_use) text += '## Should Use\n' + parsed.should_use + '\n\n';
+                if (parsed.style_inspiration) text += '## Style Inspiration\n' + parsed.style_inspiration + '\n\n';
+                textarea.value = text.trim();
+                textarea.scrollTop = 0;
+                break;
+            case 'error':
+                source.close();
+                genBtn.disabled = false;
+                genBtn.textContent = 'Retry';
+                textarea.value = 'Error: ' + (d.error || 'Unknown error');
+                break;
+            case 'done':
+                source.close();
+                if (vtGeneratedResult) {
+                    actions.classList.add('hidden');
+                    textarea.readOnly = false;
+                    resultActions.classList.remove('hidden');
+                } else {
+                    genBtn.disabled = false;
+                    genBtn.textContent = 'Retry';
+                }
+                break;
+            }
+        };
+        source.onerror = function() {
+            source.close();
+            genBtn.disabled = false;
+            genBtn.textContent = 'Retry';
+        };
+    });
+
+    document.getElementById('vt-save-generated-btn').addEventListener('click', function() {
+        if (!vtGeneratedResult) return;
+        fetch('/projects/' + projectId + '/profile/voice_and_tone/profile', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(vtGeneratedResult)
+        }).then(function() { window.location.reload(); });
+    });
+
+    document.getElementById('vt-discard-btn').addEventListener('click', function() {
+        document.getElementById('vt-build-modal').close();
+    });
+
+    // --- Voice & Tone Edit modal ---
+    document.querySelectorAll('.vt-edit-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = document.getElementById('vt-edit-modal');
+            var fieldsContainer = document.getElementById('vt-edit-fields');
+            fieldsContainer.textContent = '';
+
+            fetch('/projects/' + projectId + '/profile/voice_and_tone/profile')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var fields = [
+                        {key: 'voice_analysis', label: 'Voice Analysis', rows: 4},
+                        {key: 'content_types', label: 'Content Types', rows: 4},
+                        {key: 'should_avoid', label: 'Should Avoid', rows: 4},
+                        {key: 'should_use', label: 'Should Use', rows: 4},
+                        {key: 'style_inspiration', label: 'Style Inspiration', rows: 4}
+                    ];
+                    fields.forEach(function(f) {
+                        var wrapper = document.createElement('div');
+                        wrapper.className = 'mb-3';
+
+                        var lbl = document.createElement('label');
+                        lbl.className = 'label';
+                        var span = document.createElement('span');
+                        span.className = 'label-text font-semibold text-sm';
+                        span.textContent = f.label;
+                        lbl.appendChild(span);
+                        wrapper.appendChild(lbl);
+
+                        var textarea = document.createElement('textarea');
+                        textarea.className = 'textarea textarea-bordered w-full text-sm';
+                        textarea.rows = f.rows;
+                        textarea.value = data[f.key] || '';
+                        textarea.dataset.field = f.key;
+                        wrapper.appendChild(textarea);
+
+                        fieldsContainer.appendChild(wrapper);
+                    });
+                });
+
+            modal.showModal();
+        });
+    });
+
+    document.getElementById('vt-edit-save-btn').addEventListener('click', function() {
+        var fieldsContainer = document.getElementById('vt-edit-fields');
+        var inputs = fieldsContainer.querySelectorAll('[data-field]');
+        var data = {};
+        inputs.forEach(function(input) {
+            data[input.dataset.field] = input.value;
+        });
+        fetch('/projects/' + projectId + '/profile/voice_and_tone/profile', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        }).then(function() { window.location.reload(); });
+    });
+
+    document.getElementById('vt-edit-cancel-btn').addEventListener('click', function() {
+        document.getElementById('vt-edit-modal').close();
+    });
 }
 
 function addContextURLRow(container, url, notes) {

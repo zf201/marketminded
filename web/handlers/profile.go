@@ -30,20 +30,22 @@ var sectionDescriptions = map[string]string{
 }
 
 type ProfileHandler struct {
-	queries         *store.Queries
-	aiClient        *ai.Client
-	braveClient     *search.BraveClient
-	model           func() string
-	audienceHandler *AudienceHandler
+	queries          *store.Queries
+	aiClient         *ai.Client
+	braveClient      *search.BraveClient
+	model            func() string
+	audienceHandler  *AudienceHandler
+	voiceToneHandler *VoiceToneHandler
 }
 
 func NewProfileHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *ProfileHandler {
 	return &ProfileHandler{
-		queries:         q,
-		aiClient:        aiClient,
-		braveClient:     braveClient,
-		model:           model,
-		audienceHandler: NewAudienceHandler(q, aiClient, braveClient, model),
+		queries:          q,
+		aiClient:         aiClient,
+		braveClient:      braveClient,
+		model:            model,
+		audienceHandler:  NewAudienceHandler(q, aiClient, braveClient, model),
+		voiceToneHandler: NewVoiceToneHandler(q, aiClient, braveClient, model),
 	}
 }
 
@@ -52,6 +54,10 @@ func (h *ProfileHandler) Handle(w http.ResponseWriter, r *http.Request, projectI
 	case strings.HasPrefix(rest, "profile/audience/"):
 		audienceRest := strings.TrimPrefix(rest, "profile/audience/")
 		h.audienceHandler.Handle(w, r, projectID, audienceRest)
+		return
+	case strings.HasPrefix(rest, "profile/voice_and_tone/"):
+		vtRest := strings.TrimPrefix(rest, "profile/voice_and_tone/")
+		h.voiceToneHandler.Handle(w, r, projectID, vtRest)
 		return
 	case rest == "profile" && r.Method == "GET":
 		h.show(w, r, projectID)
@@ -106,6 +112,27 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 			card.Personas, _ = h.queries.ListAudiencePersonas(projectID)
 			card.AudienceLocation, _ = h.queries.GetProjectSetting(projectID, "audience_location")
 			card.ContextNotes, _ = h.queries.GetProjectSetting(projectID, "audience_notes")
+		}
+		if name == "voice_and_tone" {
+			card.IsVoiceTone = true
+			vt, err := h.queries.GetVoiceToneProfile(projectID)
+			if err == nil {
+				card.VoiceToneProfile = vt
+			}
+			var blogURLs, likedArticles, inspirationURLs []store.SourceURL
+			if raw, err := h.queries.GetProjectSetting(projectID, "voice_tone_blog_urls"); err == nil && raw != "" {
+				json.Unmarshal([]byte(raw), &blogURLs)
+			}
+			if raw, err := h.queries.GetProjectSetting(projectID, "voice_tone_liked_articles"); err == nil && raw != "" {
+				json.Unmarshal([]byte(raw), &likedArticles)
+			}
+			if raw, err := h.queries.GetProjectSetting(projectID, "voice_tone_inspiration"); err == nil && raw != "" {
+				json.Unmarshal([]byte(raw), &inspirationURLs)
+			}
+			card.VTBlogURLs = blogURLs
+			card.VTLikedArticles = likedArticles
+			card.VTInspiration = inspirationURLs
+			card.ContextNotes, _ = h.queries.GetProjectSetting(projectID, "profile_context_voice_and_tone")
 		}
 		cardViews[i] = card
 	}
