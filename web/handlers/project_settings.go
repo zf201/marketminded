@@ -43,10 +43,6 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 		ProjectID:             projectID,
 		ProjectName:           project.Name,
 		Language:              settings["language"],
-		CompanyWebsite:        settings["company_website"],
-		WebsiteNotes:          settings["website_notes"],
-		CompanyPricing:        settings["company_pricing"],
-		PricingNotes:          settings["pricing_notes"],
 		CompanyBlog:           settings["company_blog"],
 		BlogNotes:             settings["blog_notes"],
 		StorytellingFramework: settings["storytelling_framework"],
@@ -58,10 +54,6 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 func (h *ProjectSettingsHandler) save(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
 	h.queries.SetProjectSetting(projectID, "language", r.FormValue("language"))
-	h.queries.SetProjectSetting(projectID, "company_website", r.FormValue("company_website"))
-	h.queries.SetProjectSetting(projectID, "website_notes", r.FormValue("website_notes"))
-	h.queries.SetProjectSetting(projectID, "company_pricing", r.FormValue("company_pricing"))
-	h.queries.SetProjectSetting(projectID, "pricing_notes", r.FormValue("pricing_notes"))
 	h.queries.SetProjectSetting(projectID, "company_blog", r.FormValue("company_blog"))
 	h.queries.SetProjectSetting(projectID, "blog_notes", r.FormValue("blog_notes"))
 	h.queries.SetProjectSetting(projectID, "storytelling_framework", r.FormValue("storytelling_framework"))

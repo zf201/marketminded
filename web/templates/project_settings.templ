@@ -13,10 +13,6 @@ type ProjectSettingsData struct {
 	ProjectID            int64
 	ProjectName          string
 	Language             string
-	CompanyWebsite       string
-	WebsiteNotes         string
-	CompanyPricing       string
-	PricingNotes         string
 	CompanyBlog          string
 	BlogNotes            string
 	StorytellingFramework string
@@ -48,22 +44,8 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 			</div>
 
 			<div class="mb-4">
-				@components.Card("Company URLs") {
-					<p class="text-base-content/60 text-xs mt-1 mb-3">These URLs are fetched by the Brand Enricher during pipeline runs to ground content in your actual brand info. Use commas to separate multiple URLs.</p>
-
-					@components.FormGroup("Company Website") {
-						<input type="text" name="company_website" value={ data.CompanyWebsite } placeholder="https://example.com, https://example.com/about" class="input input-bordered w-full"/>
-					}
-					@components.FormGroup("Website Usage Notes") {
-						<textarea name="website_notes" class="textarea textarea-bordered w-full" placeholder="How should AI use this? e.g. Link to homepage in blog CTAs, reference for brand info...">{ data.WebsiteNotes }</textarea>
-					}
-
-					@components.FormGroup("Pricing Page") {
-						<input type="text" name="company_pricing" value={ data.CompanyPricing } placeholder="https://example.com/pricing, https://example.com/plans" class="input input-bordered w-full"/>
-					}
-					@components.FormGroup("Pricing Usage Notes") {
-						<textarea name="pricing_notes" class="textarea textarea-bordered w-full" placeholder="e.g. Link to pricing in conversion-focused content, mention free tier...">{ data.PricingNotes }</textarea>
-					}
+				@components.Card("Blog URL") {
+					<p class="text-base-content/60 text-xs mt-1 mb-3">Blog URL used by the Tone Analyzer to match writing style. Use commas to separate multiple URLs.</p>
 
 					@components.FormGroup("Blog URL") {
 						<input type="text" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog" class="input input-bordered w-full"/>
