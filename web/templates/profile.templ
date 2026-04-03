@@ -87,7 +87,7 @@ templ ProfilePage(data ProfilePageData) {
 						if card.Content != "" {
 							<div class="mt-3">
 								<div class="profile-content-preview max-h-28 overflow-hidden relative" data-section={ card.Section }>
-									<div class="profile-md-content text-sm leading-relaxed text-base-content/80" data-md={ card.Content }></div>
+									<div class="profile-md-content text-sm leading-relaxed text-base-content/80">{ card.Content }</div>
 									<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-base-100 to-transparent pointer-events-none profile-fade"></div>
 								</div>
 								<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section={ card.Section }>Show more</button>

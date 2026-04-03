@@ -481,14 +481,12 @@ function initProfilePage(projectId) {
 
     // Render markdown content and set up expand/collapse
     document.querySelectorAll('.profile-md-content').forEach(function(el) {
-        var md = el.dataset.md;
+        var md = el.textContent;
         if (md && typeof renderMarkdown === 'function') {
             var rendered = renderMarkdown(md);
             el.textContent = '';
             while (rendered.firstChild) el.appendChild(rendered.firstChild);
-            el.className = rendered.className + ' ' + el.className;
-        } else {
-            el.textContent = md || '';
+            el.classList.add('markdown-body');
         }
     });
 
