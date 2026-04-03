@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -87,8 +86,11 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 }
 
 func (h *ProfileHandler) showEdit(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	// rest = "profile/product_and_positioning/edit"
 	section := h.parseSectionFromRest(rest)
+	if !isValidSection(section) {
+		http.NotFound(w, r)
+		return
+	}
 
 	project, err := h.queries.GetProject(projectID)
 	if err != nil {
@@ -123,6 +125,10 @@ func (h *ProfileHandler) showEdit(w http.ResponseWriter, r *http.Request, projec
 
 func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	section := h.parseSectionFromRest(rest)
+	if !isValidSection(section) {
+		http.NotFound(w, r)
+		return
+	}
 	r.ParseForm()
 	content := r.FormValue("content")
 
@@ -158,6 +164,10 @@ func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, pro
 
 func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	sectionName := h.parseSectionFromRest(rest)
+	if !isValidSection(sectionName) {
+		http.NotFound(w, r)
+		return
+	}
 	project, _ := h.queries.GetProject(projectID)
 
 	// SSE headers
@@ -188,7 +198,8 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 			if json.Unmarshal([]byte(ps.SourceURLs), &urls) == nil {
 				for _, u := range urls {
 					sendEvent(map[string]string{"type": "status", "status": fmt.Sprintf("Fetching %s...", u.URL)})
-					result, err := tools.ExecuteFetch(r.Context(), fmt.Sprintf(`{"url":"%s"}`, u.URL))
+					fetchArgs, _ := json.Marshal(map[string]string{"url": u.URL})
+					result, err := tools.ExecuteFetch(r.Context(), string(fetchArgs))
 					if err != nil {
 						fmt.Fprintf(&fetchedContent, "\n## Source: %s\n(fetch failed: %s)\n", u.URL, err.Error())
 						continue
@@ -286,6 +297,10 @@ Write the section content now. Output ONLY the section content, no headers or me
 
 func (h *ProfileHandler) listVersions(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	section := h.parseSectionFromRest(rest)
+	if !isValidSection(section) {
+		http.NotFound(w, r)
+		return
+	}
 	versions, err := h.queries.ListProfileVersions(projectID, section)
 	if err != nil {
 		http.Error(w, "Failed to load versions", http.StatusInternalServerError)
@@ -320,6 +335,15 @@ func (h *ProfileHandler) parseSectionFromRest(rest string) string {
 	return section
 }
 
+func isValidSection(section string) bool {
+	for _, s := range allSections {
+		if s == section {
+			return true
+		}
+	}
+	return false
+}
+
 var sectionDisplayTitles = map[string]string{
 	"product_and_positioning": "Product & Positioning",
 	"voice_and_tone":          "Voice & Tone",
@@ -335,5 +359,3 @@ func sectionTitle(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// suppress unused import warning
-var _ context.Context
