@@ -216,9 +216,11 @@ For each persona, provide:
 - buying_triggers: What events/situations trigger a purchase decision
 
 ## Rules
+- ALWAYS write in English. All persona fields must be in English.
+- When the target market uses a non-English language, include important native-language terms in parentheses to help clarify meaning. For example: "Construction site manager (vodja gradbišča)" or "Fleet management (upravljanje voznega parka)". This helps downstream agents understand local terminology.
 - NEVER fabricate details. Use web_search to research real market data.
 - Be specific to THIS business. Generic personas are useless.
-- Use the customer's own language, not marketing jargon.
+- Write in plain language, not marketing jargon.
 - Each persona should be distinct and non-overlapping.
 `)
 
