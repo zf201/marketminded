@@ -156,11 +156,18 @@ func (q *Queries) BuildProfileString(projectID int64) (string, error) {
 	var b strings.Builder
 	q.prependMemory(projectID, &b)
 	for _, s := range sections {
-		if s.Content == "" {
+		if s.Content == "" || s.Section == "audience" {
 			continue
 		}
 		fmt.Fprintf(&b, "## %s\n%s\n\n", sectionTitle(s.Section), s.Content)
 	}
+
+	// Add audience personas
+	audienceStr, _ := q.BuildAudienceString(projectID)
+	if audienceStr != "" {
+		fmt.Fprintf(&b, "## Audience\n%s\n", audienceStr)
+	}
+
 	return b.String(), nil
 }
 
@@ -176,11 +183,19 @@ func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string)
 	var b strings.Builder
 	q.prependMemory(projectID, &b)
 	for _, s := range sections {
-		if s.Content == "" || excludeMap[s.Section] {
+		if s.Content == "" || excludeMap[s.Section] || s.Section == "audience" {
 			continue
 		}
 		fmt.Fprintf(&b, "## %s\n%s\n\n", sectionTitle(s.Section), s.Content)
 	}
+
+	if !excludeMap["audience"] {
+		audienceStr, _ := q.BuildAudienceString(projectID)
+		if audienceStr != "" {
+			fmt.Fprintf(&b, "## Audience\n%s\n", audienceStr)
+		}
+	}
+
 	return b.String(), nil
 }
 

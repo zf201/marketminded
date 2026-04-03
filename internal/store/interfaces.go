@@ -33,6 +33,17 @@ type ContentStore interface {
 	AllPiecesApproved(runID int64) (bool, error)
 }
 
+// AudienceStore handles audience persona cards.
+type AudienceStore interface {
+	CreateAudiencePersona(projectID int64, p AudiencePersona) (*AudiencePersona, error)
+	GetAudiencePersona(id int64) (*AudiencePersona, error)
+	ListAudiencePersonas(projectID int64) ([]AudiencePersona, error)
+	UpdateAudiencePersona(id int64, p AudiencePersona) error
+	DeleteAudiencePersona(id int64) error
+	DeleteAllAudiencePersonas(projectID int64) error
+	BuildAudienceString(projectID int64) (string, error)
+}
+
 // ProfileStore handles brand profile sections and string building.
 type ProfileStore interface {
 	UpsertProfileSection(projectID int64, section, content string) error
@@ -100,3 +111,4 @@ var _ SettingsStore = (*Queries)(nil)
 var _ ProjectSettingsStore = (*Queries)(nil)
 var _ BrainstormStore = (*Queries)(nil)
 var _ ContextStore = (*Queries)(nil)
+var _ AudienceStore = (*Queries)(nil)
