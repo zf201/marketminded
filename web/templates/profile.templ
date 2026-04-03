@@ -22,17 +22,6 @@ type ProfileCardView struct {
 	ProjectID     int64
 }
 
-type ProfileEditData struct {
-	ProjectID     int64
-	ProjectName   string
-	Section       string
-	SectionTitle  string
-	Content       string
-	SourceURLs    []store.SourceURL
-	HasSourceURLs bool
-	Saved         bool
-}
-
 templ ProfilePage(data ProfilePageData) {
 	@components.ProjectPageShell(data.ProjectName+" - Profile", []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
@@ -43,123 +32,115 @@ templ ProfilePage(data ProfilePageData) {
 			<h1 class="text-2xl font-bold">{ data.ProjectName } Profile</h1>
 		</div>
 
-		for _, card := range data.Cards {
-			<div class="card bg-base-100 shadow-sm border border-base-300 mb-3" id={ "card-" + card.Section }>
-				<div class="card-body">
-					<div class="flex items-center justify-between mb-1">
-						<div class="flex items-center gap-2">
-							<strong>{ card.Title }</strong>
-							if card.Content != "" {
-								@components.StatusBadge("approved")
-							} else {
-								<span class="badge badge-ghost">Empty</span>
-							}
-						</div>
-						<div class="flex items-center gap-1">
-							<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/edit?generate=1", card.ProjectID, card.Section)) }
-								class="btn btn-secondary btn-sm">
+		<div id="profile-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) }>
+			for _, card := range data.Cards {
+				<div class="card bg-base-100 shadow-sm border border-base-300 mb-3" id={ "card-" + card.Section }>
+					<div class="card-body">
+						<div class="flex items-center justify-between mb-1">
+							<div class="flex items-center gap-2">
+								<strong>{ card.Title }</strong>
 								if card.Content != "" {
-									Rebuild
+									@components.StatusBadge("approved")
 								} else {
-									Build
+									<span class="badge badge-ghost">Empty</span>
 								}
-							</a>
-							<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/edit", data.ProjectID, card.Section)) } class="btn btn-ghost btn-sm">
-								Edit
-							</a>
-						</div>
-					</div>
-					if card.HasSourceURLs && len(card.SourceURLs) > 0 {
-						<div class="flex flex-wrap gap-2 mt-2 mb-2">
-							for _, u := range card.SourceURLs {
-								<span class="badge badge-outline badge-sm font-mono truncate max-w-xs" title={ u.URL }>{ u.URL }</span>
-							}
-						</div>
-					}
-					if card.Content != "" {
-						<div class="whitespace-pre-wrap text-sm leading-relaxed text-base-content/80 line-clamp-4">{ card.Content }</div>
-					} else {
-						<p class="text-base-content/60 italic text-sm">Not yet filled</p>
-					}
-				</div>
-			</div>
-		}
-	}
-}
-
-templ ProfileEditPage(data ProfileEditData) {
-	@components.ProjectPageShell(data.SectionTitle, []components.Breadcrumb{
-		{Label: "Projects", URL: "/"},
-		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
-		{Label: "Profile", URL: fmt.Sprintf("/projects/%d/profile", data.ProjectID)},
-		{Label: data.SectionTitle},
-	}, data.ProjectID) {
-		<div class="flex items-center justify-between mb-4">
-			<h1 class="text-2xl font-bold">{ data.SectionTitle }</h1>
-		</div>
-
-		if data.Saved {
-			<div class="alert alert-success mb-4">
-				<span>Section saved successfully.</span>
-			</div>
-		}
-
-		<form id="profile-edit-form" method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/save", data.ProjectID, data.Section)) }>
-			if data.HasSourceURLs {
-				<div class="card bg-base-200 shadow-sm border border-base-300 mb-4">
-					<div class="card-body p-4">
-						<h3 class="font-semibold mb-2">Source URLs</h3>
-						<p class="text-sm text-base-content/60 mb-3">Add website URLs to fetch when generating this section.</p>
-						<div id="source-urls-container">
-							if len(data.SourceURLs) > 0 {
-								for _, u := range data.SourceURLs {
-									@sourceURLRow(u.URL, u.Notes)
+							</div>
+							<div class="flex items-center gap-1">
+								if card.HasSourceURLs {
+									<button type="button" class="btn btn-ghost btn-sm profile-context-btn" data-section={ card.Section } data-title={ card.Title }>
+										Add context
+									</button>
 								}
-							} else {
-								@sourceURLRow("", "")
-							}
+								<button type="button" class="btn btn-secondary btn-sm profile-build-btn" data-section={ card.Section } data-title={ card.Title }>
+									if card.Content != "" {
+										Rebuild
+									} else {
+										Build
+									}
+								</button>
+								<button type="button" class="btn btn-ghost btn-sm profile-edit-btn" data-section={ card.Section } data-title={ card.Title }>
+									Edit
+								</button>
+							</div>
 						</div>
-						<button type="button" id="add-url-btn" class="btn btn-ghost btn-sm mt-1">+ Add URL</button>
+						if card.HasSourceURLs && len(card.SourceURLs) > 0 {
+							<div class="flex flex-wrap gap-2 mt-2 mb-2">
+								for _, u := range card.SourceURLs {
+									<span class="badge badge-outline badge-sm font-mono truncate max-w-xs" title={ u.URL }>{ u.URL }</span>
+								}
+							</div>
+						}
+						if card.Content != "" {
+							<div class="whitespace-pre-wrap text-sm leading-relaxed text-base-content/80 line-clamp-4">{ card.Content }</div>
+						} else {
+							<p class="text-base-content/60 italic text-sm">Not yet filled</p>
+						}
 					</div>
 				</div>
 			}
+		</div>
 
-			<div class="card bg-base-100 shadow-sm border border-base-300 mb-4">
-				<div class="card-body p-4">
-					<h3 class="font-semibold mb-3">Actions</h3>
-					<div class="flex flex-wrap gap-2">
-						<button type="button" id="generate-btn" class="btn btn-secondary btn-sm" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
-							if data.Content != "" {
-								Rebuild from URLs
-							} else {
-								Build from URLs
-							}
-						</button>
-						<button type="button" id="history-btn" class="btn btn-ghost btn-sm" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
-							Restore from history
-						</button>
-					</div>
+		<!-- Add Context modal -->
+		<dialog id="context-modal" class="modal">
+			<div class="modal-box w-11/12 max-w-2xl">
+				<h3 class="font-bold text-lg mb-4" id="context-modal-title">Add Context</h3>
+				<div id="context-urls-container"></div>
+				<button type="button" id="context-add-url-btn" class="btn btn-ghost btn-sm mt-1 mb-4">+ Add URL</button>
+				<div class="modal-action">
+					<button type="button" id="context-save-btn" class="btn btn-primary">Save</button>
+					<button type="button" id="context-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
+			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+		</dialog>
 
-			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body p-4">
-					<h3 class="font-semibold mb-3">Edit content</h3>
-					<textarea name="content" id="profile-content" class="textarea textarea-bordered w-full font-mono text-sm" rows="20">{ data.Content }</textarea>
-					<div class="flex gap-2 mt-4">
-						<button type="submit" class="btn btn-primary">Save changes</button>
-						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", data.ProjectID)) } class="btn btn-ghost">Cancel</a>
-					</div>
+		<!-- Build modal -->
+		<dialog id="build-modal" class="modal">
+			<div class="modal-box w-11/12 max-w-3xl">
+				<h3 class="font-bold text-lg mb-4" id="build-modal-title">Build</h3>
+				<div id="build-context-summary" class="mb-4"></div>
+				<div id="build-actions" class="mb-4">
+					<button type="button" id="build-generate-btn" class="btn btn-secondary">Generate</button>
+				</div>
+				<textarea id="build-content" class="textarea textarea-bordered w-full font-mono text-sm hidden" rows="16" readonly></textarea>
+				<div id="build-result-actions" class="modal-action hidden">
+					<button type="button" id="build-save-btn" class="btn btn-primary">Save</button>
+					<button type="button" id="build-discard-btn" class="btn btn-ghost">Discard</button>
 				</div>
 			</div>
-		</form>
+			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+		</dialog>
 
-		@components.Modal("history-modal") {
-			<h3 class="font-bold text-lg mb-4">Version History</h3>
-			<div id="history-content">
-				<p class="text-base-content/60">Loading...</p>
+		<!-- Edit modal -->
+		<dialog id="edit-modal" class="modal">
+			<div class="modal-box w-11/12 max-w-3xl">
+				<h3 class="font-bold text-lg mb-1" id="edit-modal-title">Edit</h3>
+				<div class="flex items-center justify-between mb-4">
+					<p class="text-sm text-base-content/60">Edit the section content directly.</p>
+					<button type="button" id="edit-history-btn" class="btn btn-ghost btn-xs">Restore from history</button>
+				</div>
+				<textarea id="edit-content" class="textarea textarea-bordered w-full font-mono text-sm" rows="20"></textarea>
+				<div class="modal-action">
+					<button type="button" id="edit-save-btn" class="btn btn-primary">Save changes</button>
+					<button type="button" id="edit-cancel-btn" class="btn btn-ghost">Cancel</button>
+				</div>
 			</div>
-		}
+			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+		</dialog>
+
+		<!-- History modal (sub-modal, opened from Edit) -->
+		<dialog id="history-modal" class="modal">
+			<div class="modal-box w-11/12 max-w-2xl">
+				<h3 class="font-bold text-lg mb-4">Version History</h3>
+				<div id="history-content">
+					<p class="text-base-content/60">Loading...</p>
+				</div>
+				<div class="modal-action">
+					<button type="button" id="history-back-btn" class="btn btn-ghost">Back</button>
+				</div>
+			</div>
+			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+		</dialog>
 	}
 }
 

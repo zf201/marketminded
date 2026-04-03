@@ -454,16 +454,9 @@ function initProfileChat(projectID) {
 
 // Auto-init pages
 document.addEventListener('DOMContentLoaded', function() {
-    var profileEdit = document.getElementById('profile-edit-form');
-    if (profileEdit) {
-        initProfileEdit();
-        // Auto-trigger generation if ?generate=1
-        if (new URLSearchParams(window.location.search).get('generate') === '1') {
-            var genBtn = document.getElementById('generate-btn');
-            if (genBtn) genBtn.click();
-            // Clean up URL
-            history.replaceState(null, '', window.location.pathname);
-        }
+    var profilePage = document.getElementById('profile-page');
+    if (profilePage) {
+        initProfilePage(profilePage.dataset.projectId);
     }
 
     var board = document.getElementById('production-board');
@@ -483,187 +476,300 @@ document.addEventListener('DOMContentLoaded', function() {
 
 });
 
-function initProfileEdit() {
-    var generateBtn = document.getElementById('generate-btn');
-    var historyBtn = document.getElementById('history-btn');
-    var textarea = document.getElementById('profile-content');
-    var addUrlBtn = document.getElementById('add-url-btn');
-    var urlContainer = document.getElementById('source-urls-container');
+function initProfilePage(projectId) {
+    var activeSection = null;
 
-    // Dynamic URL rows
-    if (addUrlBtn && urlContainer) {
-        addUrlBtn.addEventListener('click', function() {
-            var row = document.createElement('div');
-            row.className = 'flex gap-2 mb-2 source-url-row';
+    // --- Add Context modal ---
+    document.querySelectorAll('.profile-context-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activeSection = btn.dataset.section;
+            var modal = document.getElementById('context-modal');
+            var container = document.getElementById('context-urls-container');
+            var title = document.getElementById('context-modal-title');
+            title.textContent = btn.dataset.title + ' — Context';
+            container.textContent = '';
 
-            var urlInput = document.createElement('input');
-            urlInput.type = 'text';
-            urlInput.name = 'source_url';
-            urlInput.placeholder = 'https://example.com';
-            urlInput.className = 'input input-bordered input-sm flex-1';
-
-            var notesInput = document.createElement('input');
-            notesInput.type = 'text';
-            notesInput.name = 'source_notes';
-            notesInput.placeholder = 'Usage notes...';
-            notesInput.className = 'input input-bordered input-sm flex-1';
-
-            var removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.className = 'btn btn-ghost btn-sm btn-square remove-url-btn';
-            removeBtn.textContent = 'x';
-            removeBtn.addEventListener('click', function() {
-                removeURLRow(removeBtn);
-            });
-
-            row.appendChild(urlInput);
-            row.appendChild(notesInput);
-            row.appendChild(removeBtn);
-            urlContainer.appendChild(row);
+            // Fetch current URLs
+            fetch('/projects/' + projectId + '/profile/' + activeSection + '/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var urls = data.urls || [];
+                    if (urls.length === 0) urls = [{url: '', notes: ''}];
+                    urls.forEach(function(u) { addContextURLRow(container, u.url || '', u.notes || ''); });
+                });
+            modal.showModal();
         });
+    });
 
-        urlContainer.addEventListener('click', function(e) {
-            var btn = e.target.closest('.remove-url-btn');
-            if (btn) {
-                removeURLRow(btn);
-            }
+    document.getElementById('context-add-url-btn').addEventListener('click', function() {
+        addContextURLRow(document.getElementById('context-urls-container'), '', '');
+    });
+
+    document.getElementById('context-save-btn').addEventListener('click', function() {
+        var rows = document.getElementById('context-urls-container').querySelectorAll('.source-url-row');
+        var urls = [];
+        rows.forEach(function(row) {
+            var inputs = row.querySelectorAll('input');
+            var url = inputs[0].value.trim();
+            if (url) urls.push({url: url, notes: inputs[1].value.trim()});
         });
-    }
+        fetch('/projects/' + projectId + '/profile/' + activeSection + '/save-context', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({urls: urls})
+        }).then(function() { location.reload(); });
+    });
 
-    // Generate button — SSE streaming into textarea
-    if (generateBtn && textarea) {
-        generateBtn.addEventListener('click', function() {
-            var projectId = generateBtn.dataset.projectId;
-            var section = generateBtn.dataset.section;
-            var url = '/projects/' + projectId + '/profile/' + section + '/generate';
+    document.getElementById('context-cancel-btn').addEventListener('click', function() {
+        document.getElementById('context-modal').close();
+    });
 
-            generateBtn.disabled = true;
-            generateBtn.textContent = 'Generating...';
+    // --- Build modal ---
+    document.querySelectorAll('.profile-build-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activeSection = btn.dataset.section;
+            var modal = document.getElementById('build-modal');
+            var title = document.getElementById('build-modal-title');
+            var summary = document.getElementById('build-context-summary');
+            var actions = document.getElementById('build-actions');
+            var textarea = document.getElementById('build-content');
+            var resultActions = document.getElementById('build-result-actions');
+            var genBtn = document.getElementById('build-generate-btn');
+
+            title.textContent = btn.dataset.title + ' — Build';
             textarea.value = '';
+            textarea.classList.add('hidden');
+            resultActions.classList.add('hidden');
+            actions.classList.remove('hidden');
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate';
 
-            var source = new EventSource(url);
-            source.onmessage = function(event) {
-                var d = JSON.parse(event.data);
-                switch (d.type) {
-                case 'status':
-                    generateBtn.textContent = d.status;
-                    break;
-                case 'chunk':
-                    textarea.value += d.chunk;
-                    textarea.scrollTop = textarea.scrollHeight;
-                    break;
-                case 'error':
-                    source.close();
-                    generateBtn.disabled = false;
-                    generateBtn.textContent = 'Rebuild';
-                    alert('Generation error: ' + d.error);
-                    break;
-                case 'done':
-                    source.close();
-                    generateBtn.disabled = false;
-                    generateBtn.textContent = 'Rebuild';
-                    break;
-                }
-            };
-            source.onerror = function() {
-                source.close();
-                generateBtn.disabled = false;
-                generateBtn.textContent = 'Rebuild';
-                if (!textarea.value) {
-                    alert('Connection lost. Try again.');
-                }
-            };
-        });
-    }
-
-    // History button — fetch versions and show modal
-    if (historyBtn) {
-        historyBtn.addEventListener('click', function() {
-            var projectId = historyBtn.dataset.projectId;
-            var section = historyBtn.dataset.section;
-            var modal = document.getElementById('history-modal');
-            var content = document.getElementById('history-content');
-            if (!modal || !content) return;
+            // Show context summary
+            summary.textContent = '';
+            fetch('/projects/' + projectId + '/profile/' + activeSection + '/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var urls = data.urls || [];
+                    if (urls.length > 0) {
+                        var h = document.createElement('p');
+                        h.className = 'text-sm font-semibold mb-1';
+                        h.textContent = 'Source URLs to fetch:';
+                        summary.appendChild(h);
+                        urls.forEach(function(u) {
+                            var p = document.createElement('p');
+                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.textContent = u.url + (u.notes ? ' — ' + u.notes : '');
+                            summary.appendChild(p);
+                        });
+                    }
+                    if (data.content) {
+                        var note = document.createElement('p');
+                        note.className = 'text-sm text-base-content/60 mt-2';
+                        note.textContent = 'Existing content will be used as a base to improve upon.';
+                        summary.appendChild(note);
+                    }
+                    if (!urls.length && !data.content) {
+                        var empty = document.createElement('p');
+                        empty.className = 'text-sm text-base-content/60';
+                        empty.textContent = 'No context available. Add source URLs first for better results.';
+                        summary.appendChild(empty);
+                    }
+                });
 
             modal.showModal();
-            content.textContent = '';
-            var loading = document.createElement('p');
-            loading.className = 'text-base-content/60';
-            loading.textContent = 'Loading...';
-            content.appendChild(loading);
-
-            fetch('/projects/' + projectId + '/profile/' + section + '/versions')
-                .then(function(res) { return res.json(); })
-                .then(function(versions) {
-                    content.textContent = '';
-                    if (!versions || versions.length === 0) {
-                        var empty = document.createElement('p');
-                        empty.className = 'text-base-content/60';
-                        empty.textContent = 'No previous versions.';
-                        content.appendChild(empty);
-                        return;
-                    }
-                    versions.forEach(function(v, i) {
-                        var collapse = document.createElement('div');
-                        collapse.className = 'collapse collapse-arrow bg-base-200 mb-2';
-
-                        var input = document.createElement('input');
-                        input.type = 'radio';
-                        input.name = 'history-accordion';
-                        if (i === 0) input.checked = true;
-                        collapse.appendChild(input);
-
-                        var title = document.createElement('div');
-                        title.className = 'collapse-title text-sm font-medium';
-                        title.textContent = v.created_at;
-                        collapse.appendChild(title);
-
-                        var body = document.createElement('div');
-                        body.className = 'collapse-content';
-
-                        var pre = document.createElement('pre');
-                        pre.className = 'whitespace-pre-wrap text-xs max-h-48 overflow-y-auto';
-                        pre.textContent = v.content;
-                        body.appendChild(pre);
-
-                        var restoreBtn = document.createElement('button');
-                        restoreBtn.type = 'button';
-                        restoreBtn.className = 'btn btn-ghost btn-sm mt-2';
-                        restoreBtn.textContent = 'Restore';
-                        restoreBtn.addEventListener('click', function() {
-                            textarea.value = v.content;
-                            modal.close();
-                        });
-                        body.appendChild(restoreBtn);
-
-                        collapse.appendChild(body);
-                        content.appendChild(collapse);
-                    });
-                })
-                .catch(function() {
-                    content.textContent = '';
-                    var err = document.createElement('p');
-                    err.className = 'text-error';
-                    err.textContent = 'Failed to load versions.';
-                    content.appendChild(err);
-                });
         });
-    }
+    });
+
+    document.getElementById('build-generate-btn').addEventListener('click', function() {
+        var genBtn = document.getElementById('build-generate-btn');
+        var actions = document.getElementById('build-actions');
+        var textarea = document.getElementById('build-content');
+        var resultActions = document.getElementById('build-result-actions');
+
+        genBtn.disabled = true;
+        genBtn.textContent = 'Generating...';
+        textarea.value = '';
+        textarea.classList.remove('hidden');
+        textarea.readOnly = true;
+
+        var source = new EventSource('/projects/' + projectId + '/profile/' + activeSection + '/generate');
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            switch (d.type) {
+            case 'status':
+                genBtn.textContent = d.status;
+                break;
+            case 'chunk':
+                textarea.value += d.chunk;
+                textarea.scrollTop = textarea.scrollHeight;
+                break;
+            case 'error':
+                source.close();
+                genBtn.disabled = false;
+                genBtn.textContent = 'Retry';
+                break;
+            case 'done':
+                source.close();
+                actions.classList.add('hidden');
+                textarea.readOnly = false;
+                resultActions.classList.remove('hidden');
+                break;
+            }
+        };
+        source.onerror = function() {
+            source.close();
+            genBtn.disabled = false;
+            genBtn.textContent = 'Retry';
+        };
+    });
+
+    document.getElementById('build-save-btn').addEventListener('click', function() {
+        var content = document.getElementById('build-content').value;
+        fetch('/projects/' + projectId + '/profile/' + activeSection + '/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: content})
+        }).then(function() { location.reload(); });
+    });
+
+    document.getElementById('build-discard-btn').addEventListener('click', function() {
+        document.getElementById('build-modal').close();
+    });
+
+    // --- Edit modal ---
+    document.querySelectorAll('.profile-edit-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activeSection = btn.dataset.section;
+            var modal = document.getElementById('edit-modal');
+            var title = document.getElementById('edit-modal-title');
+            var textarea = document.getElementById('edit-content');
+
+            title.textContent = btn.dataset.title + ' — Edit';
+
+            fetch('/projects/' + projectId + '/profile/' + activeSection + '/context')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    textarea.value = data.content || '';
+                });
+
+            modal.showModal();
+        });
+    });
+
+    document.getElementById('edit-save-btn').addEventListener('click', function() {
+        var content = document.getElementById('edit-content').value;
+        fetch('/projects/' + projectId + '/profile/' + activeSection + '/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: content})
+        }).then(function() { location.reload(); });
+    });
+
+    document.getElementById('edit-cancel-btn').addEventListener('click', function() {
+        document.getElementById('edit-modal').close();
+    });
+
+    // --- History (sub-modal from Edit) ---
+    document.getElementById('edit-history-btn').addEventListener('click', function() {
+        var editModal = document.getElementById('edit-modal');
+        var histModal = document.getElementById('history-modal');
+        var content = document.getElementById('history-content');
+        editModal.close();
+
+        content.textContent = '';
+        var loading = document.createElement('p');
+        loading.className = 'text-base-content/60';
+        loading.textContent = 'Loading...';
+        content.appendChild(loading);
+        histModal.showModal();
+
+        fetch('/projects/' + projectId + '/profile/' + activeSection + '/versions')
+            .then(function(r) { return r.json(); })
+            .then(function(versions) {
+                content.textContent = '';
+                if (!versions || versions.length === 0) {
+                    var empty = document.createElement('p');
+                    empty.className = 'text-base-content/60';
+                    empty.textContent = 'No previous versions.';
+                    content.appendChild(empty);
+                    return;
+                }
+                versions.forEach(function(v, i) {
+                    var collapse = document.createElement('div');
+                    collapse.className = 'collapse collapse-arrow bg-base-200 mb-2';
+
+                    var input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = 'history-accordion';
+                    if (i === 0) input.checked = true;
+                    collapse.appendChild(input);
+
+                    var titleEl = document.createElement('div');
+                    titleEl.className = 'collapse-title text-sm font-medium';
+                    titleEl.textContent = v.created_at;
+                    collapse.appendChild(titleEl);
+
+                    var body = document.createElement('div');
+                    body.className = 'collapse-content';
+
+                    var pre = document.createElement('pre');
+                    pre.className = 'whitespace-pre-wrap text-xs max-h-48 overflow-y-auto';
+                    pre.textContent = v.content;
+                    body.appendChild(pre);
+
+                    var restoreBtn = document.createElement('button');
+                    restoreBtn.type = 'button';
+                    restoreBtn.className = 'btn btn-ghost btn-sm mt-2';
+                    restoreBtn.textContent = 'Restore';
+                    restoreBtn.addEventListener('click', function() {
+                        document.getElementById('edit-content').value = v.content;
+                        histModal.close();
+                        editModal.showModal();
+                    });
+                    body.appendChild(restoreBtn);
+
+                    collapse.appendChild(body);
+                    content.appendChild(collapse);
+                });
+            });
+    });
+
+    document.getElementById('history-back-btn').addEventListener('click', function() {
+        document.getElementById('history-modal').close();
+        document.getElementById('edit-modal').showModal();
+    });
 }
 
-function removeURLRow(btn) {
-    var row = btn.closest('.source-url-row');
-    var container = document.getElementById('source-urls-container');
-    if (!row || !container) return;
-    var rows = container.querySelectorAll('.source-url-row');
-    if (rows.length > 1) {
-        row.remove();
-    } else {
-        var inputs = row.querySelectorAll('input');
-        for (var i = 0; i < inputs.length; i++) {
-            inputs[i].value = '';
-        }
-    }
+function addContextURLRow(container, url, notes) {
+    var row = document.createElement('div');
+    row.className = 'flex gap-2 mb-2 source-url-row';
+
+    var urlInput = document.createElement('input');
+    urlInput.type = 'text';
+    urlInput.value = url;
+    urlInput.placeholder = 'https://example.com';
+    urlInput.className = 'input input-bordered input-sm flex-1';
+
+    var notesInput = document.createElement('input');
+    notesInput.type = 'text';
+    notesInput.value = notes;
+    notesInput.placeholder = 'Usage notes...';
+    notesInput.className = 'input input-bordered input-sm flex-1';
+
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-ghost btn-sm btn-square';
+    removeBtn.textContent = 'x';
+    removeBtn.addEventListener('click', function() {
+        var rows = container.querySelectorAll('.source-url-row');
+        if (rows.length > 1) { row.remove(); }
+        else { urlInput.value = ''; notesInput.value = ''; }
+    });
+
+    row.appendChild(urlInput);
+    row.appendChild(notesInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
 }
 
 function initContextChat(projectID, itemID) {

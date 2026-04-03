@@ -42,14 +42,16 @@ func (h *ProfileHandler) Handle(w http.ResponseWriter, r *http.Request, projectI
 	switch {
 	case rest == "profile" && r.Method == "GET":
 		h.show(w, r, projectID)
-	case strings.HasSuffix(rest, "/edit") && r.Method == "GET":
-		h.showEdit(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/save") && r.Method == "POST":
 		h.saveSection(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/save-context") && r.Method == "POST":
+		h.saveContext(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/generate") && r.Method == "GET":
 		h.streamGenerate(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/versions") && r.Method == "GET":
 		h.listVersions(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/context") && r.Method == "GET":
+		h.getContext(w, r, projectID, rest)
 	default:
 		http.NotFound(w, r)
 	}
@@ -93,81 +95,80 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 	}).Render(r.Context(), w)
 }
 
-func (h *ProfileHandler) showEdit(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	section := h.parseSectionFromRest(rest)
-	if !isValidSection(section) {
-		http.NotFound(w, r)
-		return
-	}
-
-	project, err := h.queries.GetProject(projectID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	var content string
-	var sourceURLs []store.SourceURL
-	ps, err := h.queries.GetProfileSection(projectID, section)
-	if err == nil {
-		content = ps.Content
-		if ps.SourceURLs != "" {
-			json.Unmarshal([]byte(ps.SourceURLs), &sourceURLs)
-		}
-	}
-
-	hasSourceURLs := section == "product_and_positioning"
-	saved := r.URL.Query().Get("saved") == "1"
-
-	templates.ProfileEditPage(templates.ProfileEditData{
-		ProjectID:     projectID,
-		ProjectName:   project.Name,
-		Section:       section,
-		SectionTitle:  sectionTitle(section),
-		Content:       content,
-		SourceURLs:    sourceURLs,
-		HasSourceURLs: hasSourceURLs,
-		Saved:         saved,
-	}).Render(r.Context(), w)
-}
-
 func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	section := h.parseSectionFromRest(rest)
 	if !isValidSection(section) {
 		http.NotFound(w, r)
 		return
 	}
-	r.ParseForm()
-	content := r.FormValue("content")
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
 
 	// Save previous version if content changed
 	existing, err := h.queries.GetProfileSection(projectID, section)
-	if err == nil && existing.Content != "" && existing.Content != content {
+	if err == nil && existing.Content != "" && existing.Content != body.Content {
 		h.queries.SaveProfileVersion(projectID, section, existing.Content)
 	}
 
-	if section == "product_and_positioning" {
-		urls := r.Form["source_url"]
-		notes := r.Form["source_notes"]
-		var sourceURLs []store.SourceURL
-		for i, u := range urls {
-			u = strings.TrimSpace(u)
-			if u == "" {
-				continue
-			}
-			n := ""
-			if i < len(notes) {
-				n = strings.TrimSpace(notes[i])
-			}
-			sourceURLs = append(sourceURLs, store.SourceURL{URL: u, Notes: n})
-		}
-		urlsJSON, _ := json.Marshal(sourceURLs)
-		h.queries.UpsertProfileSectionFull(projectID, section, content, string(urlsJSON))
-	} else {
-		h.queries.UpsertProfileSection(projectID, section, content)
+	h.queries.UpsertProfileSection(projectID, section, body.Content)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *ProfileHandler) saveContext(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	section := h.parseSectionFromRest(rest)
+	if !isValidSection(section) || section != "product_and_positioning" {
+		http.NotFound(w, r)
+		return
 	}
 
-	http.Redirect(w, r, fmt.Sprintf("/projects/%d/profile/%s/edit?saved=1", projectID, section), http.StatusSeeOther)
+	var body struct {
+		URLs []store.SourceURL `json:"urls"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	urlsJSON, _ := json.Marshal(body.URLs)
+	if body.URLs == nil {
+		urlsJSON = []byte("[]")
+	}
+
+	// Get existing content so we don't overwrite it
+	existing, err := h.queries.GetProfileSection(projectID, section)
+	content := ""
+	if err == nil {
+		content = existing.Content
+	}
+
+	h.queries.UpsertProfileSectionFull(projectID, section, content, string(urlsJSON))
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *ProfileHandler) getContext(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	section := h.parseSectionFromRest(rest)
+	if !isValidSection(section) {
+		http.NotFound(w, r)
+		return
+	}
+
+	ps, err := h.queries.GetProfileSection(projectID, section)
+	var urls []store.SourceURL
+	if err == nil && ps.SourceURLs != "" {
+		json.Unmarshal([]byte(ps.SourceURLs), &urls)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"content": func() string { if err == nil { return ps.Content } else { return "" } }(),
+		"urls":    urls,
+	})
 }
 
 func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
