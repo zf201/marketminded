@@ -185,7 +185,8 @@ func (q *Queries) BuildProfileStringExcluding(projectID int64, exclude []string)
 }
 
 var sectionDisplayTitles = map[string]string{
-	"content_strategy": "Social Content Strategy",
+	"product_and_positioning": "Product & Positioning",
+	"voice_and_tone":          "Voice & Tone",
 }
 
 func sectionTitle(s string) string {
