@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"time"
+
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/pipeline"
 	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
@@ -98,8 +101,12 @@ func runWithTools(
 	}
 
 	temperature := temp
+	start := time.Now()
+	applog.Info("pipeline step %s: model=%s starting (submit=%s, maxIter=%d)", submitToolName, model, submitToolName, maxIter)
+
 	_, err := aiClient.StreamWithTools(ctx, model, aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temperature, maxIter)
 
+	duration := time.Since(start)
 	result := pipeline.StepResult{
 		Output:    savedOutput,
 		Thinking:  thinkingBuf.String(),
@@ -107,6 +114,7 @@ func runWithTools(
 	}
 
 	if err != nil {
+		applog.Error("pipeline step %s: model=%s failed after %s: %s", submitToolName, model, duration, err.Error())
 		if result.Output == "" {
 			result.Output = chunkBuf.String()
 		}
@@ -114,9 +122,11 @@ func runWithTools(
 	}
 
 	if savedOutput == "" {
+		applog.Error("pipeline step %s: model=%s completed in %s but no result submitted", submitToolName, model, duration)
 		result.Output = chunkBuf.String()
 		return result, fmt.Errorf("step did not submit results via tool call")
 	}
 
+	applog.Info("pipeline step %s: model=%s completed in %s, output=%d bytes, tools=%d", submitToolName, model, duration, len(savedOutput), len(toolCallsList))
 	return result, nil
 }
