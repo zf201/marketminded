@@ -271,23 +271,36 @@ func (h *VoiceToneHandler) streamGenerate(w http.ResponseWriter, r *http.Request
 	}
 
 	systemPrompt.WriteString(`## Your Task
-Analyze all the provided sources and produce a structured voice & tone profile with 5 sections:
 
+### Step 1: Discover and fetch blog posts
+The blog URLs above are listing/index pages. Use fetch_url to find links to 3-5 recent individual blog posts on each listing page, then fetch each individual post to read the full content. Do the same for any liked articles and inspiration URLs that point to listing pages.
+
+### Step 2: Analyze writing patterns
+Analyze the writing patterns across ALL fetched posts. Focus on STYLE, not content. Look at:
+- Voice and personality (formal/informal, warm/cold, peer/authority)
+- Sentence structure, length, and rhythm
+- Vocabulary level and recurring phrases
+- How they address the reader
+- Formatting patterns (headings, lists, CTAs)
+- What makes their good posts (liked articles) different from average ones
+- What style patterns the inspiration sources share
+
+### Step 3: Produce structured output
+Call submit_voice_tone with 5 sections:
 1. **Voice Analysis** - Brand personality, formality level, warmth, how they relate to the reader
-2. **Content Types** - What content approaches the brand uses
+2. **Content Types** - What content approaches the brand uses (educational, promotional, storytelling, opinion, how-to, case study, etc.)
 3. **Should Avoid** - Words, phrases, patterns, and tones to never use
-4. **Should Use** - Characteristic vocabulary, phrases, sentence patterns
+4. **Should Use** - Characteristic vocabulary, phrases, sentence patterns, formatting conventions
 5. **Style Inspiration** - Writing style patterns observed from the inspiration sources
-
-Use web_search to research the brand's online presence if needed. When done, call submit_voice_tone with all 5 sections.
 
 ## Rules
 - ALWAYS write in English.
 - Analyze STYLE, not content. Focus on HOW they write, not WHAT they write about.
 - Be specific to THIS brand. Generic voice guidelines are useless.
-- Include concrete examples from the source material where possible.
+- Include concrete examples and direct quotes from the source material where possible.
 - NEVER use em dashes. Use commas, periods, or restructure.
 - Write like a human. Short, direct sentences. Vary length.
+- You MUST fetch individual blog posts — do not analyze only the listing page.
 `)
 
 	// Build tools
@@ -301,6 +314,7 @@ Use web_search to research the brand's online presence if needed. When done, cal
 	}
 
 	toolList := []ai.Tool{
+		tools.NewFetchTool(),
 		tools.NewSearchTool(),
 		submitVoiceToneTool,
 	}
@@ -311,6 +325,8 @@ Use web_search to research the brand's online presence if needed. When done, cal
 
 	executor := func(ctx context.Context, name, args string) (string, error) {
 		switch name {
+		case "fetch_url":
+			return tools.ExecuteFetch(r.Context(), args)
 		case "web_search":
 			return searchExec(ctx, args)
 		case "submit_voice_tone":
@@ -322,17 +338,19 @@ Use web_search to research the brand's online presence if needed. When done, cal
 	}
 
 	onToolEvent := func(event ai.ToolEvent) {
-		switch event.Type {
-		case "tool_start":
+		if event.Type == "tool_start" {
 			summary := ""
-			if event.Tool == "web_search" {
+			switch event.Tool {
+			case "fetch_url":
+				summary = tools.FetchSummary(event.Args)
+			case "web_search":
 				summary = tools.SearchSummary(event.Args)
-			} else if event.Tool == "submit_voice_tone" {
+			case "submit_voice_tone":
 				summary = "Submitting voice & tone profile..."
 			}
-			sendEvent(map[string]string{"type": "status", "status": summary})
-		case "tool_result":
-			// no-op
+			if summary != "" {
+				sendEvent(map[string]string{"type": "status", "status": summary})
+			}
 		}
 	}
 
