@@ -457,6 +457,13 @@ document.addEventListener('DOMContentLoaded', function() {
     var profileEdit = document.getElementById('profile-edit-form');
     if (profileEdit) {
         initProfileEdit();
+        // Auto-trigger generation if ?generate=1
+        if (new URLSearchParams(window.location.search).get('generate') === '1') {
+            var genBtn = document.getElementById('generate-btn');
+            if (genBtn) genBtn.click();
+            // Clean up URL
+            history.replaceState(null, '', window.location.pathname);
+        }
     }
 
     var board = document.getElementById('production-board');

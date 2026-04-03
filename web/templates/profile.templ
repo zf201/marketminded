@@ -13,10 +13,13 @@ type ProfilePageData struct {
 }
 
 type ProfileCardView struct {
-	Section string
-	Title   string
-	Content string
-	Index   int
+	Section       string
+	Title         string
+	Content       string
+	SourceURLs    []store.SourceURL
+	HasSourceURLs bool
+	Index         int
+	ProjectID     int64
 }
 
 type ProfileEditData struct {
@@ -52,16 +55,29 @@ templ ProfilePage(data ProfilePageData) {
 								<span class="badge badge-ghost">Empty</span>
 							}
 						</div>
-						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/edit", data.ProjectID, card.Section)) } class="btn btn-ghost btn-sm">
-							if card.Content != "" {
+						<div class="flex items-center gap-1">
+							<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/edit?generate=1", card.ProjectID, card.Section)) }
+								class="btn btn-secondary btn-sm">
+								if card.Content != "" {
+									Rebuild
+								} else {
+									Build
+								}
+							</a>
+							<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/edit", data.ProjectID, card.Section)) } class="btn btn-ghost btn-sm">
 								Edit
-							} else {
-								Start
-							}
-						</a>
+							</a>
+						</div>
 					</div>
+					if card.HasSourceURLs && len(card.SourceURLs) > 0 {
+						<div class="flex flex-wrap gap-2 mt-2 mb-2">
+							for _, u := range card.SourceURLs {
+								<span class="badge badge-outline badge-sm font-mono truncate max-w-xs" title={ u.URL }>{ u.URL }</span>
+							}
+						</div>
+					}
 					if card.Content != "" {
-						<div class="whitespace-pre-wrap text-sm leading-relaxed text-base-content/80">{ card.Content }</div>
+						<div class="whitespace-pre-wrap text-sm leading-relaxed text-base-content/80 line-clamp-4">{ card.Content }</div>
 					} else {
 						<p class="text-base-content/60 italic text-sm">Not yet filled</p>
 					}

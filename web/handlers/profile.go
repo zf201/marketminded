@@ -63,19 +63,27 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 	}
 
 	sections, _ := h.queries.ListProfileSections(projectID)
-	sectionMap := make(map[string]string)
-	for _, s := range sections {
-		sectionMap[s.Section] = s.Content
+	sectionMap := make(map[string]*store.ProfileSection)
+	for i := range sections {
+		sectionMap[sections[i].Section] = &sections[i]
 	}
 
 	cardViews := make([]templates.ProfileCardView, len(allSections))
 	for i, name := range allSections {
-		cardViews[i] = templates.ProfileCardView{
-			Section: name,
-			Title:   sectionTitle(name),
-			Content: sectionMap[name],
-			Index:   i,
+		card := templates.ProfileCardView{
+			Section:       name,
+			Title:         sectionTitle(name),
+			HasSourceURLs: name == "product_and_positioning",
+			Index:         i,
+			ProjectID:     projectID,
 		}
+		if ps, ok := sectionMap[name]; ok {
+			card.Content = ps.Content
+			if card.HasSourceURLs && ps.SourceURLs != "" {
+				json.Unmarshal([]byte(ps.SourceURLs), &card.SourceURLs)
+			}
+		}
+		cardViews[i] = card
 	}
 
 	templates.ProfilePage(templates.ProfilePageData{
