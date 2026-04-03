@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -59,5 +60,46 @@ func TestBuildProfileString(t *testing.T) {
 	}
 	if strings.Contains(profile, "Audience") {
 		t.Errorf("empty audience should be skipped")
+	}
+}
+
+func TestSaveProfileVersion(t *testing.T) {
+	q := testDB(t)
+	p, _ := q.CreateProject("Test", "test")
+
+	err := q.SaveProfileVersion(p.ID, "product_and_positioning", "Version 1 content")
+	if err != nil {
+		t.Fatalf("save version: %v", err)
+	}
+
+	versions, err := q.ListProfileVersions(p.ID, "product_and_positioning")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(versions) != 1 {
+		t.Fatalf("expected 1, got %d", len(versions))
+	}
+	if versions[0].Content != "Version 1 content" {
+		t.Errorf("unexpected content: %s", versions[0].Content)
+	}
+}
+
+func TestProfileVersionCappedAt5(t *testing.T) {
+	q := testDB(t)
+	p, _ := q.CreateProject("Test", "test")
+
+	for i := 1; i <= 7; i++ {
+		q.SaveProfileVersion(p.ID, "audience", fmt.Sprintf("Version %d", i))
+	}
+
+	versions, _ := q.ListProfileVersions(p.ID, "audience")
+	if len(versions) != 5 {
+		t.Fatalf("expected 5 (capped), got %d", len(versions))
+	}
+	if versions[0].Content != "Version 7" {
+		t.Errorf("expected newest first, got: %s", versions[0].Content)
+	}
+	if versions[4].Content != "Version 3" {
+		t.Errorf("expected oldest kept to be Version 3, got: %s", versions[4].Content)
 	}
 }

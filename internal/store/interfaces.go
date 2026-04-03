@@ -36,10 +36,14 @@ type ContentStore interface {
 // ProfileStore handles brand profile sections and string building.
 type ProfileStore interface {
 	UpsertProfileSection(projectID int64, section, content string) error
+	UpsertProfileSectionFull(projectID int64, section, content, sourceURLs string) error
 	GetProfileSection(projectID int64, section string) (*ProfileSection, error)
 	ListProfileSections(projectID int64) ([]ProfileSection, error)
 	BuildProfileString(projectID int64) (string, error)
 	BuildProfileStringExcluding(projectID int64, exclude []string) (string, error)
+	BuildSourceURLList(projectID int64) (string, error)
+	SaveProfileVersion(projectID int64, section, content string) error
+	ListProfileVersions(projectID int64, section string) ([]ProfileVersion, error)
 }
 
 // ProjectStore handles projects.
