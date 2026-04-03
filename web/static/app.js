@@ -644,6 +644,7 @@ function initProfilePage(projectId) {
         textarea.classList.remove('hidden');
         textarea.readOnly = true;
         buildResultData = null;
+        document.getElementById('build-url-guide').classList.add('hidden');
 
         var source = new EventSource('/projects/' + projectId + '/profile/' + activeSection + '/generate');
         source.onmessage = function(event) {
@@ -662,6 +663,12 @@ function initProfilePage(projectId) {
                 buildResultData = parsed;
                 textarea.value = parsed.content || '';
                 textarea.scrollTop = 0;
+                if (parsed.url_guide) {
+                    var guideDiv = document.getElementById('build-url-guide');
+                    var guidePre = document.getElementById('build-url-guide-content');
+                    guidePre.textContent = parsed.url_guide;
+                    guideDiv.classList.remove('hidden');
+                }
                 break;
             case 'error':
                 source.close();
