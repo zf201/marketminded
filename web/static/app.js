@@ -454,9 +454,9 @@ function initProfileChat(projectID) {
 
 // Auto-init pages
 document.addEventListener('DOMContentLoaded', function() {
-    var sectionPage = document.getElementById('profile-section-page');
-    if (sectionPage) {
-        initProfileSectionChat(sectionPage.dataset.projectId, sectionPage.dataset.section);
+    var profileEdit = document.getElementById('profile-edit-form');
+    if (profileEdit) {
+        initProfileEdit();
     }
 
     var board = document.getElementById('production-board');
@@ -476,171 +476,187 @@ document.addEventListener('DOMContentLoaded', function() {
 
 });
 
-function initProfileSectionChat(projectID, sectionName) {
-    var form = document.getElementById('profile-section-form');
-    var input = document.getElementById('profile-section-input');
-    var btn = document.getElementById('profile-section-send');
-    var messagesEl = document.getElementById('profile-section-messages');
-    if (!form) return;
+function initProfileEdit() {
+    var generateBtn = document.getElementById('generate-btn');
+    var historyBtn = document.getElementById('history-btn');
+    var textarea = document.getElementById('profile-content');
+    var addUrlBtn = document.getElementById('add-url-btn');
+    var urlContainer = document.getElementById('source-urls-container');
 
-    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+    // Dynamic URL rows
+    if (addUrlBtn && urlContainer) {
+        addUrlBtn.addEventListener('click', function() {
+            var row = document.createElement('div');
+            row.className = 'flex gap-2 mb-2 source-url-row';
 
-    function addMsg(role, text) {
-        var outer = document.createElement('div');
-        outer.className = 'chat-msg chat-msg-' + role;
-        var roleEl = document.createElement('div');
-        roleEl.className = 'chat-msg-role';
-        roleEl.textContent = role;
-        var bodyEl = document.createElement('div');
-        bodyEl.className = 'whitespace-pre-wrap';
-        bodyEl.textContent = text;
-        outer.appendChild(roleEl);
-        outer.appendChild(bodyEl);
-        messagesEl.appendChild(outer);
-        return bodyEl;
+            var urlInput = document.createElement('input');
+            urlInput.type = 'text';
+            urlInput.name = 'source_url';
+            urlInput.placeholder = 'https://example.com';
+            urlInput.className = 'input input-bordered input-sm flex-1';
+
+            var notesInput = document.createElement('input');
+            notesInput.type = 'text';
+            notesInput.name = 'source_notes';
+            notesInput.placeholder = 'Usage notes...';
+            notesInput.className = 'input input-bordered input-sm flex-1';
+
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-ghost btn-sm btn-square remove-url-btn';
+            removeBtn.textContent = 'x';
+            removeBtn.addEventListener('click', function() {
+                removeURLRow(removeBtn);
+            });
+
+            row.appendChild(urlInput);
+            row.appendChild(notesInput);
+            row.appendChild(removeBtn);
+            urlContainer.appendChild(row);
+        });
+
+        urlContainer.addEventListener('click', function(e) {
+            var btn = e.target.closest('.remove-url-btn');
+            if (btn) {
+                removeURLRow(btn);
+            }
+        });
     }
 
-    function addChatText(container, text) {
-        var last = container.lastElementChild;
-        if (!last || !last.classList.contains('chat-text')) {
-            last = document.createElement('span');
-            last.className = 'chat-text';
-            container.appendChild(last);
-        }
-        last.textContent += text;
-    }
+    // Generate button — SSE streaming into textarea
+    if (generateBtn && textarea) {
+        generateBtn.addEventListener('click', function() {
+            var projectId = generateBtn.dataset.projectId;
+            var section = generateBtn.dataset.section;
+            var url = '/projects/' + projectId + '/profile/' + section + '/generate';
 
-    input.addEventListener('keydown', function(e) {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-            e.preventDefault();
-            form.dispatchEvent(new Event('submit'));
-        }
-    });
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            textarea.value = '';
 
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        var msg = input.value.trim();
-        if (!msg) return;
-
-        input.disabled = true;
-        btn.disabled = true;
-        btn.textContent = 'Thinking...';
-        input.value = '';
-
-        addMsg('user', msg);
-        var aBody = addMsg('assistant', '');
-        aBody.textContent = '';
-        scrollToBottom();
-
-        fetch('/projects/' + projectID + '/profile/' + sectionName + '/message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'content=' + encodeURIComponent(msg)
-        }).then(function() {
-            var source = new EventSource('/projects/' + projectID + '/profile/' + sectionName + '/stream');
+            var source = new EventSource(url);
             source.onmessage = function(event) {
                 var d = JSON.parse(event.data);
                 switch (d.type) {
+                case 'status':
+                    generateBtn.textContent = d.status;
+                    break;
                 case 'chunk':
-                    addChatText(aBody, d.chunk);
-                    scrollToBottom();
-                    break;
-                case 'tool_start':
-                    var indicator = document.createElement('div');
-                    indicator.className = 'tool-indicator';
-                    indicator.textContent = d.summary + '...';
-                    aBody.appendChild(indicator);
-                    scrollToBottom();
-                    break;
-                case 'tool_result':
-                    var lastInd = aBody.querySelector('.tool-indicator:last-of-type');
-                    if (lastInd) {
-                        var details = document.createElement('details');
-                        details.className = 'tool-result-block';
-                        var sm = document.createElement('summary');
-                        sm.textContent = d.summary;
-                        details.appendChild(sm);
-                        lastInd.replaceWith(details);
-                    }
-                    break;
-                case 'proposal':
-                    var block = document.createElement('div');
-                    block.className = 'proposal-block';
-                    var hdr = document.createElement('div');
-                    hdr.className = 'proposal-block-header';
-                    hdr.textContent = 'Proposed update: ' + d.section;
-                    block.appendChild(hdr);
-                    var cEl = document.createElement('div');
-                    cEl.className = 'proposal-block-content';
-                    cEl.textContent = d.content;
-                    block.appendChild(cEl);
-                    var acts = document.createElement('div');
-                    acts.className = 'proposal-block-actions';
-                    var accBtn = document.createElement('button');
-                    accBtn.className = 'btn btn-success btn-sm';
-                    accBtn.textContent = 'Accept';
-                    accBtn.onclick = function() {
-                        fetch('/projects/' + projectID + '/profile/sections/' + d.section, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: 'content=' + encodeURIComponent(d.content)
-                        }).then(function() {
-                            block.className = 'proposal-block proposal-block-accepted';
-                            acts.remove();
-                            var badge = document.createElement('div');
-                            badge.className = 'text-success font-semibold text-sm';
-                            badge.textContent = 'Accepted';
-                            block.appendChild(badge);
-                        });
-                    };
-                    var rejBtn = document.createElement('button');
-                    rejBtn.className = 'btn btn-ghost btn-sm';
-                    rejBtn.textContent = 'Reject';
-                    rejBtn.onclick = function() {
-                        block.className = 'proposal-block proposal-block-rejected';
-                        acts.remove();
-                        var badge = document.createElement('div');
-                        badge.className = 'text-neutral font-semibold text-sm';
-                        badge.textContent = 'Rejected';
-                        block.appendChild(badge);
-                    };
-                    acts.appendChild(accBtn);
-                    acts.appendChild(rejBtn);
-                    block.appendChild(acts);
-                    aBody.appendChild(block);
-                    scrollToBottom();
+                    textarea.value += d.chunk;
+                    textarea.scrollTop = textarea.scrollHeight;
                     break;
                 case 'error':
                     source.close();
-                    addChatText(aBody, '\nError: ' + d.error);
-                    input.disabled = false;
-                    btn.disabled = false;
-                    btn.textContent = 'Send';
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Rebuild';
+                    alert('Generation error: ' + d.error);
                     break;
                 case 'done':
                     source.close();
-                    input.disabled = false;
-                    btn.disabled = false;
-                    btn.textContent = 'Send';
-                    scrollToBottom();
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Rebuild';
                     break;
                 }
             };
             source.onerror = function() {
                 source.close();
-                input.disabled = false;
-                btn.disabled = false;
-                btn.textContent = 'Send';
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Rebuild';
+                if (!textarea.value) {
+                    alert('Connection lost. Try again.');
+                }
             };
-        }).catch(function(err) {
-            addChatText(aBody, 'Error: ' + err.message);
-            input.disabled = false;
-            btn.disabled = false;
-            btn.textContent = 'Send';
         });
-    });
+    }
 
-    scrollToBottom();
+    // History button — fetch versions and show modal
+    if (historyBtn) {
+        historyBtn.addEventListener('click', function() {
+            var projectId = historyBtn.dataset.projectId;
+            var section = historyBtn.dataset.section;
+            var modal = document.getElementById('history-modal');
+            var content = document.getElementById('history-content');
+            if (!modal || !content) return;
+
+            modal.showModal();
+            content.textContent = '';
+            var loading = document.createElement('p');
+            loading.className = 'text-base-content/60';
+            loading.textContent = 'Loading...';
+            content.appendChild(loading);
+
+            fetch('/projects/' + projectId + '/profile/' + section + '/versions')
+                .then(function(res) { return res.json(); })
+                .then(function(versions) {
+                    content.textContent = '';
+                    if (!versions || versions.length === 0) {
+                        var empty = document.createElement('p');
+                        empty.className = 'text-base-content/60';
+                        empty.textContent = 'No previous versions.';
+                        content.appendChild(empty);
+                        return;
+                    }
+                    versions.forEach(function(v, i) {
+                        var collapse = document.createElement('div');
+                        collapse.className = 'collapse collapse-arrow bg-base-200 mb-2';
+
+                        var input = document.createElement('input');
+                        input.type = 'radio';
+                        input.name = 'history-accordion';
+                        if (i === 0) input.checked = true;
+                        collapse.appendChild(input);
+
+                        var title = document.createElement('div');
+                        title.className = 'collapse-title text-sm font-medium';
+                        title.textContent = v.created_at;
+                        collapse.appendChild(title);
+
+                        var body = document.createElement('div');
+                        body.className = 'collapse-content';
+
+                        var pre = document.createElement('pre');
+                        pre.className = 'whitespace-pre-wrap text-xs max-h-48 overflow-y-auto';
+                        pre.textContent = v.content;
+                        body.appendChild(pre);
+
+                        var restoreBtn = document.createElement('button');
+                        restoreBtn.type = 'button';
+                        restoreBtn.className = 'btn btn-ghost btn-sm mt-2';
+                        restoreBtn.textContent = 'Restore';
+                        restoreBtn.addEventListener('click', function() {
+                            textarea.value = v.content;
+                            modal.close();
+                        });
+                        body.appendChild(restoreBtn);
+
+                        collapse.appendChild(body);
+                        content.appendChild(collapse);
+                    });
+                })
+                .catch(function() {
+                    content.textContent = '';
+                    var err = document.createElement('p');
+                    err.className = 'text-error';
+                    err.textContent = 'Failed to load versions.';
+                    content.appendChild(err);
+                });
+        });
+    }
+}
+
+function removeURLRow(btn) {
+    var row = btn.closest('.source-url-row');
+    var container = document.getElementById('source-urls-container');
+    if (!row || !container) return;
+    var rows = container.querySelectorAll('.source-url-row');
+    if (rows.length > 1) {
+        row.remove();
+    } else {
+        var inputs = row.querySelectorAll('input');
+        for (var i = 0; i < inputs.length; i++) {
+            inputs[i].value = '';
+        }
+    }
 }
 
 function initContextChat(projectID, itemID) {

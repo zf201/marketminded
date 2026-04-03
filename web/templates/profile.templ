@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/web/templates/components"
 )
 
@@ -12,11 +13,21 @@ type ProfilePageData struct {
 }
 
 type ProfileCardView struct {
-	Section  string
-	Title    string
-	Content  string
-	Locked   bool
-	Index    int
+	Section string
+	Title   string
+	Content string
+	Index   int
+}
+
+type ProfileEditData struct {
+	ProjectID     int64
+	ProjectName   string
+	Section       string
+	SectionTitle  string
+	Content       string
+	SourceURLs    []store.SourceURL
+	HasSourceURLs bool
+	Saved         bool
 }
 
 templ ProfilePage(data ProfilePageData) {
@@ -30,33 +41,27 @@ templ ProfilePage(data ProfilePageData) {
 		</div>
 
 		for _, card := range data.Cards {
-			<div class={ cardClasses(card) } id={ "card-" + card.Section }>
+			<div class="card bg-base-100 shadow-sm border border-base-300 mb-3" id={ "card-" + card.Section }>
 				<div class="card-body">
 					<div class="flex items-center justify-between mb-1">
 						<div class="flex items-center gap-2">
 							<strong>{ card.Title }</strong>
 							if card.Content != "" {
 								@components.StatusBadge("approved")
-							} else if card.Locked {
-								<span class="badge badge-ghost">Locked</span>
 							} else {
 								<span class="badge badge-ghost">Empty</span>
 							}
 						</div>
-						if !card.Locked {
-							<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s", data.ProjectID, card.Section)) } class="btn btn-ghost btn-sm">
-								if card.Content != "" {
-									Edit
-								} else {
-									Start
-								}
-							</a>
-						}
+						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/edit", data.ProjectID, card.Section)) } class="btn btn-ghost btn-sm">
+							if card.Content != "" {
+								Edit
+							} else {
+								Start
+							}
+						</a>
 					</div>
 					if card.Content != "" {
 						<div class="whitespace-pre-wrap text-sm leading-relaxed text-base-content/80">{ card.Content }</div>
-					} else if card.Locked {
-						<p class="text-base-content/60 italic text-sm">Complete the sections above first</p>
 					} else {
 						<p class="text-base-content/60 italic text-sm">Not yet filled</p>
 					}
@@ -66,20 +71,7 @@ templ ProfilePage(data ProfilePageData) {
 	}
 }
 
-type ProfileSectionChatData struct {
-	ProjectID    int64
-	ProjectName  string
-	Section      string
-	SectionTitle string
-	Messages     []ProfileMsgView
-}
-
-type ProfileMsgView struct {
-	Role    string
-	Content string
-}
-
-templ ProfileSectionChatPage(data ProfileSectionChatData) {
+templ ProfileEditPage(data ProfileEditData) {
 	@components.ProjectPageShell(data.SectionTitle, []components.Breadcrumb{
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
@@ -90,30 +82,68 @@ templ ProfileSectionChatPage(data ProfileSectionChatData) {
 			<h1 class="text-2xl font-bold">{ data.SectionTitle }</h1>
 		</div>
 
-		<div id="profile-section-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
-			<div class="chat-messages max-h-[500px] overflow-y-auto space-y-3" id="profile-section-messages">
-				for _, msg := range data.Messages {
-					<div class={ "chat-msg chat-msg-" + msg.Role }>
-						<div class="chat-msg-role">{ msg.Role }</div>
-						<div class="whitespace-pre-wrap">{ msg.Content }</div>
+		if data.Saved {
+			<div class="alert alert-success mb-4">
+				<span>Section saved successfully.</span>
+			</div>
+		}
+
+		<form id="profile-edit-form" method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile/%s/save", data.ProjectID, data.Section)) }>
+			if data.HasSourceURLs {
+				<div class="card bg-base-200 shadow-sm border border-base-300 mb-4">
+					<div class="card-body p-4">
+						<h3 class="font-semibold mb-2">Source URLs</h3>
+						<p class="text-sm text-base-content/60 mb-3">Add website URLs to fetch when generating this section.</p>
+						<div id="source-urls-container">
+							if len(data.SourceURLs) > 0 {
+								for _, u := range data.SourceURLs {
+									@sourceURLRow(u.URL, u.Notes)
+								}
+							} else {
+								@sourceURLRow("", "")
+							}
+						</div>
+						<button type="button" id="add-url-btn" class="btn btn-ghost btn-sm mt-1">+ Add URL</button>
 					</div>
-				}
+				</div>
+			}
+
+			<div class="flex gap-2 mb-4">
+				<button type="button" id="generate-btn" class="btn btn-secondary" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
+					if data.Content != "" {
+						Rebuild
+					} else {
+						Build Profile
+					}
+				</button>
+				<button type="button" id="history-btn" class="btn btn-ghost" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-section={ data.Section }>
+					History
+				</button>
 			</div>
 
-			<form id="profile-section-form" class="mt-4">
-				<div class="form-control">
-					<textarea id="profile-section-input" class="textarea textarea-bordered w-full" rows="3" placeholder="Tell the AI about this area, or let it ask you questions..."></textarea>
-				</div>
-				<button type="submit" id="profile-section-send" class="btn btn-primary mt-2">Send</button>
-			</form>
-		</div>
+			@components.FormGroup("Content") {
+				<textarea name="content" id="profile-content" class="textarea textarea-bordered w-full font-mono text-sm" rows="20">{ data.Content }</textarea>
+			}
+
+			<div class="flex gap-2 mt-4">
+				<button type="submit" class="btn btn-primary">Save</button>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/profile", data.ProjectID)) } class="btn btn-ghost">Cancel</a>
+			</div>
+		</form>
+
+		@components.Modal("history-modal") {
+			<h3 class="font-bold text-lg mb-4">Version History</h3>
+			<div id="history-content">
+				<p class="text-base-content/60">Loading...</p>
+			</div>
+		}
 	}
 }
 
-func cardClasses(card ProfileCardView) string {
-	cls := "card bg-base-100 shadow-sm border border-base-300 mb-3"
-	if card.Locked {
-		cls += " opacity-50"
-	}
-	return cls
+templ sourceURLRow(url string, notes string) {
+	<div class="flex gap-2 mb-2 source-url-row">
+		<input type="text" name="source_url" value={ url } placeholder="https://example.com" class="input input-bordered input-sm flex-1"/>
+		<input type="text" name="source_notes" value={ notes } placeholder="Usage notes..." class="input input-bordered input-sm flex-1"/>
+		<button type="button" class="btn btn-ghost btn-sm btn-square remove-url-btn">x</button>
+	</div>
 }

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
-	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
@@ -18,7 +17,6 @@ import (
 
 var allSections = []string{
 	"product_and_positioning", "audience", "voice_and_tone",
-	"guidelines", "content_strategy",
 }
 
 var sectionDescriptions = map[string]string{
@@ -29,33 +27,30 @@ var sectionDescriptions = map[string]string{
 - Anxiety: concerns that might stop them from acting
 - Habit: what keeps them stuck with the status quo`,
 	"voice_and_tone": `How the brand communicates: personality traits, vocabulary level, sentence style, formality, humor, warmth. Characteristic phrases to use. How they relate to the audience (peer, mentor, authority). Words/phrases to always use and to never use. Ask for examples of writing they like, use THEIR words, not marketing theory. Include content role models: creators, brands, or accounts they admire and why.`,
-	"content_strategy": `Define how the client's cornerstone content gets distributed across social platforms — what goes where and how many pieces per platform.`,
-	"guidelines": `Content-specific rules: topics that are off-limits, formatting preferences, hashtag strategy, emoji usage, visual style. Anti-patterns: what should content NEVER look or sound like. Any brand-specific dos and don'ts not covered elsewhere.`,
 }
 
 type ProfileHandler struct {
-	queries     *store.Queries
-	aiClient    *ai.Client
-	braveClient *search.BraveClient
-	model       func() string
+	queries  *store.Queries
+	aiClient *ai.Client
+	model    func() string
 }
 
-func NewProfileHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *ProfileHandler {
-	return &ProfileHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
+func NewProfileHandler(q *store.Queries, aiClient *ai.Client, model func() string) *ProfileHandler {
+	return &ProfileHandler{queries: q, aiClient: aiClient, model: model}
 }
 
 func (h *ProfileHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	switch {
 	case rest == "profile" && r.Method == "GET":
 		h.show(w, r, projectID)
-	case strings.HasPrefix(rest, "profile/sections/") && r.Method == "POST":
+	case strings.HasSuffix(rest, "/edit") && r.Method == "GET":
+		h.showEdit(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/save") && r.Method == "POST":
 		h.saveSection(w, r, projectID, rest)
-	case strings.HasSuffix(rest, "/message") && r.Method == "POST":
-		h.saveSectionMessage(w, r, projectID, rest)
-	case strings.HasSuffix(rest, "/stream") && r.Method == "GET":
-		h.streamSection(w, r, projectID, rest)
-	case strings.HasPrefix(rest, "profile/") && r.Method == "GET":
-		h.showSectionChat(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/generate") && r.Method == "GET":
+		h.streamGenerate(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/versions") && r.Method == "GET":
+		h.listVersions(w, r, projectID, rest)
 	default:
 		http.NotFound(w, r)
 	}
@@ -74,24 +69,12 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 		sectionMap[s.Section] = s.Content
 	}
 
-	// Determine which sections are locked (previous ones must be filled)
 	cardViews := make([]templates.ProfileCardView, len(allSections))
 	for i, name := range allSections {
-		locked := false
-		if i > 0 {
-			// Check if all previous sections have content
-			for j := 0; j < i; j++ {
-				if sectionMap[allSections[j]] == "" {
-					locked = true
-					break
-				}
-			}
-		}
 		cardViews[i] = templates.ProfileCardView{
 			Section: name,
 			Title:   sectionTitle(name),
 			Content: sectionMap[name],
-			Locked:  locked,
 			Index:   i,
 		}
 	}
@@ -103,13 +86,9 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 	}).Render(r.Context(), w)
 }
 
-func (h *ProfileHandler) showSectionChat(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	// rest = "profile/product_and_positioning" or "profile/audience/message" etc
-	section := strings.TrimPrefix(rest, "profile/")
-	// Remove any trailing sub-paths
-	if idx := strings.Index(section, "/"); idx != -1 {
-		section = section[:idx]
-	}
+func (h *ProfileHandler) showEdit(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	// rest = "profile/product_and_positioning/edit"
+	section := h.parseSectionFromRest(rest)
 
 	project, err := h.queries.GetProject(projectID)
 	if err != nil {
@@ -117,102 +96,69 @@ func (h *ProfileHandler) showSectionChat(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Get or create a chat for this section
-	chat, _ := h.queries.GetOrCreateSectionChat(projectID, section)
-	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
-
-	msgViews := make([]templates.ProfileMsgView, len(msgs))
-	for i, m := range msgs {
-		msgViews[i] = templates.ProfileMsgView{Role: m.Role, Content: m.Content}
-	}
-
-	templates.ProfileSectionChatPage(templates.ProfileSectionChatData{
-		ProjectID:    projectID,
-		ProjectName:  project.Name,
-		Section:      section,
-		SectionTitle: sectionTitle(section),
-		Messages:     msgViews,
-	}).Render(r.Context(), w)
-}
-
-func (h *ProfileHandler) saveSectionMessage(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	section := h.parseSectionFromRest(rest)
-	r.ParseForm()
-	content := r.FormValue("content")
-	if content == "" {
-		http.Error(w, "Content required", http.StatusBadRequest)
-		return
-	}
-
-	chat, _ := h.queries.GetOrCreateSectionChat(projectID, section)
-	h.queries.AddBrainstormMessage(chat.ID, "user", content, "")
-	w.WriteHeader(http.StatusOK)
-}
-
-func (h *ProfileHandler) parseSectionFromRest(rest string) string {
-	// rest = "profile/product_and_positioning/message" or "profile/audience/stream"
-	section := strings.TrimPrefix(rest, "profile/")
-	if idx := strings.Index(section, "/"); idx != -1 {
-		section = section[:idx]
-	}
-	return section
-}
-
-func (h *ProfileHandler) streamSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	sectionName := h.parseSectionFromRest(rest)
-	project, _ := h.queries.GetProject(projectID)
-	chat, _ := h.queries.GetOrCreateSectionChat(projectID, sectionName)
-	msgs, _ := h.queries.ListBrainstormMessages(chat.ID)
-
-	// Build current profile state for system prompt
-	var profileState strings.Builder
-	for _, name := range allSections {
-		section, err := h.queries.GetProfileSection(projectID, name)
-		if err != nil || section.Content == "" {
-			fmt.Fprintf(&profileState, "- **%s**: (empty)\n", sectionTitle(name))
-		} else {
-			fmt.Fprintf(&profileState, "- **%s**: %s\n", sectionTitle(name), section.Content)
+	var content string
+	var sourceURLs []store.SourceURL
+	ps, err := h.queries.GetProfileSection(projectID, section)
+	if err == nil {
+		content = ps.Content
+		if ps.SourceURLs != "" {
+			json.Unmarshal([]byte(ps.SourceURLs), &sourceURLs)
 		}
 	}
 
-	systemPrompt := fmt.Sprintf(`Today's date: %s
+	hasSourceURLs := section == "product_and_positioning"
+	saved := r.URL.Query().Get("saved") == "1"
 
-You are an expert content marketing strategist. You are helping build the **%s** section of a client profile for "%s".
+	templates.ProfileEditPage(templates.ProfileEditData{
+		ProjectID:     projectID,
+		ProjectName:   project.Name,
+		Section:       section,
+		SectionTitle:  sectionTitle(section),
+		Content:       content,
+		SourceURLs:    sourceURLs,
+		HasSourceURLs: hasSourceURLs,
+		Saved:         saved,
+	}).Render(r.Context(), w)
+}
 
-## What this section needs
-%s
+func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	section := h.parseSectionFromRest(rest)
+	r.ParseForm()
+	content := r.FormValue("content")
 
-## Current profile state (for context)
-%s
-
-## Your workflow
-1. Ask questions to understand the client well enough to write a thorough section. Be specific. Dig deeper on vague answers.
-2. When you have enough, call update_section with section "%s" and your writeup.
-3. If the user rejects, ask what needs changing, revise, and propose again.
-4. Focus ONLY on this section. Don't propose updates to other sections.
-
-## Rules
-- NEVER fabricate or assume details. If you need to guess, ask: "I'd need to make some assumptions about X — should I draft it or can you tell me more?"
-- Write specific prose about THIS client. If it could apply to any company, it's too generic.
-- Use fetch_url when the user shares a link. Use web_search to research competitors or context.
-- Be conversational and efficient. Don't repeat what the user said.
-
-## Writing style
-- Write like a human. NEVER sound like AI-generated content.
-- NEVER use em dashes. Use commas, periods, or restructure.
-- Zero emojis in section proposals. One max per chat message.
-- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "at the end of the day", "it's worth noting".
-- Short, direct sentences. Vary length. Sound like a person, not a press release.`,
-		time.Now().Format("January 2, 2006"),
-		sectionTitle(sectionName), project.Name,
-		sectionDescriptions[sectionName],
-		profileState.String(),
-		sectionName)
-
-	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
-	for _, m := range msgs {
-		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
+	// Save previous version if content changed
+	existing, err := h.queries.GetProfileSection(projectID, section)
+	if err == nil && existing.Content != "" && existing.Content != content {
+		h.queries.SaveProfileVersion(projectID, section, existing.Content)
 	}
+
+	if section == "product_and_positioning" {
+		urls := r.Form["source_url"]
+		notes := r.Form["source_notes"]
+		var sourceURLs []store.SourceURL
+		for i, u := range urls {
+			u = strings.TrimSpace(u)
+			if u == "" {
+				continue
+			}
+			n := ""
+			if i < len(notes) {
+				n = strings.TrimSpace(notes[i])
+			}
+			sourceURLs = append(sourceURLs, store.SourceURL{URL: u, Notes: n})
+		}
+		urlsJSON, _ := json.Marshal(sourceURLs)
+		h.queries.UpsertProfileSectionFull(projectID, section, content, string(urlsJSON))
+	} else {
+		h.queries.UpsertProfileSection(projectID, section, content)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/profile/%s/edit?saved=1", projectID, section), http.StatusSeeOther)
+}
+
+func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	sectionName := h.parseSectionFromRest(rest)
+	project, _ := h.queries.GetProject(projectID)
 
 	// SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -231,90 +177,152 @@ You are an expert content marketing strategist. You are helping build the **%s**
 		flusher.Flush()
 	}
 
-	// Build tools
-	toolList := []ai.Tool{
-		tools.NewFetchTool(),
-		tools.NewSearchTool(),
-		tools.NewUpdateSectionTool(),
-	}
+	sendEvent(map[string]string{"type": "status", "status": "Building profile..."})
 
-	// Create search executor
-	searchExec := tools.NewSearchExecutor(h.braveClient)
-
-	// Executor switch
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		switch name {
-		case "fetch_url":
-			return tools.ExecuteFetch(ctx, args)
-		case "web_search":
-			return searchExec(ctx, args)
-		case "update_section":
-			return tools.ExecuteUpdateSection(ctx, args)
-		default:
-			return "", fmt.Errorf("unknown tool: %s", name)
-		}
-	}
-
-	// Tool event callback
-	onToolEvent := func(event ai.ToolEvent) {
-		switch event.Type {
-		case "tool_start":
-			summary := ""
-			switch event.Tool {
-			case "fetch_url":
-				summary = tools.FetchSummary(event.Args)
-			case "web_search":
-				summary = tools.SearchSummary(event.Args)
-			case "update_section":
-				summary = "Proposing update..."
-			}
-			sendEvent(map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary})
-		case "tool_result":
-			summary := event.Summary
-			if len(summary) > 200 {
-				summary = summary[:200] + "..."
-			}
-			sendEvent(map[string]string{"type": "tool_result", "tool": event.Tool, "summary": summary})
-		}
-
-		// Special handling for update_section: emit proposal event
-		if event.Tool == "update_section" && event.Type == "tool_result" {
-			args, err := tools.ParseUpdateArgs(event.Args)
-			if err == nil {
-				sendEvent(map[string]string{"type": "proposal", "section": args.Section, "content": args.Content})
+	// Pre-fetch source URLs for product_and_positioning
+	var fetchedContent strings.Builder
+	if sectionName == "product_and_positioning" {
+		ps, err := h.queries.GetProfileSection(projectID, sectionName)
+		if err == nil && ps.SourceURLs != "" {
+			var urls []store.SourceURL
+			if json.Unmarshal([]byte(ps.SourceURLs), &urls) == nil {
+				for _, u := range urls {
+					sendEvent(map[string]string{"type": "status", "status": fmt.Sprintf("Fetching %s...", u.URL)})
+					result, err := tools.ExecuteFetch(r.Context(), fmt.Sprintf(`{"url":"%s"}`, u.URL))
+					if err != nil {
+						fmt.Fprintf(&fetchedContent, "\n## Source: %s\n(fetch failed: %s)\n", u.URL, err.Error())
+						continue
+					}
+					fmt.Fprintf(&fetchedContent, "\n## Source: %s\n", u.URL)
+					if u.Notes != "" {
+						fmt.Fprintf(&fetchedContent, "Notes: %s\n", u.Notes)
+					}
+					fmt.Fprintf(&fetchedContent, "%s\n", result)
+				}
 			}
 		}
 	}
 
-	// Chunk callback
-	sendChunk := func(chunk string) error {
+	// Get existing content for this section
+	var existingContent string
+	ps, err := h.queries.GetProfileSection(projectID, sectionName)
+	if err == nil {
+		existingContent = ps.Content
+	}
+
+	// Get memory setting
+	var memorySetting string
+	if mem, err := h.queries.GetProjectSetting(projectID, "memory"); err == nil && mem != "" {
+		memorySetting = mem
+	}
+
+	// Build other profile sections for context
+	var profileContext strings.Builder
+	for _, name := range allSections {
+		if name == sectionName {
+			continue
+		}
+		s, err := h.queries.GetProfileSection(projectID, name)
+		if err != nil || s.Content == "" {
+			continue
+		}
+		fmt.Fprintf(&profileContext, "## %s\n%s\n\n", sectionTitle(name), s.Content)
+	}
+
+	sendEvent(map[string]string{"type": "status", "status": "Generating..."})
+
+	// Build system prompt
+	var systemPrompt strings.Builder
+	fmt.Fprintf(&systemPrompt, "Today's date: %s\n\n", time.Now().Format("January 2, 2006"))
+	fmt.Fprintf(&systemPrompt, "You are an expert content marketing strategist. Write the **%s** section of a client profile for \"%s\".\n\n", sectionTitle(sectionName), project.Name)
+	fmt.Fprintf(&systemPrompt, "## What this section needs\n%s\n\n", sectionDescriptions[sectionName])
+
+	if fetchedContent.Len() > 0 {
+		fmt.Fprintf(&systemPrompt, "## Source material (fetched from client URLs)\n%s\n\n", fetchedContent.String())
+	}
+
+	if profileContext.Len() > 0 {
+		fmt.Fprintf(&systemPrompt, "## Other profile sections (for context)\n%s\n", profileContext.String())
+	}
+
+	if existingContent != "" {
+		fmt.Fprintf(&systemPrompt, "## Current content for this section (improve upon this)\n%s\n\n", existingContent)
+	}
+
+	if memorySetting != "" {
+		fmt.Fprintf(&systemPrompt, "## Important rules and facts\n%s\n\n", memorySetting)
+	}
+
+	systemPrompt.WriteString(`## Rules
+- NEVER fabricate or assume details. Base everything on the source material and existing profile.
+- Write specific prose about THIS client. If it could apply to any company, it's too generic.
+- Be thorough and comprehensive. Cover all aspects described above.
+
+## Writing style
+- Write like a human. NEVER sound like AI-generated content.
+- NEVER use em dashes. Use commas, periods, or restructure.
+- Zero emojis.
+- Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "at the end of the day", "it's worth noting".
+- Short, direct sentences. Vary length. Sound like a person, not a press release.
+
+Write the section content now. Output ONLY the section content, no headers or meta-commentary.`)
+
+	aiMsgs := []types.Message{
+		{Role: "system", Content: systemPrompt.String()},
+		{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section."},
+	}
+
+	_, err = h.aiClient.Stream(r.Context(), h.model(), aiMsgs, func(chunk string) error {
 		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
 		return nil
-	}
-
-	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
+	})
 	if err != nil {
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
-	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse, "")
-
 	sendEvent(map[string]string{"type": "done"})
 }
 
-func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
-	// rest = "profile/sections/voice"
-	section := strings.TrimPrefix(rest, "profile/sections/")
-	r.ParseForm()
-	content := r.FormValue("content")
-	h.queries.UpsertProfileSection(projectID, section, content)
-	w.WriteHeader(http.StatusOK)
+func (h *ProfileHandler) listVersions(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	section := h.parseSectionFromRest(rest)
+	versions, err := h.queries.ListProfileVersions(projectID, section)
+	if err != nil {
+		http.Error(w, "Failed to load versions", http.StatusInternalServerError)
+		return
+	}
+
+	type versionJSON struct {
+		ID        int64  `json:"id"`
+		Content   string `json:"content"`
+		CreatedAt string `json:"created_at"`
+	}
+
+	out := make([]versionJSON, len(versions))
+	for i, v := range versions {
+		out[i] = versionJSON{
+			ID:        v.ID,
+			Content:   v.Content,
+			CreatedAt: v.CreatedAt.Format("Jan 2, 2006 3:04 PM"),
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
+}
+
+func (h *ProfileHandler) parseSectionFromRest(rest string) string {
+	// rest = "profile/product_and_positioning/edit" or "profile/audience/save" etc.
+	section := strings.TrimPrefix(rest, "profile/")
+	if idx := strings.Index(section, "/"); idx != -1 {
+		section = section[:idx]
+	}
+	return section
 }
 
 var sectionDisplayTitles = map[string]string{
-	"content_strategy": "Social Content Strategy",
+	"product_and_positioning": "Product & Positioning",
+	"voice_and_tone":          "Voice & Tone",
 }
 
 func sectionTitle(s string) string {
@@ -326,3 +334,6 @@ func sectionTitle(s string) string {
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
 }
+
+// suppress unused import warning
+var _ context.Context

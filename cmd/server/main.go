@@ -82,7 +82,7 @@ func main() {
 	contentHandler := handlers.NewContentHandler(queries)
 brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
-	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
+	profileHandler := handlers.NewProfileHandler(queries, aiClient, contentModel)
 	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
 	projectSettingsHandler := handlers.NewProjectSettingsHandler(queries)
 	storytellingHandler := handlers.NewStorytellingHandler(queries)
