@@ -43,8 +43,6 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 		ProjectID:             projectID,
 		ProjectName:           project.Name,
 		Language:              settings["language"],
-		CompanyBlog:           settings["company_blog"],
-		BlogNotes:             settings["blog_notes"],
 		StorytellingFramework: settings["storytelling_framework"],
 		Frameworks:            fwOptions,
 		Saved:                 r.URL.Query().Get("saved") == "1",
@@ -54,8 +52,6 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 func (h *ProjectSettingsHandler) save(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
 	h.queries.SetProjectSetting(projectID, "language", r.FormValue("language"))
-	h.queries.SetProjectSetting(projectID, "company_blog", r.FormValue("company_blog"))
-	h.queries.SetProjectSetting(projectID, "blog_notes", r.FormValue("blog_notes"))
 	h.queries.SetProjectSetting(projectID, "storytelling_framework", r.FormValue("storytelling_framework"))
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/settings?saved=1", projectID), http.StatusSeeOther)
 }

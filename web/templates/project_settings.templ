@@ -13,8 +13,6 @@ type ProjectSettingsData struct {
 	ProjectID            int64
 	ProjectName          string
 	Language             string
-	CompanyBlog          string
-	BlogNotes            string
 	StorytellingFramework string
 	Frameworks           []FrameworkOption
 	Saved                bool
@@ -39,19 +37,6 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 					@components.FormGroup("Content Language") {
 						<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..." class="input input-bordered w-full"/>
 						<p class="text-base-content/60 text-xs mt-1">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
-					}
-				}
-			</div>
-
-			<div class="mb-4">
-				@components.Card("Blog URL") {
-					<p class="text-base-content/60 text-xs mt-1 mb-3">Blog URL used by the Tone Analyzer to match writing style. Use commas to separate multiple URLs.</p>
-
-					@components.FormGroup("Blog URL") {
-						<input type="text" name="company_blog" value={ data.CompanyBlog } placeholder="https://example.com/blog" class="input input-bordered w-full"/>
-					}
-					@components.FormGroup("Blog Usage Notes") {
-						<textarea name="blog_notes" class="textarea textarea-bordered w-full" placeholder="e.g. Link to blog from social posts, reference existing posts for internal linking...">{ data.BlogNotes }</textarea>
 					}
 				}
 			</div>
