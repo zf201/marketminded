@@ -79,8 +79,7 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(queries)
 	pipelineHandler := handlers.NewPipelineHandler(queries, orchestrator, aiClient, copywritingModel, promptBuilder)
 	contentHandler := handlers.NewContentHandler(queries)
-	templateHandler := handlers.NewTemplateHandler(queries)
-	brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
+brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
 	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
 	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
@@ -119,9 +118,7 @@ func main() {
 			pipelineHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "content"):
 			contentHandler.Handle(w, r, projectID, rest)
-		case strings.HasPrefix(rest, "templates"):
-			templateHandler.Handle(w, r, projectID, rest)
-		case strings.HasPrefix(rest, "brainstorm"):
+case strings.HasPrefix(rest, "brainstorm"):
 			brainstormHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "profile"):
 			profileHandler.Handle(w, r, projectID, rest)

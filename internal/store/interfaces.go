@@ -87,16 +87,6 @@ type ContextStore interface {
 	BuildContextString(projectID int64) (string, error)
 }
 
-// TemplateStore handles email/social templates.
-type TemplateStore interface {
-	CreateTemplate(projectID int64, name, platform, htmlContent string) (*Template, error)
-	GetTemplate(id int64) (*Template, error)
-	ListTemplates(projectID int64) ([]Template, error)
-	ListTemplatesByPlatform(projectID int64, platform string) ([]Template, error)
-	UpdateTemplate(id int64, name, htmlContent string) error
-	DeleteTemplate(id int64) error
-}
-
 // Ensure Queries implements all interfaces at compile time.
 var _ PipelineStore = (*Queries)(nil)
 var _ ContentStore = (*Queries)(nil)
@@ -106,4 +96,3 @@ var _ SettingsStore = (*Queries)(nil)
 var _ ProjectSettingsStore = (*Queries)(nil)
 var _ BrainstormStore = (*Queries)(nil)
 var _ ContextStore = (*Queries)(nil)
-var _ TemplateStore = (*Queries)(nil)

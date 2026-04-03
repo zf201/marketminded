@@ -246,42 +246,6 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div></div><div class=\"card bg-base-100 shadow-sm border border-base-300\"><div class=\"card-body p-4\"><h3 class=\"font-semibold text-base\">")
-			if err != nil {
-				return err
-			}
-			var_20 := `Templates`
-			_, err = templBuffer.WriteString(var_20)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-2 text-base-content/60\">")
-			if err != nil {
-				return err
-			}
-			var_21 := `HTML templates for social posts`
-			_, err = templBuffer.WriteString(var_21)
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("</p><a href=\"")
-			if err != nil {
-				return err
-			}
-			var var_22 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_22)))
-			if err != nil {
-				return err
-			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm\">")
-			if err != nil {
-				return err
-			}
-			var_23 := `Manage Templates`
-			_, err = templBuffer.WriteString(var_23)
-			if err != nil {
-				return err
-			}
 			_, err = templBuffer.WriteString("</a></div></div></div>")
 			if err != nil {
 				return err

@@ -73,14 +73,6 @@ templ ProjectOverview(p ProjectDetail) {
 					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID)) } class="btn btn-secondary btn-sm">Pipeline Runs</a>
 				</div>
 			</div>
-
-			<div class="card bg-base-100 shadow-sm border border-base-300">
-				<div class="card-body p-4">
-					<h3 class="font-semibold text-base">Templates</h3>
-					<p class="mb-2 text-base-content/60">HTML templates for social posts</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/templates", p.ID)) } class="btn btn-secondary btn-sm">Manage Templates</a>
-				</div>
-			</div>
 		</div>
 	}
 }
