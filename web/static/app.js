@@ -966,11 +966,38 @@ function initProfilePage(projectId) {
         header.appendChild(toggleBtn);
         body.appendChild(header);
 
-        var desc = document.createElement('p');
-        desc.className = 'text-sm text-base-content/80 mt-1';
-        var descText = persona.description || '';
-        desc.textContent = descText.length > 200 ? descText.substring(0, 200) + '...' : descText;
-        body.appendChild(desc);
+        // All fields
+        var fields = [
+            {label: 'Description', value: persona.description, required: true},
+            {label: 'Pain points', value: persona.pain_points, required: true},
+            {label: 'Push', value: persona.push, required: true},
+            {label: 'Pull', value: persona.pull, required: true},
+            {label: 'Anxiety', value: persona.anxiety, required: true},
+            {label: 'Habit', value: persona.habit, required: true},
+            {label: 'Role', value: persona.role},
+            {label: 'Demographics', value: persona.demographics},
+            {label: 'Company', value: persona.company_info},
+            {label: 'Content habits', value: persona.content_habits},
+            {label: 'Buying triggers', value: persona.buying_triggers}
+        ];
+
+        var fieldsDiv = document.createElement('div');
+        fieldsDiv.className = 'mt-2 space-y-1';
+        fields.forEach(function(f) {
+            if (!f.value) return;
+            var row = document.createElement('div');
+            row.className = 'text-xs';
+            var lbl = document.createElement('span');
+            lbl.className = 'font-semibold text-base-content/60';
+            lbl.textContent = f.label + ': ';
+            var val = document.createElement('span');
+            val.className = 'text-base-content/80';
+            val.textContent = f.value;
+            row.appendChild(lbl);
+            row.appendChild(val);
+            fieldsDiv.appendChild(row);
+        });
+        body.appendChild(fieldsDiv);
 
         card.appendChild(body);
         return card;
