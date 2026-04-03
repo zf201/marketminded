@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
@@ -424,17 +425,26 @@ Source URLs:
 		}
 
 		temp := 0.3
-		_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent,
+		model := h.model()
+		start := time.Now()
+		applog.Info("profile generate (tool): section=%s project=%d model=%s starting", sectionName, projectID, model)
+
+		_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent,
 			func(string) error { return nil },
 			func(string) error { return nil }, &temp, 5)
 
+		duration := time.Since(start)
 		if err != nil && submittedResult == "" {
+			applog.Error("profile generate (tool): section=%s project=%d model=%s failed after %s: %s", sectionName, projectID, model, duration, err.Error())
 			sendEvent(map[string]string{"type": "error", "error": err.Error()})
 			return
 		}
 
 		if submittedResult != "" {
+			applog.Info("profile generate (tool): section=%s project=%d model=%s completed in %s, result=%d bytes", sectionName, projectID, model, duration, len(submittedResult))
 			sendEvent(map[string]any{"type": "result", "data": json.RawMessage(submittedResult)})
+		} else {
+			applog.Error("profile generate (tool): section=%s project=%d model=%s completed in %s but no result submitted", sectionName, projectID, model, duration)
 		}
 
 		sendEvent(map[string]string{"type": "done"})
@@ -447,15 +457,23 @@ Source URLs:
 			{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section."},
 		}
 
-		_, err = h.aiClient.Stream(r.Context(), h.model(), aiMsgs, func(chunk string) error {
+		model := h.model()
+		start := time.Now()
+		applog.Info("profile generate (stream): section=%s project=%d model=%s starting", sectionName, projectID, model)
+
+		_, err = h.aiClient.Stream(r.Context(), model, aiMsgs, func(chunk string) error {
 			sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
 			return nil
 		})
+
+		duration := time.Since(start)
 		if err != nil {
+			applog.Error("profile generate (stream): section=%s project=%d model=%s failed after %s: %s", sectionName, projectID, model, duration, err.Error())
 			sendEvent(map[string]string{"type": "error", "error": err.Error()})
 			return
 		}
 
+		applog.Info("profile generate (stream): section=%s project=%d model=%s completed in %s", sectionName, projectID, model, duration)
 		sendEvent(map[string]string{"type": "done"})
 	}
 }

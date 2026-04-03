@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
@@ -296,14 +297,24 @@ For each persona, provide:
 	}
 
 	temp := 0.5
-	_, err := h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, 10)
+	model := h.model()
+	start := time.Now()
+	applog.Info("audience generate: project=%d model=%s starting", projectID, model)
+
+	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, 10)
+
+	duration := time.Since(start)
 	if err != nil && submittedResult == "" {
+		applog.Error("audience generate: project=%d model=%s failed after %s: %s", projectID, model, duration, err.Error())
 		sendEvent(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
 	if submittedResult != "" {
+		applog.Info("audience generate: project=%d model=%s completed in %s, result=%d bytes", projectID, model, duration, len(submittedResult))
 		sendEvent(map[string]any{"type": "personas", "data": json.RawMessage(submittedResult)})
+	} else {
+		applog.Error("audience generate: project=%d model=%s completed in %s but no result submitted", projectID, model, duration)
 	}
 
 	sendEvent(map[string]string{"type": "done"})
