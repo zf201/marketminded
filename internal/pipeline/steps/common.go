@@ -120,15 +120,3 @@ func runWithTools(
 
 	return result, nil
 }
-
-func splitURLs(s string) []string {
-	parts := strings.Split(s, ",")
-	var urls []string
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			urls = append(urls, p)
-		}
-	}
-	return urls
-}

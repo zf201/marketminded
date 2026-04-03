@@ -13,7 +13,6 @@ func StepDependencies() map[string][]string {
 		"research":       {},
 		"brand_enricher": {"research"},
 		"factcheck":      {"brand_enricher"},
-		"tone_analyzer":  {},
 		"editor":         {"factcheck"},
 		"write":          {"editor"},
 	}

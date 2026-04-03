@@ -44,12 +44,6 @@ func NewRegistry(braveClient *search.BraveClient) *Registry {
 		`{"type":"object","properties":{"issues_found":{"type":"array","description":"List of issues found during fact-checking (may be empty if everything checks out)","items":{"type":"object","properties":{"claim":{"type":"string","description":"The claim that was checked"},"problem":{"type":"string","description":"What is wrong or uncertain"},"resolution":{"type":"string","description":"How to address this in the final content"}},"required":["claim","problem","resolution"]}},"enriched_brief":{"type":"string","description":"The research brief, corrected and enriched with any additional context from fact-checking. This is what the writer will use."},"sources":{"type":"array","description":"Verified sources to cite in the final piece","items":{"type":"object","properties":{"url":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"},"date":{"type":"string"}},"required":["url","title","summary"]}}},"required":["issues_found","enriched_brief","sources"]}`,
 	)}
 
-	r.stepTools["tone_analyzer"] = []ai.Tool{fetchTool, submitTool(
-		"submit_tone_analysis",
-		"Submit the tone and style guide based on the company's existing blog posts.",
-		`{"type":"object","properties":{"tone_guide":{"type":"string","description":"A concise guide describing the writing tone, voice, style patterns, sentence structure, vocabulary level, and formatting conventions observed in the blog posts. The writer will use this to match the brand's voice."},"posts":{"type":"array","description":"The blog posts that were analyzed","items":{"type":"object","properties":{"title":{"type":"string"},"url":{"type":"string"},"excerpt":{"type":"string","description":"A short excerpt showing the post's typical writing style"}},"required":["title","url"]}}},"required":["tone_guide","posts"]}`,
-	)}
-
 	r.stepTools["editor"] = []ai.Tool{submitTool(
 		"submit_editorial_outline",
 		"Submit the structured editorial outline for the writer. Call this when you have determined the narrative structure.",

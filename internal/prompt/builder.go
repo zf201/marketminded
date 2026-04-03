@@ -182,36 +182,8 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 - Call submit_factcheck when done. This is your only way to deliver results.`, b.DateHeader(), researchOutput)
 }
 
-// ForToneAnalyzer builds the system prompt for the tone analyzer step.
-func (b *Builder) ForToneAnalyzer(blogURLs string) string {
-	return fmt.Sprintf(`%s
-
-You are a tone analyzer. Your job is to read 3-5 recent blog posts from the company's blog and create a tone/style guide for the content writer.
-
-Blog URL(s) to start from:
-%s
-
-Steps:
-1. Fetch the blog listing page(s) above
-2. Find links to 3-5 recent individual blog posts
-3. Fetch each post and read the full content
-4. Analyze the writing patterns across all posts
-
-Create a tone guide covering:
-- Voice and tone (formal/informal, authoritative/conversational, etc.)
-- Typical sentence structure and length
-- Vocabulary level and any recurring phrases or expressions
-- How they address the reader (you/vi, formal/informal)
-- Formatting patterns (headings, lists, CTAs, etc.)
-- Language (what language the posts are written in)
-
-IMPORTANT: You are analyzing STYLE only, not content. The writer will use your guide to match the brand's voice, not to copy facts.
-
-You MUST call submit_tone_analysis with your findings.`, b.DateHeader(), blogURLs)
-}
-
 // ForEditor builds the system prompt for the editor step.
-func (b *Builder) ForEditor(profile, brief, sourcesText, frameworkBlock, toneGuide string) string {
+func (b *Builder) ForEditor(profile, brief, sourcesText, frameworkBlock string) string {
 	var sb strings.Builder
 	sb.WriteString(b.DateHeader())
 	sb.WriteString(`
@@ -241,17 +213,11 @@ Do NOT write the article. Produce only the structural outline via the tool.
 		sb.WriteString("\n")
 	}
 
-	if toneGuide != "" {
-		sb.WriteString("\n## Tone & style reference\nKeep this voice in mind when choosing the angle and editorial notes.\n\n")
-		sb.WriteString(toneGuide)
-		sb.WriteString("\n")
-	}
-
 	return sb.String()
 }
 
 // ForWriter builds the system prompt for the writer step.
-func (b *Builder) ForWriter(promptFile, profile, editorOutput, rejectionReason, toneGuide string) string {
+func (b *Builder) ForWriter(promptFile, profile, editorOutput, rejectionReason string) string {
 	promptText := b.ContentPrompt(promptFile)
 	if promptText == "" {
 		promptText = "You are writing a blog post."
@@ -268,12 +234,6 @@ func (b *Builder) ForWriter(promptFile, profile, editorOutput, rejectionReason, 
 
 	if rejectionReason != "" {
 		sb.WriteString(fmt.Sprintf("\n## Previous rejection feedback\n%s. Address this in the new version.\n", rejectionReason))
-	}
-
-	if toneGuide != "" {
-		sb.WriteString("\n## Tone & style reference (from company blog)\nUse this ONLY to match the writing tone, voice, and style. Do NOT use any factual information from the blog posts — all facts must come from the editorial outline above.\n\n")
-		sb.WriteString(toneGuide)
-		sb.WriteString("\n")
 	}
 
 	sb.WriteString(antiAIRules)

@@ -31,14 +31,6 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	format := "post"
 	ct, ctOk := content.LookupType(platform, format)
 
-	var toneGuide string
-	if toneOutput, ok := input.PriorOutputs["tone_analyzer"]; ok {
-		var toneResult struct{ ToneGuide string `json:"tone_guide"` }
-		if json.Unmarshal([]byte(toneOutput), &toneResult) == nil {
-			toneGuide = toneResult.ToneGuide
-		}
-	}
-
 	var rejectionReason string
 	pieces, _ := s.Content.ListContentByPipelineRun(input.RunID)
 	for _, p := range pieces {
@@ -52,7 +44,7 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	if ctOk {
 		promptFile = ct.PromptFile
 	}
-	systemPrompt := s.Prompt.ForWriter(promptFile, input.Profile, editorOutput, rejectionReason, toneGuide)
+	systemPrompt := s.Prompt.ForWriter(promptFile, input.Profile, editorOutput, rejectionReason)
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt},

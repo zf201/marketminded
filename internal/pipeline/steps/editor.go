@@ -47,15 +47,7 @@ func (s *EditorStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 		}
 	}
 
-	var toneGuide string
-	if toneOutput, ok := input.PriorOutputs["tone_analyzer"]; ok {
-		var toneResult struct{ ToneGuide string `json:"tone_guide"` }
-		if json.Unmarshal([]byte(toneOutput), &toneResult) == nil {
-			toneGuide = toneResult.ToneGuide
-		}
-	}
-
-	systemPrompt := s.Prompt.ForEditor(input.Profile, brief, sourcesText, frameworkBlock, toneGuide)
+	systemPrompt := s.Prompt.ForEditor(input.Profile, brief, sourcesText, frameworkBlock)
 	toolList := s.Tools.ForStep("editor")
 	return runWithTools(ctx, s.AI, s.Model(), systemPrompt, "Create the editorial outline now.", toolList, s.Tools, "submit_editorial_outline", stream, 0.3, 5)
 }
