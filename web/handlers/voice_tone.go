@@ -354,6 +354,9 @@ Call submit_voice_tone with 5 sections:
 		return nil
 	}
 
+	maxIter := 15
+	systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call submit_voice_tone when ready. Do NOT keep fetching endlessly.", maxIter))
+
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt.String()},
 		{Role: "user", Content: "Analyze the provided sources and build a structured voice & tone profile for this brand. Use fetch_url to read individual blog posts from the listing pages, then submit your analysis."},
@@ -364,7 +367,7 @@ Call submit_voice_tone with 5 sections:
 	start := time.Now()
 	applog.Info("voice_tone generate: project=%d model=%s starting", projectID, model)
 
-	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, 15)
+	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, maxIter)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {

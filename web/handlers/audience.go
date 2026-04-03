@@ -223,7 +223,6 @@ For each persona, provide:
 - Be specific to THIS business. Generic personas are useless.
 - Write in plain language, not marketing jargon.
 - Each persona should be distinct and non-overlapping.
-- You have a MAXIMUM of 15 tool calls total. Plan your searches efficiently — do 2-4 targeted searches, then call submit_personas. Do NOT keep searching endlessly.
 `)
 
 	if len(existingPersonas) > 0 {
@@ -292,6 +291,9 @@ For each persona, provide:
 		return nil
 	}
 
+	maxIter := 15
+	systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call submit_personas when ready. Do NOT keep searching endlessly.", maxIter))
+
 	aiMsgs := []types.Message{
 		{Role: "system", Content: systemPrompt.String()},
 		{Role: "user", Content: "Research and build audience personas for this business. Use web_search to gather real market insights, then submit your personas."},
@@ -302,7 +304,7 @@ For each persona, provide:
 	start := time.Now()
 	applog.Info("audience generate: project=%d model=%s starting", projectID, model)
 
-	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, 15)
+	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, maxIter)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {

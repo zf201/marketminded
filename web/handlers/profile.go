@@ -419,6 +419,9 @@ Source URLs:
 			}
 		}
 
+		maxIter := 5
+		systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Call submit_profile with your results.", maxIter))
+
 		aiMsgs := []types.Message{
 			{Role: "system", Content: systemPrompt.String()},
 			{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section and produce the URL guide."},
@@ -431,7 +434,7 @@ Source URLs:
 
 		_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent,
 			func(string) error { return nil },
-			func(string) error { return nil }, &temp, 5)
+			func(string) error { return nil }, &temp, maxIter)
 
 		duration := time.Since(start)
 		if err != nil && submittedResult == "" {

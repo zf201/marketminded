@@ -29,8 +29,11 @@ func runWithTools(
 	temp float64,
 	maxIter int,
 ) (pipeline.StepResult, error) {
+	// Inject tool call budget into system prompt
+	fullPrompt := systemPrompt + fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call your submit tool when ready. Do NOT keep searching endlessly.", maxIter)
+
 	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt},
+		{Role: "system", Content: fullPrompt},
 		{Role: "user", Content: userPrompt},
 	}
 
