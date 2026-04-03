@@ -223,6 +223,7 @@ For each persona, provide:
 - Be specific to THIS business. Generic personas are useless.
 - Write in plain language, not marketing jargon.
 - Each persona should be distinct and non-overlapping.
+- You have a MAXIMUM of 15 tool calls total. Plan your searches efficiently — do 2-4 targeted searches, then call submit_personas. Do NOT keep searching endlessly.
 `)
 
 	if len(existingPersonas) > 0 {
@@ -301,7 +302,7 @@ For each persona, provide:
 	start := time.Now()
 	applog.Info("audience generate: project=%d model=%s starting", projectID, model)
 
-	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, 10)
+	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, 15)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {
