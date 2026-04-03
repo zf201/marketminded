@@ -125,6 +125,8 @@ Search the web thoroughly. Look for:
 
 Fetch pages when search snippets are insufficient. Aim for at least 3-5 solid sources.
 
+You have a MAXIMUM of 20 tool calls. Plan efficiently — do 5-8 targeted searches, fetch key pages, then call submit_research. Do NOT keep searching endlessly.
+
 When you have gathered enough material, call submit_research with your sources and a comprehensive brief.`, b.DateHeader(), profile, brief)
 }
 
@@ -152,6 +154,7 @@ You are a brand enricher. You receive market research about a specific topic and
 %s
 
 ## Rules
+- You have a MAXIMUM of 12 tool calls. Fetch the URLs below, extract what's relevant, and call submit_brand_enrichment.
 - Fetch ALL URLs above, but be selective about what you extract. More is not better — relevance is.
 - Ask yourself: "Would a writer need this specific detail for THIS article?" If not, leave it out.
 - Include specific numbers (pricing, terms, features) that strengthen the article's argument.
@@ -175,7 +178,7 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 4. Call submit_factcheck with the enriched brief and complete sources list
 
 ## Rules
-- Be efficient. 3-5 targeted searches, not 15+ scattered ones.
+- You have a MAXIMUM of 20 tool calls. Plan efficiently — do 3-5 targeted searches, then call submit_factcheck. Do NOT keep searching endlessly.
 - Focus on claims that would embarrass the brand if wrong (prices, percentages, dates).
 - Accept reasonable claims from credible sources without re-verifying.
 - Your sources list MUST include ALL sources from the input above, plus any new ones. Never drop sources.
