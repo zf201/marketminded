@@ -630,6 +630,8 @@ function initProfilePage(projectId) {
         });
     });
 
+    var buildResultData = null; // stores structured result from tool call
+
     document.getElementById('build-generate-btn').addEventListener('click', function() {
         var genBtn = document.getElementById('build-generate-btn');
         var actions = document.getElementById('build-actions');
@@ -641,6 +643,7 @@ function initProfilePage(projectId) {
         textarea.value = '';
         textarea.classList.remove('hidden');
         textarea.readOnly = true;
+        buildResultData = null;
 
         var source = new EventSource('/projects/' + projectId + '/profile/' + activeSection + '/generate');
         source.onmessage = function(event) {
@@ -652,6 +655,13 @@ function initProfilePage(projectId) {
             case 'chunk':
                 textarea.value += d.chunk;
                 textarea.scrollTop = textarea.scrollHeight;
+                break;
+            case 'result':
+                // Structured result from tool call (P&P with URLs)
+                var parsed = typeof d.data === 'string' ? JSON.parse(d.data) : d.data;
+                buildResultData = parsed;
+                textarea.value = parsed.content || '';
+                textarea.scrollTop = 0;
                 break;
             case 'error':
                 source.close();
@@ -675,10 +685,15 @@ function initProfilePage(projectId) {
 
     document.getElementById('build-save-btn').addEventListener('click', function() {
         var content = document.getElementById('build-content').value;
+        var payload = {content: content};
+        // Include url_guide if we got a structured result
+        if (buildResultData && buildResultData.url_guide) {
+            payload.url_guide = buildResultData.url_guide;
+        }
         fetch('/projects/' + projectId + '/profile/' + activeSection + '/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({content: content})
+            body: JSON.stringify(payload)
         }).then(function() { location.reload(); });
     });
 

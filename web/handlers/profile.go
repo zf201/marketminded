@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -106,6 +107,7 @@ func (h *ProfileHandler) show(w http.ResponseWriter, r *http.Request, projectID 
 		}
 		if card.HasSourceURLs {
 			card.ContextNotes, _ = h.queries.GetProjectSetting(projectID, "profile_context_"+name)
+			card.URLGuide, _ = h.queries.GetProjectSetting(projectID, "profile_url_guide")
 		}
 		if name == "audience" {
 			card.IsAudience = true
@@ -156,7 +158,8 @@ func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, pro
 	}
 
 	var body struct {
-		Content string `json:"content"`
+		Content  string `json:"content"`
+		URLGuide string `json:"url_guide,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
@@ -170,6 +173,12 @@ func (h *ProfileHandler) saveSection(w http.ResponseWriter, r *http.Request, pro
 	}
 
 	h.queries.UpsertProfileSection(projectID, section, body.Content)
+
+	// Save URL guide if provided (from P&P build)
+	if body.URLGuide != "" {
+		h.queries.SetProjectSetting(projectID, "profile_url_guide", body.URLGuide)
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -342,10 +351,35 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 		fmt.Fprintf(&systemPrompt, "## Important rules and facts\n%s\n\n", memorySetting)
 	}
 
+	if sectionName == "product_and_positioning" && fetchedContent.Len() > 0 {
+		// List the URLs so the AI can write a guide for each
+		var urlListForGuide strings.Builder
+		ps2, _ := h.queries.GetProfileSection(projectID, sectionName)
+		if ps2 != nil && ps2.SourceURLs != "" {
+			var urls []store.SourceURL
+			if json.Unmarshal([]byte(ps2.SourceURLs), &urls) == nil {
+				for _, u := range urls {
+					fmt.Fprintf(&urlListForGuide, "- %s", u.URL)
+					if u.Notes != "" {
+						fmt.Fprintf(&urlListForGuide, " (user notes: %s)", u.Notes)
+					}
+					urlListForGuide.WriteString("\n")
+				}
+			}
+		}
+		systemPrompt.WriteString(fmt.Sprintf(`## URL Guide
+You MUST also produce a url_guide: for each source URL listed below, write a one-line instruction explaining what data a pipeline agent should extract from that URL and when it's relevant. Be specific — e.g. "Fetch for pricing tiers and plan names when writing about costs" not "Company website".
+
+Source URLs:
+%s
+`, urlListForGuide.String()))
+	}
+
 	systemPrompt.WriteString(`## Rules
 - NEVER fabricate or assume details. Base everything on the source material and existing profile.
 - Write specific prose about THIS client. If it could apply to any company, it's too generic.
 - Be thorough and comprehensive. Cover all aspects described above.
+- ALWAYS write in English.
 
 ## Writing style
 - Write like a human. NEVER sound like AI-generated content.
@@ -353,24 +387,77 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 - Zero emojis.
 - Avoid: "dive into", "leverage", "elevate", "streamline", "game-changer", "unlock", "harness", "at the end of the day", "it's worth noting".
 - Short, direct sentences. Vary length. Sound like a person, not a press release.
+`)
 
-Write the section content now. Output ONLY the section content, no headers or meta-commentary.`)
+	if sectionName == "product_and_positioning" && fetchedContent.Len() > 0 {
+		systemPrompt.WriteString("\nCall submit_profile with both the content and url_guide fields.")
 
-	aiMsgs := []types.Message{
-		{Role: "system", Content: systemPrompt.String()},
-		{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section."},
+		submitTool := ai.Tool{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "submit_profile",
+				Description: "Submit the profile section content and URL guide for pipeline agents.",
+				Parameters:  json.RawMessage(`{"type":"object","properties":{"content":{"type":"string","description":"The full profile section content"},"url_guide":{"type":"string","description":"One-line instruction per source URL explaining what data to extract and when it's relevant. Format: one line per URL, starting with the URL."}},"required":["content","url_guide"]}`),
+			},
+		}
+
+		toolList := []ai.Tool{submitTool}
+		var submittedResult string
+
+		executor := func(ctx context.Context, name, args string) (string, error) {
+			if name == "submit_profile" {
+				submittedResult = args
+				return "Profile submitted.", ai.ErrToolDone
+			}
+			return "", fmt.Errorf("unknown tool: %s", name)
+		}
+
+		onToolEvent := func(event ai.ToolEvent) {
+			if event.Type == "tool_start" && event.Tool == "submit_profile" {
+				sendEvent(map[string]string{"type": "status", "status": "Finalizing..."})
+			}
+		}
+
+		aiMsgs := []types.Message{
+			{Role: "system", Content: systemPrompt.String()},
+			{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section and produce the URL guide."},
+		}
+
+		temp := 0.3
+		_, err = h.aiClient.StreamWithTools(r.Context(), h.model(), aiMsgs, toolList, executor, onToolEvent,
+			func(string) error { return nil },
+			func(string) error { return nil }, &temp, 5)
+
+		if err != nil && submittedResult == "" {
+			sendEvent(map[string]string{"type": "error", "error": err.Error()})
+			return
+		}
+
+		if submittedResult != "" {
+			sendEvent(map[string]any{"type": "result", "data": json.RawMessage(submittedResult)})
+		}
+
+		sendEvent(map[string]string{"type": "done"})
+	} else {
+		// Simple stream for non-P&P sections (or P&P without URLs)
+		systemPrompt.WriteString("\nWrite the section content now. Output ONLY the section content, no headers or meta-commentary.")
+
+		aiMsgs := []types.Message{
+			{Role: "system", Content: systemPrompt.String()},
+			{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section."},
+		}
+
+		_, err = h.aiClient.Stream(r.Context(), h.model(), aiMsgs, func(chunk string) error {
+			sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
+			return nil
+		})
+		if err != nil {
+			sendEvent(map[string]string{"type": "error", "error": err.Error()})
+			return
+		}
+
+		sendEvent(map[string]string{"type": "done"})
 	}
-
-	_, err = h.aiClient.Stream(r.Context(), h.model(), aiMsgs, func(chunk string) error {
-		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
-		return nil
-	})
-	if err != nil {
-		sendEvent(map[string]string{"type": "error", "error": err.Error()})
-		return
-	}
-
-	sendEvent(map[string]string{"type": "done"})
 }
 
 func (h *ProfileHandler) listVersions(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {

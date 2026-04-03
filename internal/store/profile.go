@@ -117,9 +117,15 @@ func (q *Queries) ListProfileVersions(projectID int64, section string) ([]Profil
 	return versions, rows.Err()
 }
 
-// BuildSourceURLList returns a formatted string of source URLs from the
-// product_and_positioning section, for use by the brand enricher pipeline step.
+// BuildSourceURLList returns a formatted string of source URLs for the brand enricher.
+// Prefers the AI-generated url_guide if available, otherwise falls back to user notes.
 func (q *Queries) BuildSourceURLList(projectID int64) (string, error) {
+	// Try AI-generated URL guide first
+	if guide, err := q.GetProjectSetting(projectID, "profile_url_guide"); err == nil && guide != "" {
+		return "## Must-Use URLs (fetch these for latest data)\n" + guide + "\n", nil
+	}
+
+	// Fallback to raw URLs with user notes
 	section, err := q.GetProfileSection(projectID, "product_and_positioning")
 	if err != nil {
 		return "", nil
