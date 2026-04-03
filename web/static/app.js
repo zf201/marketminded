@@ -479,6 +479,45 @@ document.addEventListener('DOMContentLoaded', function() {
 function initProfilePage(projectId) {
     var activeSection = null;
 
+    // Render markdown content and set up expand/collapse
+    document.querySelectorAll('.profile-md-content').forEach(function(el) {
+        var md = el.dataset.md;
+        if (md && typeof renderMarkdown === 'function') {
+            var rendered = renderMarkdown(md);
+            el.textContent = '';
+            while (rendered.firstChild) el.appendChild(rendered.firstChild);
+            el.className = rendered.className + ' ' + el.className;
+        } else {
+            el.textContent = md || '';
+        }
+    });
+
+    document.querySelectorAll('.profile-expand-btn').forEach(function(btn) {
+        var section = btn.dataset.section;
+        var preview = document.querySelector('.profile-content-preview[data-section="' + section + '"]');
+        var fade = preview ? preview.querySelector('.profile-fade') : null;
+        var expanded = false;
+
+        // Hide expand button if content is short enough
+        if (preview && preview.scrollHeight <= preview.offsetHeight + 4) {
+            btn.classList.add('hidden');
+            if (fade) fade.classList.add('hidden');
+        }
+
+        btn.addEventListener('click', function() {
+            expanded = !expanded;
+            if (expanded) {
+                preview.style.maxHeight = 'none';
+                if (fade) fade.classList.add('hidden');
+                btn.textContent = 'Show less';
+            } else {
+                preview.style.maxHeight = '';
+                if (fade) fade.classList.remove('hidden');
+                btn.textContent = 'Show more';
+            }
+        });
+    });
+
     // --- Add Context modal ---
     document.querySelectorAll('.profile-context-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
