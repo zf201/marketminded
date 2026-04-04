@@ -162,11 +162,27 @@ SSE endpoints remain unchanged — they already stream JSON events over EventSou
 
 ## TypeScript Types
 
-Three type files:
+Types are **generated from Go structs** using [tygo](https://github.com/gzuidhof/tygo) — no hand-written type definitions. This eliminates type drift between backend and frontend.
 
-- **`types/models.ts`** — Domain models matching Go structs: `Project`, `Pipeline`, `PipelineStep`, `ContentPiece`, `ProfileSection`, `AudiencePersona`, `VoiceToneProfile`, `BrainstormChat`, `ContextItem`, `Settings`.
-- **`types/api.ts`** — API response wrappers and request payloads.
-- **`types/events.ts`** — SSE event types: `ChunkEvent`, `ThinkingEvent`, `ToolStartEvent`, `ToolResultEvent`, `DoneEvent`, `ErrorEvent`, `ProposalEvent`, `ContentWrittenEvent`.
+### Generation Setup
+
+- **Tool:** tygo (Go struct → TypeScript interface generator)
+- **Config:** `tygo.yaml` in project root, specifying which Go packages to generate from
+- **Output:** `frontend/src/types/generated.ts`
+- **Makefile target:** `make types` runs tygo, called automatically by `make dev` and `make build`
+
+### Source Packages
+
+| Go Package | Generated Types |
+|------------|----------------|
+| `internal/store` | `Project`, `Pipeline`, `PipelineStep`, `ContentPiece`, `ProfileSection`, `AudiencePersona`, `VoiceToneProfile`, `BrainstormChat`, `ContextItem`, `Settings` |
+| `web/handlers` | API request/response structs, SSE event types (`ChunkEvent`, `ThinkingEvent`, `ToolStartEvent`, `ToolResultEvent`, `DoneEvent`, `ErrorEvent`, `ProposalEvent`, `ContentWrittenEvent`) |
+
+### Hand-Written Types
+
+Only one hand-written type file:
+
+- **`types/index.ts`** — Re-exports from `generated.ts`, plus any frontend-only types (e.g., UI state enums, form validation types) that have no Go equivalent.
 
 ## Directory Structure
 
@@ -188,7 +204,7 @@ frontend/
     ├── layouts/               (2 files)
     ├── views/                 (16 files)
     ├── components/            (12 files)
-    └── types/                 (3 files)
+    └── types/                 (generated.ts + index.ts)
 ```
 
 ### Backend Changes
@@ -196,6 +212,7 @@ frontend/
 - **Removed:** `web/templates/` (all .templ and _templ.go), `web/static/` (JS, CSS)
 - **Modified:** All `web/handlers/*.go` — return JSON instead of rendering templ
 - **Added:** `web/handlers/spa.go` — serves Vue `dist/` via `embed.FS` with SPA fallback
+- **Added:** `tygo.yaml` — config for Go → TypeScript type generation
 - **Modified:** `cmd/server/main.go` — new `/api/` routing prefix
 - **Unchanged:** All `internal/` packages (pipeline, store, prompt, tools, sse, applog), migrations
 
@@ -205,8 +222,9 @@ frontend/
 
 | Target | What it does |
 |--------|-------------|
-| `make dev` | Vite dev server + Go server concurrently |
-| `make build` | Vite build + Go build → single binary |
+| `make dev` | Generate types + Vite dev server + Go server concurrently |
+| `make build` | Generate types + Vite build + Go build → single binary |
+| `make types` | Run tygo to generate `frontend/src/types/generated.ts` from Go structs |
 | `make test` | `go test ./...` (backend) |
 | `make test-frontend` | `vitest run` (frontend) |
 
