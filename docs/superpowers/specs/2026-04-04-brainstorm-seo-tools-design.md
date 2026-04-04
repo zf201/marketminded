@@ -211,15 +211,28 @@ See what keywords a domain ranks for — useful for competitive analysis.
 - If SEO client is present, add three SEO tools to `toolList` and wire up executor cases
 - Add SEO cost guardrail text to system prompt
 
+**`web/handlers/settings.go`**
+- Add `dataforseo_login` and `dataforseo_password` settings to `save()` and `show()`
+
+**`web/templates/settings.templ`** + **`web/templates/settings_templ.go`**
+- Add `DataForSEOLogin` and `DataForSEOPassword` fields to `SettingsData`
+- Add a new "SEO / DataForSEO" section to the settings form with login and password inputs
+- Password field uses `type="password"` for the API password
+
+**`cmd/server/main.go`**
+- SEO client credential resolution: DB settings > env vars > disabled
+- When credentials change in settings, the SEO client should pick them up (resolve from DB at call time, similar to model resolvers)
+
 ---
 
 ## Authentication
 
-DataForSEO uses HTTP Basic Auth. The login and password are passed as environment variables:
-- `DATAFORSEO_LOGIN` — the account email or login
-- `DATAFORSEO_PASSWORD` — the API password (not necessarily the account password)
+DataForSEO uses HTTP Basic Auth. Credentials can be configured two ways (DB settings take precedence):
 
-These are set in `.env` alongside existing keys (OpenRouter, Brave).
+1. **Settings UI** — "SEO / DataForSEO" section with login and password fields (stored in DB via `settings` table)
+2. **Environment variables** — `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` as fallback
+
+The SEO client resolves credentials at call time (not at startup) so that changes in the settings UI take effect immediately without restart.
 
 ---
 
