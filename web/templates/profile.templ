@@ -37,7 +37,7 @@ templ ProfilePage(data ProfilePageData) {
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Profile"},
-	}, data.ProjectID) {
+	}, data.ProjectID, data.ProjectName, "profile") {
 		<div class="flex items-center justify-between mb-4">
 			<h1 class="text-2xl font-bold">{ data.ProjectName } Profile</h1>
 		</div>
@@ -45,13 +45,13 @@ templ ProfilePage(data ProfilePageData) {
 		<div id="profile-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) }>
 			for _, card := range data.Cards {
 				if card.IsAudience {
-					<div class="card bg-base-100 shadow-sm border border-base-300 mb-3" id={ "card-" + card.Section }>
-						<div class="card-body">
+					<div class="card mb-3" id={ "card-" + card.Section }>
+						<div class="p-5">
 							<div class="flex items-center justify-between mb-1">
 								<div class="flex items-center gap-2">
 									<strong>{ card.Title }</strong>
 									if len(card.Personas) > 0 {
-										<span class="badge badge-success badge-sm">{ fmt.Sprintf("%d persona%s", len(card.Personas), pluralS(len(card.Personas))) }</span>
+										<span class="badge badge-success text-[10px]">{ fmt.Sprintf("%d persona%s", len(card.Personas), pluralS(len(card.Personas))) }</span>
 									} else {
 										<span class="badge badge-ghost">Empty</span>
 									}
@@ -67,52 +67,52 @@ templ ProfilePage(data ProfilePageData) {
 								</div>
 							</div>
 							<!-- Context subcard -->
-							<div class="card bg-base-200 border border-base-300 mt-3">
-								<div class="card-body p-3">
+							<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-3">
+								<div class="p-3">
 									<div class="flex items-center justify-between mb-1">
-										<span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">Context</span>
+										<span class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Context</span>
 										<button type="button" class="btn btn-ghost btn-xs audience-context-btn">
 											Edit context
 										</button>
 									</div>
 									if card.AudienceLocation != "" {
-										<p class="text-xs text-base-content/70"><strong>Location:</strong> { card.AudienceLocation }</p>
+										<p class="text-xs text-zinc-400"><strong>Location:</strong> { card.AudienceLocation }</p>
 									}
 									if card.ContextNotes != "" {
-										<p class="text-xs text-base-content/70 mt-1">{ card.ContextNotes }</p>
+										<p class="text-xs text-zinc-400 mt-1">{ card.ContextNotes }</p>
 									}
 									if card.AudienceLocation == "" && card.ContextNotes == "" {
-										<p class="text-xs text-base-content/50 italic">No context added yet</p>
+										<p class="text-xs text-zinc-600 italic">No context added yet</p>
 									}
 								</div>
 							</div>
 							<!-- Persona subcards -->
 							for _, persona := range card.Personas {
-								<div class="card bg-base-200 border border-base-300 mt-2" data-persona-id={ fmt.Sprintf("%d", persona.ID) }>
-									<div class="card-body p-3">
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2" data-persona-id={ fmt.Sprintf("%d", persona.ID) }>
+									<div class="p-3">
 										<div class="flex items-center justify-between mb-1">
 											<strong class="text-sm">{ persona.Label }</strong>
 											<div class="flex items-center gap-1">
 												<button type="button" class="btn btn-ghost btn-xs audience-edit-btn" data-persona-id={ fmt.Sprintf("%d", persona.ID) }>Edit</button>
-												<button type="button" class="btn btn-ghost btn-xs text-error audience-delete-btn" data-persona-id={ fmt.Sprintf("%d", persona.ID) }>Delete</button>
+												<button type="button" class="btn btn-ghost btn-xs text-red-400 audience-delete-btn" data-persona-id={ fmt.Sprintf("%d", persona.ID) }>Delete</button>
 											</div>
 										</div>
 										<div class="profile-content-preview max-h-20 overflow-hidden relative" data-section={ fmt.Sprintf("persona-%d", persona.ID) }>
-											<div class="profile-md-content text-sm leading-relaxed text-base-content/80">{ persona.Description }</div>
-											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-base-200 to-transparent pointer-events-none profile-fade"></div>
+											<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ persona.Description }</div>
+											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
 										</div>
 										<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section={ fmt.Sprintf("persona-%d", persona.ID) }>Show more</button>
 									</div>
 								</div>
 							}
 							if len(card.Personas) == 0 {
-								<p class="text-base-content/60 italic text-sm mt-2">No personas defined yet. Click Build to generate audience personas.</p>
+								<p class="text-zinc-500 italic text-sm mt-2">No personas defined yet. Click Build to generate audience personas.</p>
 							}
 						</div>
 					</div>
 				} else if card.IsVoiceTone {
-					<div class="card bg-base-100 shadow-sm border border-base-300 mb-3" id={ "card-" + card.Section }>
-						<div class="card-body">
+					<div class="card mb-3" id={ "card-" + card.Section }>
+						<div class="p-5">
 							<div class="flex items-center justify-between mb-1">
 								<div class="flex items-center gap-2">
 									<strong>{ card.Title }</strong>
@@ -136,10 +136,10 @@ templ ProfilePage(data ProfilePageData) {
 								</div>
 							</div>
 							<!-- Context subcard -->
-							<div class="card bg-base-200 border border-base-300 mt-3">
-								<div class="card-body p-3">
+							<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-3">
+								<div class="p-3">
 									<div class="flex items-center justify-between mb-1">
-										<span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">Context</span>
+										<span class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Context</span>
 										<button type="button" class="btn btn-ghost btn-xs vt-context-btn">
 											Edit context
 										</button>
@@ -147,21 +147,21 @@ templ ProfilePage(data ProfilePageData) {
 									if len(card.VTBlogURLs) > 0 || len(card.VTLikedArticles) > 0 || len(card.VTInspiration) > 0 {
 										<div class="flex flex-wrap gap-1.5">
 											if len(card.VTBlogURLs) > 0 {
-												<span class="badge badge-outline badge-sm">{ fmt.Sprintf("%d blog URL%s", len(card.VTBlogURLs), pluralS(len(card.VTBlogURLs))) }</span>
+												<span class="badge badge-outline text-[10px]">{ fmt.Sprintf("%d blog URL%s", len(card.VTBlogURLs), pluralS(len(card.VTBlogURLs))) }</span>
 											}
 											if len(card.VTLikedArticles) > 0 {
-												<span class="badge badge-outline badge-sm">{ fmt.Sprintf("%d liked article%s", len(card.VTLikedArticles), pluralS(len(card.VTLikedArticles))) }</span>
+												<span class="badge badge-outline text-[10px]">{ fmt.Sprintf("%d liked article%s", len(card.VTLikedArticles), pluralS(len(card.VTLikedArticles))) }</span>
 											}
 											if len(card.VTInspiration) > 0 {
-												<span class="badge badge-outline badge-sm">{ fmt.Sprintf("%d inspiration%s", len(card.VTInspiration), pluralS(len(card.VTInspiration))) }</span>
+												<span class="badge badge-outline text-[10px]">{ fmt.Sprintf("%d inspiration%s", len(card.VTInspiration), pluralS(len(card.VTInspiration))) }</span>
 											}
 										</div>
 									}
 									if card.ContextNotes != "" {
-										<p class="text-xs text-base-content/70 mt-1">{ card.ContextNotes }</p>
+										<p class="text-xs text-zinc-400 mt-1">{ card.ContextNotes }</p>
 									}
 									if len(card.VTBlogURLs) == 0 && len(card.VTLikedArticles) == 0 && len(card.VTInspiration) == 0 && card.ContextNotes == "" {
-										<p class="text-xs text-base-content/50 italic">No context added yet</p>
+										<p class="text-xs text-zinc-600 italic">No context added yet</p>
 									}
 								</div>
 							</div>
@@ -169,21 +169,21 @@ templ ProfilePage(data ProfilePageData) {
 							if card.VoiceToneProfile != nil {
 								<div class="mt-3">
 									<div class="profile-content-preview max-h-28 overflow-hidden relative" data-section="voice_and_tone">
-										<div class="profile-md-content text-sm leading-relaxed text-base-content/80">
+										<div class="profile-md-content text-sm leading-relaxed text-zinc-300">
 											{ "## Voice Analysis\n" + card.VoiceToneProfile.VoiceAnalysis + "\n\n## Content Types\n" + card.VoiceToneProfile.ContentTypes + "\n\n## Should Avoid\n" + card.VoiceToneProfile.ShouldAvoid + "\n\n## Should Use\n" + card.VoiceToneProfile.ShouldUse + "\n\n## Style Inspiration\n" + card.VoiceToneProfile.StyleInspiration }
 										</div>
-										<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-base-100 to-transparent pointer-events-none profile-fade"></div>
+										<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
 									</div>
 									<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="voice_and_tone">Show more</button>
 								</div>
 							} else {
-								<p class="text-base-content/60 italic text-sm mt-2">No voice & tone profile yet. Click Build to generate one.</p>
+								<p class="text-zinc-500 italic text-sm mt-2">No voice & tone profile yet. Click Build to generate one.</p>
 							}
 						</div>
 					</div>
 				} else {
-					<div class="card bg-base-100 shadow-sm border border-base-300 mb-3" id={ "card-" + card.Section }>
-						<div class="card-body">
+					<div class="card mb-3" id={ "card-" + card.Section }>
+						<div class="p-5">
 							<div class="flex items-center justify-between mb-1">
 								<div class="flex items-center gap-2">
 									<strong>{ card.Title }</strong>
@@ -207,10 +207,10 @@ templ ProfilePage(data ProfilePageData) {
 								</div>
 							</div>
 							if card.HasSourceURLs {
-								<div class="card bg-base-200 border border-base-300 mt-3">
-									<div class="card-body p-3">
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-3">
+									<div class="p-3">
 										<div class="flex items-center justify-between mb-1">
-											<span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">Context</span>
+											<span class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Context</span>
 											<button type="button" class="btn btn-ghost btn-xs profile-context-btn" data-section={ card.Section } data-title={ card.Title }>
 												Edit context
 											</button>
@@ -218,15 +218,15 @@ templ ProfilePage(data ProfilePageData) {
 										if len(card.SourceURLs) > 0 {
 											<div class="flex flex-wrap gap-1.5">
 												for _, u := range card.SourceURLs {
-													<span class="badge badge-outline badge-sm font-mono truncate max-w-xs" title={ u.URL }>{ u.URL }</span>
+													<span class="badge badge-outline text-[10px] font-mono truncate max-w-xs" title={ u.URL }>{ u.URL }</span>
 												}
 											</div>
 										}
 										if card.ContextNotes != "" {
-											<p class="text-xs text-base-content/70 mt-1">{ card.ContextNotes }</p>
+											<p class="text-xs text-zinc-400 mt-1">{ card.ContextNotes }</p>
 										}
 										if len(card.SourceURLs) == 0 && card.ContextNotes == "" {
-											<p class="text-xs text-base-content/50 italic">No context added yet</p>
+											<p class="text-xs text-zinc-600 italic">No context added yet</p>
 										}
 									</div>
 								</div>
@@ -234,19 +234,19 @@ templ ProfilePage(data ProfilePageData) {
 							if card.Content != "" {
 								<div class="mt-3">
 									<div class="profile-content-preview max-h-28 overflow-hidden relative" data-section={ card.Section }>
-										<div class="profile-md-content text-sm leading-relaxed text-base-content/80">{ card.Content }</div>
-										<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-base-100 to-transparent pointer-events-none profile-fade"></div>
+										<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ card.Content }</div>
+										<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
 									</div>
 									<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section={ card.Section }>Show more</button>
 								</div>
 							} else if !card.HasSourceURLs {
-								<p class="text-base-content/60 italic text-sm">Not yet filled</p>
+								<p class="text-zinc-500 italic text-sm">Not yet filled</p>
 							}
 							if card.URLGuide != "" {
-								<div class="card bg-base-200 border border-base-300 mt-3">
-									<div class="card-body p-3">
-										<span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide mb-2">URL Guide (for pipeline agents)</span>
-										<pre class="whitespace-pre-wrap text-xs leading-relaxed text-base-content/70 mt-1">{ card.URLGuide }</pre>
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-3">
+									<div class="p-3">
+										<span class="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">URL Guide (for pipeline agents)</span>
+										<pre class="whitespace-pre-wrap text-xs leading-relaxed text-zinc-400 mt-1">{ card.URLGuide }</pre>
 									</div>
 								</div>
 							}
@@ -258,83 +258,98 @@ templ ProfilePage(data ProfilePageData) {
 
 		<!-- Add Context modal -->
 		<dialog id="context-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-2xl">
-				<h3 class="font-bold text-lg mb-4" id="context-modal-title">Edit Context</h3>
-				<label class="label"><span class="label-text font-semibold">Source URLs</span></label>
-				<p class="text-xs text-base-content/60 mb-2">URLs fetched during profile generation.</p>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-2xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg" id="context-modal-title">Edit Context</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Source URLs</label>
+				<p class="text-xs text-zinc-500 mb-2">URLs fetched during profile generation.</p>
 				<div id="context-urls-container"></div>
 				<button type="button" id="context-add-url-btn" class="btn btn-ghost btn-sm mt-1 mb-4">+ Add URL</button>
-				<label class="label"><span class="label-text font-semibold">Additional notes</span></label>
-				<p class="text-xs text-base-content/60 mb-2">Extra context for the AI when building this section.</p>
-				<textarea id="context-notes" class="textarea textarea-bordered w-full text-sm" rows="4" placeholder="e.g. Focus on enterprise features, mention the free tier..."></textarea>
-				<div class="modal-action">
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Additional notes</label>
+				<p class="text-xs text-zinc-500 mb-2">Extra context for the AI when building this section.</p>
+				<textarea id="context-notes" class="textarea w-full text-sm" rows="4" placeholder="e.g. Focus on enterprise features, mention the free tier..."></textarea>
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="context-save-btn" class="btn btn-primary">Save</button>
 					<button type="button" id="context-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Build modal -->
 		<dialog id="build-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-3xl">
-				<h3 class="font-bold text-lg mb-4" id="build-modal-title">Build</h3>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg" id="build-modal-title">Build</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
 				<div id="build-context-summary" class="mb-4"></div>
 				<div id="build-actions" class="mb-4">
 					<button type="button" id="build-generate-btn" class="btn btn-secondary">Generate</button>
 				</div>
-				<textarea id="build-content" class="textarea textarea-bordered w-full font-mono text-sm hidden" rows="16" readonly></textarea>
+				<textarea id="build-content" class="textarea w-full font-mono text-sm hidden" rows="16" readonly></textarea>
 				<div id="build-url-guide" class="hidden mt-3">
-					<span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">URL Guide (for pipeline agents)</span>
-					<pre id="build-url-guide-content" class="whitespace-pre-wrap text-xs text-base-content/70 mt-1 bg-base-200 rounded-lg p-3"></pre>
+					<span class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">URL Guide (for pipeline agents)</span>
+					<pre id="build-url-guide-content" class="whitespace-pre-wrap text-xs text-zinc-400 mt-1 bg-zinc-800/50 rounded-lg p-3"></pre>
 				</div>
-				<div id="build-result-actions" class="modal-action hidden">
+				<div id="build-result-actions" class="flex justify-end gap-2 mt-6 hidden">
 					<button type="button" id="build-save-btn" class="btn btn-primary">Save</button>
 					<button type="button" id="build-discard-btn" class="btn btn-ghost">Discard</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Edit modal -->
 		<dialog id="edit-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-3xl">
-				<h3 class="font-bold text-lg mb-1" id="edit-modal-title">Edit</h3>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-1">
+					<h3 class="font-bold text-lg" id="edit-modal-title">Edit</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
 				<div class="flex items-center justify-between mb-4">
-					<p class="text-sm text-base-content/60">Edit the section content directly.</p>
+					<p class="text-sm text-zinc-500">Edit the section content directly.</p>
 					<button type="button" id="edit-history-btn" class="btn btn-ghost btn-xs">Restore from history</button>
 				</div>
-				<textarea id="edit-content" class="textarea textarea-bordered w-full font-mono text-sm" rows="20"></textarea>
-				<div class="modal-action">
+				<textarea id="edit-content" class="textarea w-full font-mono text-sm" rows="20"></textarea>
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="edit-save-btn" class="btn btn-primary">Save changes</button>
 					<button type="button" id="edit-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Audience Context modal -->
 		<dialog id="audience-context-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-2xl">
-				<h3 class="font-bold text-lg mb-4">Audience Context</h3>
-				<label class="label"><span class="label-text font-semibold">Location / Market</span></label>
-				<p class="text-xs text-base-content/60 mb-2">Target geographic market or location.</p>
-				<input type="text" id="audience-location" class="input input-bordered w-full text-sm" placeholder="e.g. United States, Europe, Global"/>
-				<label class="label mt-3"><span class="label-text font-semibold">Additional notes</span></label>
-				<p class="text-xs text-base-content/60 mb-2">Extra context for the AI when generating personas.</p>
-				<textarea id="audience-notes" class="textarea textarea-bordered w-full text-sm" rows="4" placeholder="e.g. Focus on B2B SaaS buyers, target mid-market companies..."></textarea>
-				<div class="modal-action">
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-2xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Audience Context</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Location / Market</label>
+				<p class="text-xs text-zinc-500 mb-2">Target geographic market or location.</p>
+				<input type="text" id="audience-location" class="input w-full text-sm" placeholder="e.g. United States, Europe, Global"/>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5 mt-3">Additional notes</label>
+				<p class="text-xs text-zinc-500 mb-2">Extra context for the AI when generating personas.</p>
+				<textarea id="audience-notes" class="textarea w-full text-sm" rows="4" placeholder="e.g. Focus on B2B SaaS buyers, target mid-market companies..."></textarea>
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="audience-context-save-btn" class="btn btn-primary">Save</button>
 					<button type="button" id="audience-context-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Audience Build modal -->
 		<dialog id="audience-build-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-3xl">
-				<h3 class="font-bold text-lg mb-4">Build Audience Personas</h3>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Build Audience Personas</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
 				<div id="audience-build-context" class="mb-4"></div>
 				<div id="audience-build-actions" class="mb-4">
 					<button type="button" id="audience-generate-btn" class="btn btn-secondary">Generate</button>
@@ -342,96 +357,111 @@ templ ProfilePage(data ProfilePageData) {
 				<div id="audience-build-results" class="hidden">
 					<div id="audience-personas-container" class="space-y-2 mb-4"></div>
 				</div>
-				<div id="audience-build-result-actions" class="modal-action hidden">
+				<div id="audience-build-result-actions" class="flex justify-end gap-2 mt-6 hidden">
 					<button type="button" id="audience-save-generated-btn" class="btn btn-primary">Save accepted</button>
 					<button type="button" id="audience-discard-btn" class="btn btn-ghost">Discard</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Audience Edit Persona modal -->
 		<dialog id="audience-edit-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-2xl">
-				<h3 class="font-bold text-lg mb-4" id="audience-edit-title">Edit Persona</h3>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-2xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg" id="audience-edit-title">Edit Persona</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
 				<div id="audience-edit-fields"></div>
-				<div class="modal-action">
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="audience-edit-save-btn" class="btn btn-primary">Save</button>
 					<button type="button" id="audience-edit-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Voice & Tone Context modal -->
 		<dialog id="vt-context-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-2xl">
-				<h3 class="font-bold text-lg mb-4">Voice & Tone Context</h3>
-				<label class="label"><span class="label-text font-semibold">Blog URLs</span></label>
-				<p class="text-xs text-base-content/60 mb-2">Your company blog posts to analyze writing style.</p>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-2xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Voice & Tone Context</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Blog URLs</label>
+				<p class="text-xs text-zinc-500 mb-2">Your company blog posts to analyze writing style.</p>
 				<div id="vt-blog-urls"></div>
 				<button type="button" class="btn btn-ghost btn-sm mt-1 mb-4 vt-add-blog-url">+ Add URL</button>
-				<label class="label"><span class="label-text font-semibold">Liked Articles</span></label>
-				<p class="text-xs text-base-content/60 mb-2">Posts the brand considers good examples of content.</p>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Liked Articles</label>
+				<p class="text-xs text-zinc-500 mb-2">Posts the brand considers good examples of content.</p>
 				<div id="vt-liked-articles"></div>
 				<button type="button" class="btn btn-ghost btn-sm mt-1 mb-4 vt-add-liked-url">+ Add URL</button>
-				<label class="label"><span class="label-text font-semibold">Inspiration Sources</span></label>
-				<p class="text-xs text-base-content/60 mb-2">External writing styles the brand admires.</p>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Inspiration Sources</label>
+				<p class="text-xs text-zinc-500 mb-2">External writing styles the brand admires.</p>
 				<div id="vt-inspiration"></div>
 				<button type="button" class="btn btn-ghost btn-sm mt-1 mb-4 vt-add-inspiration-url">+ Add URL</button>
-				<label class="label"><span class="label-text font-semibold">Additional notes</span></label>
-				<p class="text-xs text-base-content/60 mb-2">Extra context for the AI when analyzing voice & tone.</p>
-				<textarea id="vt-context-notes" class="textarea textarea-bordered w-full text-sm" rows="4" placeholder="e.g. We want to sound more casual, avoid corporate jargon..."></textarea>
-				<div class="modal-action">
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Additional notes</label>
+				<p class="text-xs text-zinc-500 mb-2">Extra context for the AI when analyzing voice & tone.</p>
+				<textarea id="vt-context-notes" class="textarea w-full text-sm" rows="4" placeholder="e.g. We want to sound more casual, avoid corporate jargon..."></textarea>
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="vt-context-save-btn" class="btn btn-primary">Save</button>
 					<button type="button" id="vt-context-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Voice & Tone Build modal -->
 		<dialog id="vt-build-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-3xl">
-				<h3 class="font-bold text-lg mb-4">Build Voice & Tone Profile</h3>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Build Voice & Tone Profile</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
 				<div id="vt-build-context" class="mb-4"></div>
 				<div id="vt-build-actions" class="mb-4">
 					<button type="button" id="vt-generate-btn" class="btn btn-secondary">Generate</button>
 				</div>
-				<textarea id="vt-build-content" class="textarea textarea-bordered w-full font-mono text-sm hidden" rows="16" readonly></textarea>
-				<div id="vt-build-result-actions" class="modal-action hidden">
+				<textarea id="vt-build-content" class="textarea w-full font-mono text-sm hidden" rows="16" readonly></textarea>
+				<div id="vt-build-result-actions" class="flex justify-end gap-2 mt-6 hidden">
 					<button type="button" id="vt-save-generated-btn" class="btn btn-primary">Save</button>
 					<button type="button" id="vt-discard-btn" class="btn btn-ghost">Discard</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- Voice & Tone Edit modal -->
 		<dialog id="vt-edit-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-3xl">
-				<h3 class="font-bold text-lg mb-4">Edit Voice & Tone Profile</h3>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Edit Voice & Tone Profile</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
 				<div id="vt-edit-fields"></div>
-				<div class="modal-action">
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="vt-edit-save-btn" class="btn btn-primary">Save changes</button>
 					<button type="button" id="vt-edit-cancel-btn" class="btn btn-ghost">Cancel</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 
 		<!-- History modal (sub-modal, opened from Edit) -->
 		<dialog id="history-modal" class="modal">
-			<div class="modal-box w-11/12 max-w-2xl">
-				<h3 class="font-bold text-lg mb-4">Version History</h3>
-				<div id="history-content">
-					<p class="text-base-content/60">Loading...</p>
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-2xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Version History</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
 				</div>
-				<div class="modal-action">
+				<div id="history-content">
+					<p class="text-zinc-500">Loading...</p>
+				</div>
+				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="history-back-btn" class="btn btn-ghost">Back</button>
 				</div>
 			</div>
-			<form method="dialog" class="modal-backdrop"><button>close</button></form>
+			<form method="dialog"><button class="hidden">close</button></form>
 		</dialog>
 	}
 }
@@ -445,8 +475,8 @@ func pluralS(n int) string {
 
 templ sourceURLRow(url string, notes string) {
 	<div class="flex gap-2 mb-2 source-url-row">
-		<input type="text" name="source_url" value={ url } placeholder="https://example.com" class="input input-bordered input-sm flex-1"/>
-		<input type="text" name="source_notes" value={ notes } placeholder="Usage notes..." class="input input-bordered input-sm flex-1"/>
+		<input type="text" name="source_url" value={ url } placeholder="https://example.com" class="input text-xs py-1.5 flex-1"/>
+		<input type="text" name="source_notes" value={ notes } placeholder="Usage notes..." class="input text-xs py-1.5 flex-1"/>
 		<button type="button" class="btn btn-ghost btn-sm btn-square remove-url-btn">x</button>
 	</div>
 }

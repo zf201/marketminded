@@ -16,30 +16,28 @@ templ ContextMemoryPage(data ContextMemoryData) {
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Context & Memories"},
-	}, data.ProjectID) {
-		<h1 class="text-2xl font-bold mb-6">Context & Memories</h1>
+	}, data.ProjectID, data.ProjectName, "context-memory") {
+		<h1 class="text-xl font-semibold text-zinc-100 mb-6">Context & Memories</h1>
 
 		if data.Saved {
-			<div class="alert alert-success mb-4">
-				<span>Saved.</span>
-			</div>
+			<div class="alert-success mb-4">Saved.</div>
 		}
 
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context-memory", data.ProjectID)) }>
 			<div class="mb-4">
 				@components.Card("Context") {
-					<p class="text-base-content/60 text-xs mb-3">Background info the AI should know: campaign details, competitor intel, product launches, industry context. This gets injected into every pipeline run.</p>
+					<p class="text-zinc-500 text-xs mb-3">Background info the AI should know: campaign details, competitor intel, product launches, industry context. This gets injected into every pipeline run.</p>
 					@components.FormGroup("") {
-						<textarea name="context" class="textarea textarea-bordered w-full min-h-[200px]" placeholder="e.g. We're launching a new subscription tier in April...&#10;&#10;Main competitor is Acme Corp, avoid mentioning them by name...&#10;&#10;Our target audience skews 25-40, tech-savvy professionals...">{ data.Context }</textarea>
+						<textarea name="context" class="textarea min-h-[200px]" placeholder="e.g. We're launching a new subscription tier in April...&#10;&#10;Main competitor is Acme Corp, avoid mentioning them by name...&#10;&#10;Our target audience skews 25-40, tech-savvy professionals...">{ data.Context }</textarea>
 					}
 				}
 			</div>
 
 			<div class="mb-4">
 				@components.Card("Memories") {
-					<p class="text-base-content/60 text-xs mb-3">Corrections and rules for the AI. Things it keeps getting wrong, facts to always include, things to never say.</p>
+					<p class="text-zinc-500 text-xs mb-3">Corrections and rules for the AI. Things it keeps getting wrong, facts to always include, things to never say.</p>
 					@components.FormGroup("") {
-						<textarea name="memory" class="textarea textarea-bordered w-full min-h-[200px]" placeholder="e.g. Our free tier includes 1000 API calls, not unlimited.&#10;&#10;Never use the word 'solution' — say 'tool' or 'platform' instead.&#10;&#10;Pricing on the website is excluding VAT.">{ data.Memory }</textarea>
+						<textarea name="memory" class="textarea min-h-[200px]" placeholder="e.g. Our free tier includes 1000 API calls, not unlimited.&#10;&#10;Never use the word 'solution' — say 'tool' or 'platform' instead.&#10;&#10;Pricing on the website is excluding VAT.">{ data.Memory }</textarea>
 					}
 				}
 			</div>

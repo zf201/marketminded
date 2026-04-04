@@ -5,7 +5,7 @@ func badgeClass(status string) string {
 	case "pending":
 		return "badge badge-ghost"
 	case "running":
-		return "badge badge-warning"
+		return "badge badge-warning animate-pulse"
 	case "completed", "complete":
 		return "badge badge-success"
 	case "failed":
@@ -21,7 +21,7 @@ func badgeClass(status string) string {
 	case "abandoned":
 		return "badge badge-ghost"
 	default:
-		return "badge"
+		return "badge badge-ghost"
 	}
 }
 

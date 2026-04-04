@@ -19,33 +19,35 @@ type ProjectSettingsData struct {
 }
 
 templ ProjectSettingsPage(data ProjectSettingsData) {
-	@components.ProjectPageShell(data.ProjectName + " - Settings", []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)}, {Label: "Settings"}}, data.ProjectID) {
+	@components.ProjectPageShell(data.ProjectName + " - Settings", []components.Breadcrumb{
+		{Label: "Projects", URL: "/"},
+		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
+		{Label: "Settings"},
+	}, data.ProjectID, data.ProjectName, "settings") {
 		<div class="flex items-center justify-between mb-6">
-			<h1 class="text-2xl font-bold">Project Settings</h1>
+			<h1 class="text-xl font-semibold text-zinc-100">Project Settings</h1>
 			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost">Back</a>
 		</div>
 
 		if data.Saved {
-			<div class="alert alert-success mb-4">
-				<p>Settings saved.</p>
-			</div>
+			<div class="alert-success mb-4">Settings saved.</div>
 		}
 
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", data.ProjectID)) }>
 			<div class="mb-4">
 				@components.Card("Language") {
 					@components.FormGroup("Content Language") {
-						<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..." class="input input-bordered w-full"/>
-						<p class="text-base-content/60 text-xs mt-1">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
+						<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..." class="input"/>
+						<p class="text-zinc-500 text-xs mt-1">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
 					}
 				}
 			</div>
 
 			<div class="mb-4">
 				@components.Card("Storytelling Framework") {
-					<p class="text-base-content/60 text-xs mt-1 mb-3">Guides how the AI structures the narrative in cornerstone content.</p>
+					<p class="text-zinc-500 text-xs mt-1 mb-3">Guides how the AI structures the narrative in cornerstone content.</p>
 					@components.FormGroup("") {
-						<select name="storytelling_framework" class="select select-bordered w-full">
+						<select name="storytelling_framework" class="select">
 							if data.StorytellingFramework == "" {
 								<option value="" selected>None (free-form)</option>
 							} else {
@@ -61,9 +63,9 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 						</select>
 					}
 					for _, fw := range data.Frameworks {
-						<div class="bg-base-200 rounded-lg p-3 mb-2 text-sm">
+						<div class="bg-zinc-800/50 rounded-lg p-3 mb-2 text-sm">
 							<strong>{ fw.Name }</strong>
-							<span class="text-base-content/60"> — { fw.Description }</span>
+							<span class="text-zinc-500"> — { fw.Description }</span>
 						</div>
 					}
 				}

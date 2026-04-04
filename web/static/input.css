@@ -1,3 +1,104 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-zinc-950 text-zinc-100 antialiased;
+  }
+
+  ::selection {
+    @apply bg-zinc-700 text-zinc-100;
+  }
+}
+
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-colors inline-flex items-center justify-center gap-2 cursor-pointer;
+  }
+  .btn-primary {
+    @apply bg-zinc-100 text-zinc-900 hover:bg-white;
+  }
+  .btn-secondary {
+    @apply bg-zinc-800 text-zinc-300 hover:bg-zinc-700;
+  }
+  .btn-ghost {
+    @apply text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800;
+  }
+  .btn-danger {
+    @apply bg-red-500/10 text-red-400 hover:bg-red-500/20;
+  }
+  .btn-success {
+    @apply bg-green-500/10 text-green-400 hover:bg-green-500/20;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .btn-xs {
+    @apply px-2 py-1 text-xs;
+  }
+
+  /* Badges */
+  .badge {
+    @apply px-2 py-0.5 text-xs font-medium rounded-full inline-flex items-center;
+  }
+  .badge-success {
+    @apply bg-green-500/10 text-green-400;
+  }
+  .badge-warning {
+    @apply bg-yellow-500/10 text-yellow-400;
+  }
+  .badge-error {
+    @apply bg-red-500/10 text-red-400;
+  }
+  .badge-info {
+    @apply bg-blue-500/10 text-blue-400;
+  }
+  .badge-ghost {
+    @apply bg-zinc-800 text-zinc-500;
+  }
+  .badge-outline {
+    @apply border border-zinc-700 text-zinc-400 bg-transparent;
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-zinc-600 focus:outline-none transition-colors;
+  }
+  .textarea {
+    @apply w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-zinc-600 focus:outline-none transition-colors;
+  }
+  .select {
+    @apply w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:border-zinc-600 focus:outline-none transition-colors appearance-none;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-zinc-900 border border-zinc-800 rounded-xl;
+  }
+
+  /* Alerts */
+  .alert-success {
+    @apply bg-green-500/10 text-green-400 rounded-lg px-4 py-3 text-sm;
+  }
+  .alert-error {
+    @apply bg-red-500/10 text-red-400 rounded-lg px-4 py-3 text-sm;
+  }
+
+  /* Modal styling */
+  dialog.modal {
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+    max-width: none;
+    max-height: none;
+  }
+  dialog.modal[open] {
+    @apply fixed inset-0 z-50 flex items-start justify-center p-4 m-0 w-full h-full;
+  }
+  dialog.modal::backdrop {
+    @apply bg-black/60;
+  }
+}

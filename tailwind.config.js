@@ -5,10 +5,12 @@ module.exports = {
     './web/static/js/**/*.js',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        sidebar: '#0a0a0f',
+        surface: '#111118',
+      },
+    },
   },
-  plugins: [require('daisyui')],
-  daisyui: {
-    themes: ['business'],
-  },
+  plugins: [],
 }

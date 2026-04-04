@@ -597,7 +597,7 @@ function initProfilePage(projectId) {
                         summary.appendChild(h);
                         urls.forEach(function(u) {
                             var p = document.createElement('p');
-                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.className = 'text-xs text-zinc-400 font-mono';
                             p.textContent = u.url + (u.notes ? ' — ' + u.notes : '');
                             summary.appendChild(p);
                         });
@@ -608,19 +608,19 @@ function initProfilePage(projectId) {
                         nh.textContent = 'Additional notes:';
                         summary.appendChild(nh);
                         var np = document.createElement('p');
-                        np.className = 'text-xs text-base-content/70';
+                        np.className = 'text-xs text-zinc-400';
                         np.textContent = data.notes;
                         summary.appendChild(np);
                     }
                     if (data.content) {
                         var note = document.createElement('p');
-                        note.className = 'text-sm text-base-content/60 mt-2';
+                        note.className = 'text-sm text-zinc-500 mt-2';
                         note.textContent = 'Existing content will be used as a base to improve upon.';
                         summary.appendChild(note);
                     }
                     if (!urls.length && !data.content && !data.notes) {
                         var empty = document.createElement('p');
-                        empty.className = 'text-sm text-base-content/60';
+                        empty.className = 'text-sm text-zinc-500';
                         empty.textContent = 'No context available. Add source URLs first for better results.';
                         summary.appendChild(empty);
                     }
@@ -750,7 +750,7 @@ function initProfilePage(projectId) {
 
         content.textContent = '';
         var loading = document.createElement('p');
-        loading.className = 'text-base-content/60';
+        loading.className = 'text-zinc-500';
         loading.textContent = 'Loading...';
         content.appendChild(loading);
         histModal.showModal();
@@ -761,31 +761,26 @@ function initProfilePage(projectId) {
                 content.textContent = '';
                 if (!versions || versions.length === 0) {
                     var empty = document.createElement('p');
-                    empty.className = 'text-base-content/60';
+                    empty.className = 'text-zinc-500';
                     empty.textContent = 'No previous versions.';
                     content.appendChild(empty);
                     return;
                 }
                 versions.forEach(function(v, i) {
-                    var collapse = document.createElement('div');
-                    collapse.className = 'collapse collapse-arrow bg-base-200 mb-2';
+                    var details = document.createElement('details');
+                    details.className = 'bg-zinc-800/50 border border-zinc-800 rounded-lg mb-2';
+                    if (i === 0) details.open = true;
 
-                    var input = document.createElement('input');
-                    input.type = 'radio';
-                    input.name = 'history-accordion';
-                    if (i === 0) input.checked = true;
-                    collapse.appendChild(input);
-
-                    var titleEl = document.createElement('div');
-                    titleEl.className = 'collapse-title text-sm font-medium';
-                    titleEl.textContent = v.created_at;
-                    collapse.appendChild(titleEl);
+                    var summary = document.createElement('summary');
+                    summary.className = 'px-4 py-3 text-sm font-medium text-zinc-300 cursor-pointer hover:text-zinc-100';
+                    summary.textContent = v.created_at;
+                    details.appendChild(summary);
 
                     var body = document.createElement('div');
-                    body.className = 'collapse-content';
+                    body.className = 'px-4 pb-3';
 
                     var pre = document.createElement('pre');
-                    pre.className = 'whitespace-pre-wrap text-xs max-h-48 overflow-y-auto';
+                    pre.className = 'whitespace-pre-wrap text-xs max-h-48 overflow-y-auto text-zinc-400';
                     pre.textContent = v.content;
                     body.appendChild(pre);
 
@@ -800,8 +795,8 @@ function initProfilePage(projectId) {
                     });
                     body.appendChild(restoreBtn);
 
-                    collapse.appendChild(body);
-                    content.appendChild(collapse);
+                    details.appendChild(body);
+                    content.appendChild(details);
                 });
             });
     });
@@ -878,13 +873,13 @@ function initProfilePage(projectId) {
                     }
                     if (data.notes) {
                         var np = document.createElement('p');
-                        np.className = 'text-sm text-base-content/70 mt-1';
+                        np.className = 'text-sm text-zinc-400 mt-1';
                         np.textContent = 'Notes: ' + data.notes;
                         contextDiv.appendChild(np);
                     }
                     if (!data.location && !data.notes) {
                         var empty = document.createElement('p');
-                        empty.className = 'text-sm text-base-content/60';
+                        empty.className = 'text-sm text-zinc-500';
                         empty.textContent = 'No audience context set. Add context for better results.';
                         contextDiv.appendChild(empty);
                     }
@@ -951,7 +946,7 @@ function initProfilePage(projectId) {
     function buildAudienceResultCard(persona, idx) {
         var statusColors = {new: 'success', updated: 'warning', unchanged: 'ghost', removed: 'error'};
         var card = document.createElement('div');
-        card.className = 'card bg-base-200 border border-base-300';
+        card.className = 'card bg-zinc-800/50 border border-zinc-800';
         card.dataset.idx = idx;
 
         var body = document.createElement('div');
@@ -1010,10 +1005,10 @@ function initProfilePage(projectId) {
             var row = document.createElement('div');
             row.className = 'text-xs';
             var lbl = document.createElement('span');
-            lbl.className = 'font-semibold text-base-content/60';
+            lbl.className = 'font-semibold text-zinc-500';
             lbl.textContent = f.label + ': ';
             var val = document.createElement('span');
-            val.className = 'text-base-content/80';
+            val.className = 'text-zinc-300';
             val.textContent = f.value;
             row.appendChild(lbl);
             row.appendChild(val);
@@ -1301,7 +1296,7 @@ function initProfilePage(projectId) {
                         contextDiv.appendChild(h);
                         blogs.forEach(function(u) {
                             var p = document.createElement('p');
-                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.className = 'text-xs text-zinc-400 font-mono';
                             p.textContent = u.url + (u.notes ? ' - ' + u.notes : '');
                             contextDiv.appendChild(p);
                         });
@@ -1313,7 +1308,7 @@ function initProfilePage(projectId) {
                         contextDiv.appendChild(h2);
                         liked.forEach(function(u) {
                             var p = document.createElement('p');
-                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.className = 'text-xs text-zinc-400 font-mono';
                             p.textContent = u.url + (u.notes ? ' - ' + u.notes : '');
                             contextDiv.appendChild(p);
                         });
@@ -1325,7 +1320,7 @@ function initProfilePage(projectId) {
                         contextDiv.appendChild(h3);
                         insp.forEach(function(u) {
                             var p = document.createElement('p');
-                            p.className = 'text-xs text-base-content/70 font-mono';
+                            p.className = 'text-xs text-zinc-400 font-mono';
                             p.textContent = u.url + (u.notes ? ' - ' + u.notes : '');
                             contextDiv.appendChild(p);
                         });
@@ -1336,13 +1331,13 @@ function initProfilePage(projectId) {
                         nh.textContent = 'Additional notes:';
                         contextDiv.appendChild(nh);
                         var np = document.createElement('p');
-                        np.className = 'text-xs text-base-content/70';
+                        np.className = 'text-xs text-zinc-400';
                         np.textContent = data.notes;
                         contextDiv.appendChild(np);
                     }
                     if (!hasContext) {
                         var empty = document.createElement('p');
-                        empty.className = 'text-sm text-base-content/60';
+                        empty.className = 'text-sm text-zinc-500';
                         empty.textContent = 'No context available. Add blog URLs, liked articles, or inspiration sources for better results.';
                         contextDiv.appendChild(empty);
                     }
@@ -1780,7 +1775,7 @@ function openContentModal(opts) {
 
     // Preview area — uses renderContentBody
     var previewArea = document.createElement('div');
-    previewArea.className = 'overflow-y-auto flex-1 bg-base-200 p-3 rounded-lg mb-3 min-h-36 max-h-96 hidden';
+    previewArea.className = 'overflow-y-auto flex-1 bg-zinc-800/50 p-3 rounded-lg mb-3 min-h-36 max-h-96 hidden';
     modal.appendChild(previewArea);
 
     // Actions

@@ -41,7 +41,7 @@ function renderField(parent, label, value, markdown) {
 
 function makeSubcard(title, contentEl) {
     var card = document.createElement('div');
-    card.className = 'card card-compact bg-base-100 border border-base-300 mb-2';
+    card.className = 'card bg-zinc-900 border border-zinc-800 mb-2';
     var body = document.createElement('div');
     body.className = 'card-body p-3';
     if (title) {
@@ -157,7 +157,7 @@ function renderStepOutput(el, typeName, data) {
             var sectionsContent = document.createElement('div');
             data.sections.forEach(function(sec) {
                 var row = document.createElement('div');
-                row.className = 'mb-2 p-2 bg-base-200 rounded text-sm';
+                row.className = 'mb-2 p-2 bg-zinc-800/50 rounded text-sm';
                 var heading = document.createElement('strong');
                 heading.textContent = sec.heading;
                 if (sec.framework_beat) heading.textContent += ' (' + sec.framework_beat + ')';

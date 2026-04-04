@@ -42,7 +42,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex items-center justify-between mb-6\"><h1 class=\"text-2xl font-bold\">")
+			_, err = templBuffer.WriteString("<div class=\"mb-8\"><h1 class=\"text-xl font-semibold text-zinc-100\">")
 			if err != nil {
 				return err
 			}
@@ -51,12 +51,12 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1></div> ")
+			_, err = templBuffer.WriteString("</h1>")
 			if err != nil {
 				return err
 			}
 			if p.Description != "" {
-				_, err = templBuffer.WriteString("<p class=\"text-base-content/60 mb-6\">")
+				_, err = templBuffer.WriteString("<p class=\"text-zinc-500 text-sm mt-1.5\">")
 				if err != nil {
 					return err
 				}
@@ -70,7 +70,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 					return err
 				}
 			}
-			_, err = templBuffer.WriteString(" <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4\"><div class=\"card bg-base-100 shadow-sm border border-base-300\"><div class=\"card-body p-4\"><h3 class=\"font-semibold text-base\">")
+			_, err = templBuffer.WriteString("</div> <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4\"><div class=\"card\"><div class=\"p-5\"><h3 class=\"text-sm font-semibold text-zinc-100\">")
 			if err != nil {
 				return err
 			}
@@ -79,7 +79,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-2\">")
+			_, err = templBuffer.WriteString("</h3><p class=\"mt-2\">")
 			if err != nil {
 				return err
 			}
@@ -103,7 +103,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm mt-3\">")
 			if err != nil {
 				return err
 			}
@@ -112,7 +112,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div></div><div class=\"card bg-base-100 shadow-sm border border-base-300\"><div class=\"card-body p-4\"><h3 class=\"font-semibold text-base\">")
+			_, err = templBuffer.WriteString("</a></div></div><div class=\"card\"><div class=\"p-5\"><h3 class=\"text-sm font-semibold text-zinc-100\">")
 			if err != nil {
 				return err
 			}
@@ -121,7 +121,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-2\">")
+			_, err = templBuffer.WriteString("</h3><p class=\"mt-2\">")
 			if err != nil {
 				return err
 			}
@@ -145,7 +145,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm mt-3\">")
 			if err != nil {
 				return err
 			}
@@ -154,7 +154,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div></div><div class=\"card bg-base-100 shadow-sm border border-base-300\"><div class=\"card-body p-4\"><h3 class=\"font-semibold text-base\">")
+			_, err = templBuffer.WriteString("</a></div></div><div class=\"card\"><div class=\"p-5\"><h3 class=\"text-sm font-semibold text-zinc-100\">")
 			if err != nil {
 				return err
 			}
@@ -163,17 +163,21 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-2\">")
+			_, err = templBuffer.WriteString("</h3><p class=\"mt-2\">")
 			if err != nil {
 				return err
 			}
 			if p.Language != "" {
+				_, err = templBuffer.WriteString("<span class=\"text-zinc-400 text-sm\">")
+				if err != nil {
+					return err
+				}
 				var_12 := `Language: `
 				_, err = templBuffer.WriteString(var_12)
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("<strong>")
+				_, err = templBuffer.WriteString("<strong class=\"text-zinc-200\">")
 				if err != nil {
 					return err
 				}
@@ -182,7 +186,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</strong>")
+				_, err = templBuffer.WriteString("</strong></span>")
 				if err != nil {
 					return err
 				}
@@ -201,7 +205,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm mt-3\">")
 			if err != nil {
 				return err
 			}
@@ -210,7 +214,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div></div><div class=\"card bg-base-100 shadow-sm border border-base-300\"><div class=\"card-body p-4\"><h3 class=\"font-semibold text-base\">")
+			_, err = templBuffer.WriteString("</a></div></div><div class=\"card\"><div class=\"p-5\"><h3 class=\"text-sm font-semibold text-zinc-100\">")
 			if err != nil {
 				return err
 			}
@@ -219,7 +223,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h3><p class=\"mb-2 text-base-content/60\">")
+			_, err = templBuffer.WriteString("</h3><p class=\"text-zinc-500 text-sm mt-2\">")
 			if err != nil {
 				return err
 			}
@@ -237,7 +241,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm\">")
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm mt-3\">")
 			if err != nil {
 				return err
 			}
@@ -255,7 +259,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			}
 			return err
 		})
-		err = components.ProjectPageShell(p.Name, []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: p.Name}}, p.ID).Render(templ.WithChildren(ctx, var_2), templBuffer)
+		err = components.ProjectPageShell(p.Name, []components.Breadcrumb{{Label: "Projects", URL: "/"}, {Label: p.Name}}, p.ID, p.Name, "overview").Render(templ.WithChildren(ctx, var_2), templBuffer)
 		if err != nil {
 			return err
 		}

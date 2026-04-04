@@ -15,14 +15,14 @@ templ ContextNewPage(data ContextNewData) {
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Add Context"},
-	}, data.ProjectID) {
+	}, data.ProjectID, data.ProjectName, "context-memory") {
 		<div class="flex items-center justify-between mb-4">
-			<h1 class="text-2xl font-bold">Add Context</h1>
+			<h1 class="text-xl font-semibold text-zinc-100">Add Context</h1>
 			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost btn-sm">Cancel</a>
 		</div>
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/new", data.ProjectID)) }>
 			@components.FormGroup("Title (what is this about?)") {
-				<input type="text" name="title" class="input input-bordered w-full" required placeholder="e.g. New subscription tier launch, Competitor campaign analysis..."/>
+				<input type="text" name="title" class="input" required placeholder="e.g. New subscription tier launch, Competitor campaign analysis..."/>
 			}
 			<div class="mt-4">
 				@components.SubmitButton("Create & Start Chat")
@@ -50,13 +50,13 @@ templ ContextItemPage(data ContextItemData) {
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: data.Title},
-	}, data.ProjectID) {
+	}, data.ProjectID, data.ProjectName, "context-memory") {
 		<div class="flex items-center justify-between mb-4">
-			<h1 class="text-2xl font-bold">{ data.Title }</h1>
+			<h1 class="text-xl font-semibold text-zinc-100">{ data.Title }</h1>
 			<div class="flex items-center gap-2">
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost btn-sm">Back</a>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/context/%d/delete", data.ProjectID, data.ItemID)) } class="inline">
-					<button type="submit" class="btn btn-error btn-sm">Delete</button>
+					<button type="submit" class="btn btn-danger btn-sm">Delete</button>
 				</form>
 			</div>
 		</div>
@@ -82,7 +82,7 @@ templ ContextItemPage(data ContextItemData) {
 
 			<form id="context-chat-form" class="mt-4">
 				<div class="form-control w-full">
-					<textarea id="context-chat-input" class="textarea textarea-bordered w-full min-h-[80px]" placeholder="Paste raw info here, or describe what you want to add..."></textarea>
+					<textarea id="context-chat-input" class="textarea w-full min-h-[80px]" placeholder="Paste raw info here, or describe what you want to add..."></textarea>
 				</div>
 				<div class="flex gap-2 mt-2">
 					<button type="submit" id="context-chat-send" class="btn btn-primary">Send</button>

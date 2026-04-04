@@ -1,10 +1,10 @@
 package components
 
 templ Card(title string) {
-	<div class="card bg-base-100 shadow-sm border border-base-300">
-		<div class="card-body p-4">
+	<div class="card">
+		<div class="p-5">
 			if title != "" {
-				<h3 class="font-semibold text-base">{ title }</h3>
+				<h3 class="text-sm font-semibold text-zinc-100 mb-3">{ title }</h3>
 			}
 			{ children... }
 		</div>
@@ -12,13 +12,13 @@ templ Card(title string) {
 }
 
 templ CollapsibleCard(title string, defaultOpen bool) {
-	<div class="card bg-base-100 shadow-sm border border-base-300" x-data={ collapseInit(defaultOpen) }>
-		<div class="p-3 cursor-pointer flex items-center gap-2" @click="open = !open">
-			<button class="btn btn-secondary btn-xs" x-text="open ? '−' : '+'"></button>
-			<span class="font-semibold text-base">{ title }</span>
+	<div class="card" x-data={ collapseInit(defaultOpen) }>
+		<div class="px-5 py-3 cursor-pointer flex items-center gap-2" @click="open = !open">
+			<button class="btn btn-ghost btn-xs" x-text="open ? '−' : '+'"></button>
+			<span class="text-sm font-semibold text-zinc-100">{ title }</span>
 		</div>
 		<div x-show="open" x-collapse>
-			<div class="px-3 pb-3">
+			<div class="px-5 pb-4">
 				{ children... }
 			</div>
 		</div>

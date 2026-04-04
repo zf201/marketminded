@@ -33,7 +33,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div class=\"flex items-center justify-between mb-6\"><h1 class=\"text-2xl font-bold\">")
+			_, err = templBuffer.WriteString("<div class=\"flex items-center justify-between mb-8\"><h1 class=\"text-xl font-semibold text-zinc-100\">")
 			if err != nil {
 				return err
 			}
@@ -56,7 +56,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				return err
 			}
 			if len(projects) == 0 {
-				_, err = templBuffer.WriteString("<p class=\"text-base-content/60\">")
+				_, err = templBuffer.WriteString("<p class=\"text-zinc-500\">")
 				if err != nil {
 					return err
 				}
@@ -84,7 +84,7 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\" class=\"card bg-base-100 shadow-sm border border-base-300 hover:border-primary transition-colors no-underline text-inherit\"><div class=\"card-body\"><h3 class=\"card-title text-base\">")
+				_, err = templBuffer.WriteString("\" class=\"card hover:border-zinc-700 transition-colors group\"><div class=\"p-5\"><h3 class=\"text-sm font-semibold text-zinc-100 group-hover:text-white\">")
 				if err != nil {
 					return err
 				}
@@ -93,16 +93,26 @@ func Dashboard(projects []DashboardProject) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</h3><p class=\"text-base-content/60\">")
+				_, err = templBuffer.WriteString("</h3>")
 				if err != nil {
 					return err
 				}
-				var var_8 string = p.Description
-				_, err = templBuffer.WriteString(templ.EscapeString(var_8))
-				if err != nil {
-					return err
+				if p.Description != "" {
+					_, err = templBuffer.WriteString("<p class=\"text-zinc-500 text-sm mt-1.5 line-clamp-2\">")
+					if err != nil {
+						return err
+					}
+					var var_8 string = p.Description
+					_, err = templBuffer.WriteString(templ.EscapeString(var_8))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</p>")
+					if err != nil {
+						return err
+					}
 				}
-				_, err = templBuffer.WriteString("</p></div></a>")
+				_, err = templBuffer.WriteString("</div></a>")
 				if err != nil {
 					return err
 				}

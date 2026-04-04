@@ -19,58 +19,56 @@ templ StorytellingPage(data StorytellingData) {
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Storytelling"},
-	}, data.ProjectID) {
+	}, data.ProjectID, data.ProjectName, "storytelling") {
 		<div class="flex items-center justify-between mb-4">
-			<h1 class="text-2xl font-bold">Storytelling Framework</h1>
+			<h1 class="text-xl font-semibold text-zinc-100">Storytelling Framework</h1>
 		</div>
 
 		if data.Saved {
-			<div class="alert alert-success mb-4">
-				<span>Framework saved.</span>
-			</div>
+			<div class="alert-success mb-4">Framework saved.</div>
 		}
 
-		<p class="text-base-content/60 mb-4">Choose a storytelling framework to structure your cornerstone content (blog posts, video scripts). This guides how the AI structures the narrative.</p>
+		<p class="text-zinc-500 mb-4">Choose a storytelling framework to structure your cornerstone content (blog posts, video scripts). This guides how the AI structures the narrative.</p>
 
 		<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/storytelling", data.ProjectID)) }>
 			<!-- None option -->
-			<div class={ "card bg-base-100 shadow-sm border mb-3", templ.KV("border-primary", data.SelectedKey == ""), templ.KV("border-base-300", data.SelectedKey != "") }>
-				<div class="card-body">
+			<div class={ "card mb-3", templ.KV("border-zinc-500", data.SelectedKey == ""), templ.KV("border-zinc-800", data.SelectedKey != "") }>
+				<div class="p-5">
 					<label class="flex items-center gap-3 cursor-pointer">
 						if data.SelectedKey == "" {
-							<input type="radio" name="storytelling_framework" value="" class="radio radio-primary" checked/>
+							<input type="radio" name="storytelling_framework" value="" class="accent-zinc-400" checked/>
 						} else {
-							<input type="radio" name="storytelling_framework" value="" class="radio radio-primary"/>
+							<input type="radio" name="storytelling_framework" value="" class="accent-zinc-400"/>
 						}
 						<div>
 							<strong>None</strong>
-							<span class="text-base-content/60 ml-2">— No framework applied. AI uses its default structure.</span>
+							<span class="text-zinc-500 ml-2">— No framework applied. AI uses its default structure.</span>
 						</div>
 					</label>
 				</div>
 			</div>
 
 			for _, fw := range data.Frameworks {
-				<div class={ "card bg-base-100 shadow-sm border mb-3", templ.KV("border-primary", data.SelectedKey == fw.Key), templ.KV("border-base-300", data.SelectedKey != fw.Key) }>
-					<div class="card-body">
+				<div class={ "card mb-3", templ.KV("border-zinc-500", data.SelectedKey == fw.Key), templ.KV("border-zinc-800", data.SelectedKey != fw.Key) }>
+					<div class="p-5">
 						<label class="flex items-start gap-3 cursor-pointer">
 							if data.SelectedKey == fw.Key {
-								<input type="radio" name="storytelling_framework" value={ fw.Key } class="radio radio-primary mt-1" checked/>
+								<input type="radio" name="storytelling_framework" value={ fw.Key } class="accent-zinc-400 mt-1" checked/>
 							} else {
-								<input type="radio" name="storytelling_framework" value={ fw.Key } class="radio radio-primary mt-1"/>
+								<input type="radio" name="storytelling_framework" value={ fw.Key } class="accent-zinc-400 mt-1"/>
 							}
 							<div class="flex-1">
 								<div class="flex items-center justify-between">
 									<div>
 										<strong>{ fw.Name }</strong>
-										<span class="text-base-content/60 ml-2">— { fw.Attribution }</span>
+										<span class="text-zinc-500 ml-2">— { fw.Attribution }</span>
 									</div>
 									<span class="badge badge-ghost">{ fw.BestFor }</span>
 								</div>
-								<p class="text-base-content/60 text-sm mt-2">{ fw.ShortDescription }</p>
+								<p class="text-zinc-500 text-sm mt-2">{ fw.ShortDescription }</p>
 								<details class="mt-2">
 									<summary class="btn btn-ghost btn-xs">Show details</summary>
-									<div class="mt-3 pt-3 border-t border-base-300">
+									<div class="mt-3 pt-3 border-t border-zinc-800">
 										<p class="text-sm"><strong>Beats:</strong> { fw.Beats }</p>
 										<p class="text-sm mt-2"><strong>Example:</strong> { fw.Example }</p>
 									</div>

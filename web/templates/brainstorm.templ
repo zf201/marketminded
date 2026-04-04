@@ -22,9 +22,9 @@ templ BrainstormListPage(data BrainstormListData) {
 		{Label: "Projects", URL: "/"},
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Chat"},
-	}, data.ProjectID) {
+	}, data.ProjectID, data.ProjectName, "chat") {
 		<div class="flex items-center justify-between mb-4">
-			<h1 class="text-2xl font-bold">Chat</h1>
+			<h1 class="text-xl font-semibold text-zinc-100">Chat</h1>
 			<div class="flex items-center gap-2">
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", data.ProjectID)) } class="btn btn-ghost btn-sm">Back</a>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)) } class="inline">
@@ -33,14 +33,14 @@ templ BrainstormListPage(data BrainstormListData) {
 			</div>
 		</div>
 		if len(data.Chats) == 0 {
-			<p class="text-base-content/60">No chats yet. Start a new one.</p>
+			<p class="text-zinc-500">No chats yet. Start a new one.</p>
 		}
 		for _, chat := range data.Chats {
-			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d", data.ProjectID, chat.ID)) } class="card bg-base-100 shadow-sm border border-base-300 mb-2 hover:border-primary transition-colors block no-underline text-inherit">
-				<div class="card-body py-3">
+			<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d", data.ProjectID, chat.ID)) } class="card mb-2 hover:border-zinc-700 transition-colors block">
+				<div class="p-4">
 					<span class="font-semibold">{ chat.Title }</span>
 					if chat.Preview != "" {
-						<p class="text-base-content/60 text-sm mt-1 line-clamp-2">{ chat.Preview }</p>
+						<p class="text-zinc-500 text-sm mt-1 line-clamp-2">{ chat.Preview }</p>
 					}
 				</div>
 			</a>
@@ -68,9 +68,9 @@ templ BrainstormChatPage(data BrainstormChatData) {
 		{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 		{Label: "Chat", URL: fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)},
 		{Label: data.ChatTitle},
-	}, data.ProjectID) {
+	}, data.ProjectID, data.ProjectName, "chat") {
 		<div class="flex items-center justify-between mb-4">
-			<h1 class="text-2xl font-bold">{ data.ChatTitle }</h1>
+			<h1 class="text-xl font-semibold text-zinc-100">{ data.ChatTitle }</h1>
 			<div class="flex items-center gap-2">
 				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm", data.ProjectID)) } class="btn btn-ghost btn-sm">Back</a>
 				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/brainstorm/%d/push", data.ProjectID, data.ChatID)) } class="inline">
@@ -84,8 +84,8 @@ templ BrainstormChatPage(data BrainstormChatData) {
 					<div class="chat-msg-role text-xs font-semibold uppercase text-base-content/50 mb-1">{ msg.Role }</div>
 					<div class="whitespace-pre-wrap">
 						if msg.Thinking != "" {
-							<details class="collapse bg-base-200 rounded-lg p-2 mb-1">
-								<summary class="text-sm text-base-content/60 cursor-pointer">Thinking (done)</summary>
+							<details class="bg-zinc-800/50 rounded-lg p-2 mb-1">
+								<summary class="text-sm text-zinc-500 cursor-pointer">Thinking (done)</summary>
 								<pre class="text-xs mt-1 whitespace-pre-wrap">{ msg.Thinking }</pre>
 							</details>
 						}
@@ -96,7 +96,7 @@ templ BrainstormChatPage(data BrainstormChatData) {
 		</div>
 		<form id="chat-form" class="mt-4">
 			<div class="form-control w-full">
-				<textarea id="chat-input" class="textarea textarea-bordered w-full min-h-[80px]" placeholder="Type your message... (Cmd+Enter to send)"></textarea>
+				<textarea id="chat-input" class="textarea w-full min-h-[80px]" placeholder="Type your message... (Cmd+Enter to send)"></textarea>
 			</div>
 			<div class="mt-2">
 				<button type="submit" id="chat-send" class="btn btn-primary">Send</button>
@@ -191,11 +191,11 @@ templ BrainstormChatPage(data BrainstormChatData) {
 								if (!thinkingEl) {
 									if (indicator.parentNode) indicator.remove();
 									thinkingEl = document.createElement('details');
-									thinkingEl.className = 'collapse bg-base-200 rounded-lg p-2 mb-1';
+									thinkingEl.className = 'bg-zinc-800/50 rounded-lg p-2 mb-1';
 									thinkingEl.setAttribute('open', '');
 									var summary = document.createElement('summary');
 									summary.textContent = 'Thinking...';
-									summary.className = 'text-sm text-base-content/60 cursor-pointer';
+									summary.className = 'text-sm text-zinc-500 cursor-pointer';
 									thinkingEl.appendChild(summary);
 									thinkingPre = document.createElement('pre');
 									thinkingPre.className = 'text-xs mt-1 whitespace-pre-wrap';

@@ -107,7 +107,7 @@ function renderLinkedinCarousel(el, data) {
         var sec = renderSection(el, 'Slides (' + data.slides.length + ')', null, { force: true });
         data.slides.forEach(function(slide, i) {
             var card = document.createElement('div');
-            card.className = 'card card-compact bg-base-200 mb-1';
+            card.className = 'card bg-zinc-800/50 mb-1';
             var body = document.createElement('div');
             body.className = 'card-body p-2';
             var title = document.createElement('div');
@@ -132,7 +132,7 @@ function renderInstagramCarousel(el, data) {
         var sec = renderSection(el, 'Slides (' + data.slides.length + ')', null, { force: true });
         data.slides.forEach(function(slide, i) {
             var card = document.createElement('div');
-            card.className = 'card card-compact bg-base-200 mb-1';
+            card.className = 'card bg-zinc-800/50 mb-1';
             var body = document.createElement('div');
             body.className = 'card-body p-2';
             var title = document.createElement('div');

@@ -1,10 +1,10 @@
 package components
 
 templ FormGroup(label string) {
-	<div class="form-control w-full">
+	<div class="mb-3">
 		if label != "" {
-			<label class="label">
-				<span class="label-text">{ label }</span>
+			<label class="block text-sm font-medium text-zinc-300 mb-1.5">
+				{ label }
 			</label>
 		}
 		{ children... }

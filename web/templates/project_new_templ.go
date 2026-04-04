@@ -30,7 +30,7 @@ func ProjectNew() templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<h1 class=\"text-2xl font-bold mb-6\">")
+			_, err = templBuffer.WriteString("<h1 class=\"text-xl font-semibold text-zinc-100 mb-8\">")
 			if err != nil {
 				return err
 			}
@@ -55,7 +55,7 @@ func ProjectNew() templ.Component {
 						templBuffer = templ.GetBuffer()
 						defer templ.ReleaseBuffer(templBuffer)
 					}
-					_, err = templBuffer.WriteString("<input type=\"text\" id=\"name\" name=\"name\" required placeholder=\"e.g. Acme Corp\" class=\"input input-bordered w-full\">")
+					_, err = templBuffer.WriteString("<input type=\"text\" id=\"name\" name=\"name\" required placeholder=\"e.g. Acme Corp\" class=\"input\">")
 					if err != nil {
 						return err
 					}
@@ -78,7 +78,7 @@ func ProjectNew() templ.Component {
 						templBuffer = templ.GetBuffer()
 						defer templ.ReleaseBuffer(templBuffer)
 					}
-					_, err = templBuffer.WriteString("<textarea id=\"description\" name=\"description\" placeholder=\"Brief description of the client/project\" class=\"textarea textarea-bordered w-full\"></textarea>")
+					_, err = templBuffer.WriteString("<textarea id=\"description\" name=\"description\" placeholder=\"Brief description of the client/project\" class=\"textarea\"></textarea>")
 					if err != nil {
 						return err
 					}

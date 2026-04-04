@@ -45,7 +45,7 @@
             if (link && !link.closest('#chat-drawer')) {
                 e.preventDefault();
                 // Flash the drawer to signal "close me first"
-                var panel = drawer.querySelector('.bg-base-100');
+                var panel = drawer.querySelector('.bg-zinc-900');
                 panel.classList.add('animate-pulse');
                 setTimeout(function() { panel.classList.remove('animate-pulse'); }, 500);
             }
@@ -57,7 +57,7 @@
             var form = e.target;
             if (!form.closest('#chat-drawer')) {
                 e.preventDefault();
-                var panel = drawer.querySelector('.bg-base-100');
+                var panel = drawer.querySelector('.bg-zinc-900');
                 panel.classList.add('animate-pulse');
                 setTimeout(function() { panel.classList.remove('animate-pulse'); }, 500);
             }
@@ -140,7 +140,7 @@
 
                 chats.forEach(function(chat) {
                     var card = document.createElement('div');
-                    card.className = 'card bg-base-200 shadow-sm mb-2 cursor-pointer hover:bg-base-300 transition-colors';
+                    card.className = 'card bg-zinc-800/50 shadow-sm mb-2 cursor-pointer hover:bg-zinc-700 transition-colors';
                     var body = document.createElement('div');
                     body.className = 'card-body p-3';
                     var title = document.createElement('div');

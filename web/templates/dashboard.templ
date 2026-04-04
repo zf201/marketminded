@@ -7,19 +7,21 @@ import (
 
 templ Dashboard(projects []DashboardProject) {
 	@components.PageShell("Dashboard", []components.Breadcrumb{{Label: "Projects"}}) {
-		<div class="flex items-center justify-between mb-6">
-			<h1 class="text-2xl font-bold">Projects</h1>
+		<div class="flex items-center justify-between mb-8">
+			<h1 class="text-xl font-semibold text-zinc-100">Projects</h1>
 			<a href="/projects/new" class="btn btn-primary">New Project</a>
 		</div>
 		if len(projects) == 0 {
-			<p class="text-base-content/60">No projects yet. Create one to get started.</p>
+			<p class="text-zinc-500">No projects yet. Create one to get started.</p>
 		}
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 			for _, p := range projects {
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", p.ID)) } class="card bg-base-100 shadow-sm border border-base-300 hover:border-primary transition-colors no-underline text-inherit">
-					<div class="card-body">
-						<h3 class="card-title text-base">{ p.Name }</h3>
-						<p class="text-base-content/60">{ p.Description }</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d", p.ID)) } class="card hover:border-zinc-700 transition-colors group">
+					<div class="p-5">
+						<h3 class="text-sm font-semibold text-zinc-100 group-hover:text-white">{ p.Name }</h3>
+						if p.Description != "" {
+							<p class="text-zinc-500 text-sm mt-1.5 line-clamp-2">{ p.Description }</p>
+						}
 					</div>
 				</a>
 			}
