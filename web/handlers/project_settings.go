@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/web/templates"
 )
@@ -31,27 +30,17 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 		http.NotFound(w, r)
 		return
 	}
-
 	settings, _ := h.queries.AllProjectSettings(projectID)
-
-	fwOptions := make([]templates.FrameworkOption, len(content.Frameworks))
-	for i, fw := range content.Frameworks {
-		fwOptions[i] = templates.FrameworkOption{Key: fw.Key, Name: fw.Name, Description: fw.ShortDescription}
-	}
-
 	templates.ProjectSettingsPage(templates.ProjectSettingsData{
-		ProjectID:             projectID,
-		ProjectName:           project.Name,
-		Language:              settings["language"],
-		StorytellingFramework: settings["storytelling_framework"],
-		Frameworks:            fwOptions,
-		Saved:                 r.URL.Query().Get("saved") == "1",
+		ProjectID:   projectID,
+		ProjectName: project.Name,
+		Language:    settings["language"],
+		Saved:       r.URL.Query().Get("saved") == "1",
 	}).Render(r.Context(), w)
 }
 
 func (h *ProjectSettingsHandler) save(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
 	h.queries.SetProjectSetting(projectID, "language", r.FormValue("language"))
-	h.queries.SetProjectSetting(projectID, "storytelling_framework", r.FormValue("storytelling_framework"))
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/settings?saved=1", projectID), http.StatusSeeOther)
 }

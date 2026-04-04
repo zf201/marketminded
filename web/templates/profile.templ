@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/web/templates/components"
 )
@@ -167,14 +168,95 @@ templ ProfilePage(data ProfilePageData) {
 							</div>
 							<!-- Voice & Tone profile content -->
 							if card.VoiceToneProfile != nil {
-								<div class="mt-3">
-									<div class="profile-content-preview max-h-28 overflow-hidden relative" data-section="voice_and_tone">
-										<div class="profile-md-content text-sm leading-relaxed text-zinc-300">
-											{ "## Voice Analysis\n" + card.VoiceToneProfile.VoiceAnalysis + "\n\n## Content Types\n" + card.VoiceToneProfile.ContentTypes + "\n\n## Should Avoid\n" + card.VoiceToneProfile.ShouldAvoid + "\n\n## Should Use\n" + card.VoiceToneProfile.ShouldUse + "\n\n## Style Inspiration\n" + card.VoiceToneProfile.StyleInspiration }
+								<!-- Voice Analysis -->
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+									<div class="p-3">
+										<strong class="text-sm">Voice Analysis</strong>
+										<div class="profile-content-preview max-h-20 overflow-hidden relative mt-1" data-section="vt-voice-analysis">
+											<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ card.VoiceToneProfile.VoiceAnalysis }</div>
+											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
 										</div>
-										<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
+										<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="vt-voice-analysis">Show more</button>
 									</div>
-									<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="voice_and_tone">Show more</button>
+								</div>
+								<!-- Content Types -->
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+									<div class="p-3">
+										<strong class="text-sm">Content Types</strong>
+										<div class="profile-content-preview max-h-20 overflow-hidden relative mt-1" data-section="vt-content-types">
+											<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ card.VoiceToneProfile.ContentTypes }</div>
+											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
+										</div>
+										<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="vt-content-types">Show more</button>
+									</div>
+								</div>
+								<!-- Should Avoid -->
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+									<div class="p-3">
+										<strong class="text-sm">Should Avoid</strong>
+										<div class="profile-content-preview max-h-20 overflow-hidden relative mt-1" data-section="vt-should-avoid">
+											<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ card.VoiceToneProfile.ShouldAvoid }</div>
+											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
+										</div>
+										<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="vt-should-avoid">Show more</button>
+									</div>
+								</div>
+								<!-- Should Use -->
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+									<div class="p-3">
+										<strong class="text-sm">Should Use</strong>
+										<div class="profile-content-preview max-h-20 overflow-hidden relative mt-1" data-section="vt-should-use">
+											<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ card.VoiceToneProfile.ShouldUse }</div>
+											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
+										</div>
+										<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="vt-should-use">Show more</button>
+									</div>
+								</div>
+								<!-- Style Inspiration -->
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+									<div class="p-3">
+										<strong class="text-sm">Style Inspiration</strong>
+										<div class="profile-content-preview max-h-20 overflow-hidden relative mt-1" data-section="vt-style-inspiration">
+											<div class="profile-md-content text-sm leading-relaxed text-zinc-300">{ card.VoiceToneProfile.StyleInspiration }</div>
+											<div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
+										</div>
+										<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section="vt-style-inspiration">Show more</button>
+									</div>
+								</div>
+								<!-- Storytelling Frameworks -->
+								if len(card.VoiceToneProfile.ParseFrameworks()) > 0 {
+									<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+										<div class="p-3">
+											<div class="flex items-center gap-2 mb-2">
+												<strong class="text-sm">Storytelling Frameworks</strong>
+												<span class="badge badge-outline text-[10px]">{ fmt.Sprintf("%d selected", len(card.VoiceToneProfile.ParseFrameworks())) }</span>
+											</div>
+											for _, f := range card.VoiceToneProfile.ParseFrameworks() {
+												if fw := content.FrameworkByKey(f.Key); fw != nil {
+													<div class="border-t border-zinc-700/50 pt-2 mt-2">
+														<div class="flex items-center gap-2">
+															<span class="text-sm font-medium text-zinc-200">{ fw.Name }</span>
+															<span class="badge badge-outline text-[10px]">{ fw.BestFor }</span>
+														</div>
+														<div class="profile-content-preview max-h-16 overflow-hidden relative mt-1" data-section={ "vt-fw-" + f.Key }>
+															<p class="text-sm leading-relaxed text-zinc-400">{ f.Note }</p>
+															<div class="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none profile-fade"></div>
+														</div>
+														<button type="button" class="btn btn-ghost btn-xs mt-1 profile-expand-btn" data-section={ "vt-fw-" + f.Key }>Show more</button>
+													</div>
+												}
+											}
+										</div>
+									</div>
+								}
+								<!-- Preferred Length -->
+								<div class="bg-zinc-800/50 border border-zinc-800 rounded-lg mt-2">
+									<div class="p-3">
+										<div class="flex items-center justify-between">
+											<strong class="text-sm">Preferred Length</strong>
+											<span class="text-sm text-zinc-300">{ fmt.Sprintf("~%s words", formatNumber(card.VoiceToneProfile.PreferredLength)) }</span>
+										</div>
+									</div>
 								</div>
 							} else {
 								<p class="text-zinc-500 italic text-sm mt-2">No voice & tone profile yet. Click Build to generate one.</p>
@@ -433,12 +515,29 @@ templ ProfilePage(data ProfilePageData) {
 
 		<!-- Voice & Tone Edit modal -->
 		<dialog id="vt-edit-modal" class="modal">
-			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh] max-h-[80vh] overflow-y-auto">
 				<div class="flex items-center justify-between mb-4">
 					<h3 class="font-bold text-lg">Edit Voice & Tone Profile</h3>
 					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
 				</div>
 				<div id="vt-edit-fields"></div>
+				<div id="vt-edit-frameworks" class="mb-4">
+					<label class="block text-sm font-medium text-zinc-300 mb-2">Storytelling Frameworks</label>
+					for _, fw := range content.Frameworks {
+						<div class="bg-zinc-800/50 rounded-lg p-3 mb-2">
+							<label class="flex items-center gap-2 cursor-pointer">
+								<input type="checkbox" class="checkbox checkbox-sm vt-fw-checkbox" data-fw-key={ fw.Key }/>
+								<strong class="text-sm">{ fw.Name }</strong>
+								<span class="badge badge-outline text-[10px]">{ fw.BestFor }</span>
+							</label>
+							<textarea class="textarea w-full text-sm mt-2 hidden vt-fw-note" data-fw-key={ fw.Key } rows="2" placeholder={ "Why " + fw.Name + " fits this brand..." }></textarea>
+						</div>
+					}
+				</div>
+				<div class="mb-4">
+					<label class="block text-sm font-medium text-zinc-300 mb-1">Preferred Length (words)</label>
+					<input type="number" id="vt-edit-preferred-length" class="input w-32" min="300" max="10000" step="50" value="1500"/>
+				</div>
 				<div class="flex justify-end gap-2 mt-6">
 					<button type="button" id="vt-edit-save-btn" class="btn btn-primary">Save changes</button>
 					<button type="button" id="vt-edit-cancel-btn" class="btn btn-ghost">Cancel</button>
@@ -471,6 +570,13 @@ func pluralS(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+func formatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	return fmt.Sprintf("%d,%03d", n/1000, n%1000)
 }
 
 templ sourceURLRow(url string, notes string) {

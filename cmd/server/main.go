@@ -70,7 +70,7 @@ func main() {
 		&steps.ResearchStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
 		&steps.BrandEnricherStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Profile: queries, Model: contentModel},
 		&steps.FactcheckStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
-		&steps.EditorStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Pipeline: queries, ProjectSettings: queries, Model: contentModel},
+		&steps.EditorStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Pipeline: queries, VoiceTone: queries, Model: contentModel},
 		&steps.WriterStep{AI: aiClient, Prompt: promptBuilder, Content: queries, Pipeline: queries, Model: copywritingModel},
 	)
 
@@ -84,7 +84,6 @@ brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClien
 	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
 	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
 	projectSettingsHandler := handlers.NewProjectSettingsHandler(queries)
-	storytellingHandler := handlers.NewStorytellingHandler(queries)
 
 	mux := http.NewServeMux()
 
@@ -126,8 +125,6 @@ case strings.HasPrefix(rest, "brainstorm"):
 			projectHandler.HandleContextMemory(w, r, projectID)
 		case strings.HasPrefix(rest, "context"):
 			contextHandler.Handle(w, r, projectID, rest)
-		case strings.HasPrefix(rest, "storytelling"):
-			storytellingHandler.Handle(w, r, projectID, rest)
 		case rest == "settings" || rest == "settings/":
 			projectSettingsHandler.Handle(w, r, projectID, rest)
 		default:

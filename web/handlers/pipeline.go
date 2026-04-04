@@ -263,10 +263,8 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	var frameworkBlock string
-	if fwKey, err := h.queries.GetProjectSetting(projectID, "storytelling_framework"); err == nil && fwKey != "" {
-		if fw := content.FrameworkByKey(fwKey); fw != nil {
-			frameworkBlock = fmt.Sprintf("## Storytelling framework\nFramework: %s (%s)\n%s", fw.Name, fw.Attribution, fw.PromptInstruction)
-		}
+	if vt, err := h.queries.GetVoiceToneProfile(projectID); err == nil {
+		frameworkBlock = vt.BuildFrameworkBlock()
 	}
 
 	systemPrompt := h.promptBuilder.ForPiece(promptFile, profile, run.Brief, frameworkBlock, piece.RejectionReason)

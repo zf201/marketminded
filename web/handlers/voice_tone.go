@@ -10,6 +10,7 @@ import (
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/applog"
+	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/internal/types"
@@ -103,34 +104,50 @@ func (h *VoiceToneHandler) getProfile(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"voice_analysis":    vt.VoiceAnalysis,
-		"content_types":     vt.ContentTypes,
-		"should_avoid":      vt.ShouldAvoid,
-		"should_use":        vt.ShouldUse,
-		"style_inspiration": vt.StyleInspiration,
+	json.NewEncoder(w).Encode(map[string]any{
+		"voice_analysis":          vt.VoiceAnalysis,
+		"content_types":           vt.ContentTypes,
+		"should_avoid":            vt.ShouldAvoid,
+		"should_use":              vt.ShouldUse,
+		"style_inspiration":       vt.StyleInspiration,
+		"storytelling_frameworks": json.RawMessage(vt.StorytellingFrameworks),
+		"preferred_length":        vt.PreferredLength,
 	})
 }
 
 func (h *VoiceToneHandler) saveProfile(w http.ResponseWriter, r *http.Request, projectID int64) {
 	var body struct {
-		VoiceAnalysis    string `json:"voice_analysis"`
-		ContentTypes     string `json:"content_types"`
-		ShouldAvoid      string `json:"should_avoid"`
-		ShouldUse        string `json:"should_use"`
-		StyleInspiration string `json:"style_inspiration"`
+		VoiceAnalysis          string          `json:"voice_analysis"`
+		ContentTypes           string          `json:"content_types"`
+		ShouldAvoid            string          `json:"should_avoid"`
+		ShouldUse              string          `json:"should_use"`
+		StyleInspiration       string          `json:"style_inspiration"`
+		StorytellingFrameworks json.RawMessage `json:"storytelling_frameworks"`
+		PreferredLength        int             `json:"preferred_length"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
+	frameworksJSON := "[]"
+	if len(body.StorytellingFrameworks) > 0 {
+		frameworksJSON = string(body.StorytellingFrameworks)
+	}
+
+	preferredLength := body.PreferredLength
+	if preferredLength == 0 {
+		preferredLength = 1500
+	}
+
 	err := h.queries.UpsertVoiceToneProfile(projectID, store.VoiceToneProfile{
-		VoiceAnalysis:    body.VoiceAnalysis,
-		ContentTypes:     body.ContentTypes,
-		ShouldAvoid:      body.ShouldAvoid,
-		ShouldUse:        body.ShouldUse,
-		StyleInspiration: body.StyleInspiration,
+		VoiceAnalysis:          body.VoiceAnalysis,
+		ContentTypes:           body.ContentTypes,
+		ShouldAvoid:            body.ShouldAvoid,
+		ShouldUse:              body.ShouldUse,
+		StyleInspiration:       body.StyleInspiration,
+		StorytellingFrameworks: frameworksJSON,
+		PreferredLength:        preferredLength,
 	})
 	if err != nil {
 		http.Error(w, "Failed to save profile", http.StatusInternalServerError)
@@ -260,6 +277,8 @@ func (h *VoiceToneHandler) streamGenerate(w http.ResponseWriter, r *http.Request
 		fmt.Fprintf(&systemPrompt, "### Should Avoid\n%s\n\n", existingVT.ShouldAvoid)
 		fmt.Fprintf(&systemPrompt, "### Should Use\n%s\n\n", existingVT.ShouldUse)
 		fmt.Fprintf(&systemPrompt, "### Style Inspiration\n%s\n\n", existingVT.StyleInspiration)
+		fmt.Fprintf(&systemPrompt, "### Storytelling Frameworks\n%s\n\n", existingVT.StorytellingFrameworks)
+		fmt.Fprintf(&systemPrompt, "### Preferred Length\n%d words\n\n", existingVT.PreferredLength)
 	}
 
 	if contextNotes != "" {
@@ -268,6 +287,18 @@ func (h *VoiceToneHandler) streamGenerate(w http.ResponseWriter, r *http.Request
 	if memorySetting != "" {
 		fmt.Fprintf(&systemPrompt, "## Important Rules and Facts\n%s\n\n", memorySetting)
 	}
+
+	// Build framework reference for the prompt
+	var frameworkRef strings.Builder
+	frameworkRef.WriteString("## Available Storytelling Frameworks\n")
+	for _, fw := range content.Frameworks {
+		fmt.Fprintf(&frameworkRef, "\n**%s** (%s)\n", fw.Name, fw.Attribution)
+		fmt.Fprintf(&frameworkRef, "Best for: %s\n", fw.BestFor)
+		fmt.Fprintf(&frameworkRef, "%s\n", fw.ShortDescription)
+		fmt.Fprintf(&frameworkRef, "Key: `%s`\n", fw.Key)
+	}
+	frameworkRef.WriteString("\n")
+	systemPrompt.WriteString(frameworkRef.String())
 
 	systemPrompt.WriteString(`## Your Task
 
@@ -284,13 +315,21 @@ Analyze the writing patterns across ALL fetched posts. Focus on STYLE, not conte
 - What makes their good posts (liked articles) different from average ones
 - What style patterns the inspiration sources share
 
-### Step 3: Produce structured output
-Call submit_voice_tone with 5 sections:
+### Step 3: Select storytelling frameworks
+Review the available frameworks listed above. Pick 1-3 that best fit this brand's voice, audience, and content style. For each, write a short adaptation note explaining why it fits and how the editor/writer should apply it to this brand specifically.
+
+### Step 4: Determine preferred content length
+If you can infer a typical article length from the analyzed blog posts (estimate their word counts and average them), use that as the preferred length. If you cannot infer, default to 1500.
+
+### Step 5: Produce structured output
+Call submit_voice_tone with 7 fields:
 1. **Voice Analysis** - Brand personality, formality level, warmth, how they relate to the reader
 2. **Content Types** - What content approaches the brand uses (educational, promotional, storytelling, opinion, how-to, case study, etc.)
 3. **Should Avoid** - Words, phrases, patterns, and tones to never use
 4. **Should Use** - Characteristic vocabulary, phrases, sentence patterns, formatting conventions
 5. **Style Inspiration** - Writing style patterns observed from the inspiration sources
+6. **Storytelling Frameworks** - 1-3 framework selections from the available frameworks, each with key and adaptation note
+7. **Preferred Length** - Target word count as an integer
 
 ## Rules
 - ALWAYS write in English.
@@ -308,7 +347,19 @@ Call submit_voice_tone with 5 sections:
 		Function: ai.ToolFunction{
 			Name:        "submit_voice_tone",
 			Description: "Submit the structured voice & tone analysis.",
-			Parameters:  json.RawMessage(`{"type":"object","properties":{"voice_analysis":{"type":"string","description":"Brand personality, formality level, warmth, how they relate to the reader"},"content_types":{"type":"string","description":"What content approaches the brand uses"},"should_avoid":{"type":"string","description":"Words, phrases, patterns, and tones to never use"},"should_use":{"type":"string","description":"Characteristic vocabulary, phrases, sentence patterns"},"style_inspiration":{"type":"string","description":"Writing style patterns observed from the inspiration sources"}},"required":["voice_analysis","content_types","should_avoid","should_use","style_inspiration"]}`),
+			Parameters: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"voice_analysis":{"type":"string","description":"Brand personality, formality level, warmth, how they relate to the reader"},
+					"content_types":{"type":"string","description":"What content approaches the brand uses"},
+					"should_avoid":{"type":"string","description":"Words, phrases, patterns, and tones to never use"},
+					"should_use":{"type":"string","description":"Characteristic vocabulary, phrases, sentence patterns"},
+					"style_inspiration":{"type":"string","description":"Writing style patterns observed from the inspiration sources"},
+					"storytelling_frameworks":{"type":"array","items":{"type":"object","properties":{"key":{"type":"string","enum":["pixar","golden_circle","storybrand","heros_journey","three_act","abt"]},"note":{"type":"string","description":"Brand-specific adaptation: why this framework fits and how to apply it"}},"required":["key","note"]},"description":"1-3 storytelling frameworks best suited for this brand"},
+					"preferred_length":{"type":"integer","description":"Target word count. Infer from analyzed blog posts if possible, default 1500"}
+				},
+				"required":["voice_analysis","content_types","should_avoid","should_use","style_inspiration","storytelling_frameworks","preferred_length"]
+			}`),
 		},
 	}
 

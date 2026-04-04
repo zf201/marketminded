@@ -1370,13 +1370,20 @@ function initProfilePage(projectId) {
             case 'result':
                 var parsed = typeof d.data === 'string' ? JSON.parse(d.data) : d.data;
                 vtGeneratedResult = parsed;
-                // Format into textarea with headers
                 var text = '';
                 if (parsed.voice_analysis) text += '## Voice Analysis\n' + parsed.voice_analysis + '\n\n';
                 if (parsed.content_types) text += '## Content Types\n' + parsed.content_types + '\n\n';
                 if (parsed.should_avoid) text += '## Should Avoid\n' + parsed.should_avoid + '\n\n';
                 if (parsed.should_use) text += '## Should Use\n' + parsed.should_use + '\n\n';
                 if (parsed.style_inspiration) text += '## Style Inspiration\n' + parsed.style_inspiration + '\n\n';
+                if (parsed.storytelling_frameworks && parsed.storytelling_frameworks.length > 0) {
+                    text += '## Storytelling Frameworks\n';
+                    parsed.storytelling_frameworks.forEach(function(f) {
+                        text += '- ' + f.key + ': ' + f.note + '\n';
+                    });
+                    text += '\n';
+                }
+                if (parsed.preferred_length) text += '## Preferred Length\n~' + parsed.preferred_length + ' words\n\n';
                 textarea.value = text.trim();
                 textarea.scrollTop = 0;
                 break;
@@ -1457,6 +1464,35 @@ function initProfilePage(projectId) {
 
                         fieldsContainer.appendChild(wrapper);
                     });
+
+                    // Populate framework checkboxes
+                    var frameworks = data.storytelling_frameworks || [];
+                    var fwMap = {};
+                    frameworks.forEach(function(f) { fwMap[f.key] = f.note; });
+                    document.querySelectorAll('.vt-fw-checkbox').forEach(function(cb) {
+                        var key = cb.dataset.fwKey;
+                        var noteEl = document.querySelector('.vt-fw-note[data-fw-key="' + key + '"]');
+                        if (fwMap[key] !== undefined) {
+                            cb.checked = true;
+                            noteEl.classList.remove('hidden');
+                            noteEl.value = fwMap[key];
+                        } else {
+                            cb.checked = false;
+                            noteEl.classList.add('hidden');
+                            noteEl.value = '';
+                        }
+                        cb.addEventListener('change', function() {
+                            if (cb.checked) {
+                                noteEl.classList.remove('hidden');
+                            } else {
+                                noteEl.classList.add('hidden');
+                                noteEl.value = '';
+                            }
+                        });
+                    });
+
+                    // Populate preferred length
+                    document.getElementById('vt-edit-preferred-length').value = data.preferred_length || 1500;
                 });
 
             modal.showModal();
@@ -1470,6 +1506,17 @@ function initProfilePage(projectId) {
         inputs.forEach(function(input) {
             data[input.dataset.field] = input.value;
         });
+
+        // Collect frameworks
+        var frameworks = [];
+        document.querySelectorAll('.vt-fw-checkbox:checked').forEach(function(cb) {
+            var key = cb.dataset.fwKey;
+            var note = document.querySelector('.vt-fw-note[data-fw-key="' + key + '"]').value;
+            frameworks.push({key: key, note: note});
+        });
+        data.storytelling_frameworks = frameworks;
+        data.preferred_length = parseInt(document.getElementById('vt-edit-preferred-length').value) || 1500;
+
         fetch('/projects/' + projectId + '/profile/voice_and_tone/profile', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},

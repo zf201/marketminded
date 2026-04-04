@@ -3,19 +3,11 @@ package templates
 import "fmt"
 import "github.com/zanfridau/marketminded/web/templates/components"
 
-type FrameworkOption struct {
-	Key         string
-	Name        string
-	Description string
-}
-
 type ProjectSettingsData struct {
-	ProjectID            int64
-	ProjectName          string
-	Language             string
-	StorytellingFramework string
-	Frameworks           []FrameworkOption
-	Saved                bool
+	ProjectID   int64
+	ProjectName string
+	Language    string
+	Saved       bool
 }
 
 templ ProjectSettingsPage(data ProjectSettingsData) {
@@ -39,34 +31,6 @@ templ ProjectSettingsPage(data ProjectSettingsData) {
 					@components.FormGroup("Content Language") {
 						<input type="text" name="language" value={ data.Language } placeholder="e.g. English, Slovenian, Spanish..." class="input"/>
 						<p class="text-zinc-500 text-xs mt-1">Used for proofreading and grammar checks. AI will write and correct in this language.</p>
-					}
-				}
-			</div>
-
-			<div class="mb-4">
-				@components.Card("Storytelling Framework") {
-					<p class="text-zinc-500 text-xs mt-1 mb-3">Guides how the AI structures the narrative in cornerstone content.</p>
-					@components.FormGroup("") {
-						<select name="storytelling_framework" class="select">
-							if data.StorytellingFramework == "" {
-								<option value="" selected>None (free-form)</option>
-							} else {
-								<option value="">None (free-form)</option>
-							}
-							for _, fw := range data.Frameworks {
-								if fw.Key == data.StorytellingFramework {
-									<option value={ fw.Key } selected>{ fw.Name }</option>
-								} else {
-									<option value={ fw.Key }>{ fw.Name }</option>
-								}
-							}
-						</select>
-					}
-					for _, fw := range data.Frameworks {
-						<div class="bg-zinc-800/50 rounded-lg p-3 mb-2 text-sm">
-							<strong>{ fw.Name }</strong>
-							<span class="text-zinc-500"> — { fw.Description }</span>
-						</div>
 					}
 				}
 			</div>
