@@ -16,6 +16,7 @@ type PipelineStore interface {
 	UpdatePipelineStepStatus(id int64, status string) error
 	UpdatePipelineStepOutput(id int64, output, thinking string) error
 	UpdatePipelineStepToolCalls(id int64, toolCalls string) error
+	UpdatePipelineStepUsage(id int64, usage string) error
 }
 
 // ContentStore handles content pieces.

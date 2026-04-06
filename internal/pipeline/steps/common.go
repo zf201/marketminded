@@ -103,11 +103,18 @@ func RunWithTools(
 	_, usage, err := aiClient.StreamWithTools(ctx, model, aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temperature, submitToolName, maxIter)
 
 	duration := time.Since(start)
+	var usageJSON string
+	if usage != nil {
+		if uj, err := json.Marshal(usage); err == nil {
+			usageJSON = string(uj)
+		}
+	}
+
 	result := pipeline.StepResult{
 		Output:    savedOutput,
 		Thinking:  thinkingBuf.String(),
 		ToolCalls: pipeline.ToolCallsJSON(toolCallsList),
-		Usage:     usage,
+		UsageJSON: usageJSON,
 	}
 
 	if err != nil {

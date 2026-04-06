@@ -93,6 +93,9 @@ func (o *Orchestrator) RunStep(ctx context.Context, stepID int64, run *store.Pip
 	if result.ToolCalls != "" {
 		o.store.UpdatePipelineStepToolCalls(stepID, result.ToolCalls)
 	}
+	if result.UsageJSON != "" {
+		o.store.UpdatePipelineStepUsage(stepID, result.UsageJSON)
+	}
 	o.store.UpdatePipelineStepStatus(stepID, "completed")
 	return nil
 }

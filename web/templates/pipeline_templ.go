@@ -34,6 +34,7 @@ type PipelineStepView struct {
 	Output    string
 	Thinking  string
 	ToolCalls string
+	Usage     string
 }
 
 func PipelineListPage(data PipelineListData) templ.Component {
@@ -676,6 +677,14 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						return err
 					}
 					_, err = templBuffer.WriteString(templ.EscapeString(step.ToolCalls))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\" data-usage=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(step.Usage))
 					if err != nil {
 						return err
 					}

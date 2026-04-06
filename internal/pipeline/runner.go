@@ -1,10 +1,6 @@
 package pipeline
 
-import (
-	"context"
-
-	"github.com/zanfridau/marketminded/internal/ai"
-)
+import "context"
 
 // StepRunner executes a single pipeline step type.
 type StepRunner interface {
@@ -28,7 +24,7 @@ type StepResult struct {
 	Output    string
 	Thinking  string
 	ToolCalls string
-	Usage     *ai.StreamUsage
+	UsageJSON string // serialized ai.StreamUsage
 }
 
 // StepStream abstracts SSE output so steps don't depend on HTTP.

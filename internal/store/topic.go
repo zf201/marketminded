@@ -20,6 +20,7 @@ type TopicStep struct {
 	Output     string
 	Thinking   string
 	ToolCalls  string
+	Usage      string
 	SortOrder  int
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -107,15 +108,15 @@ func (q *Queries) CreateTopicStep(topicRunID int64, stepType string, round, sort
 func (q *Queries) GetTopicStep(id int64) (*TopicStep, error) {
 	s := &TopicStep{}
 	err := q.db.QueryRow(
-		`SELECT id, topic_run_id, step_type, round, status, output, thinking, tool_calls, sort_order, created_at, updated_at
+		`SELECT id, topic_run_id, step_type, round, status, output, thinking, tool_calls, usage, sort_order, created_at, updated_at
 		 FROM topic_steps WHERE id = ?`, id,
-	).Scan(&s.ID, &s.TopicRunID, &s.StepType, &s.Round, &s.Status, &s.Output, &s.Thinking, &s.ToolCalls, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.TopicRunID, &s.StepType, &s.Round, &s.Status, &s.Output, &s.Thinking, &s.ToolCalls, &s.Usage, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt)
 	return s, err
 }
 
 func (q *Queries) ListTopicSteps(topicRunID int64) ([]TopicStep, error) {
 	rows, err := q.db.Query(
-		`SELECT id, topic_run_id, step_type, round, status, output, thinking, tool_calls, sort_order, created_at, updated_at
+		`SELECT id, topic_run_id, step_type, round, status, output, thinking, tool_calls, usage, sort_order, created_at, updated_at
 		 FROM topic_steps WHERE topic_run_id = ? ORDER BY sort_order ASC`, topicRunID,
 	)
 	if err != nil {
@@ -126,7 +127,7 @@ func (q *Queries) ListTopicSteps(topicRunID int64) ([]TopicStep, error) {
 	var steps []TopicStep
 	for rows.Next() {
 		var s TopicStep
-		if err := rows.Scan(&s.ID, &s.TopicRunID, &s.StepType, &s.Round, &s.Status, &s.Output, &s.Thinking, &s.ToolCalls, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.TopicRunID, &s.StepType, &s.Round, &s.Status, &s.Output, &s.Thinking, &s.ToolCalls, &s.Usage, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		steps = append(steps, s)
@@ -151,6 +152,11 @@ func (q *Queries) UpdateTopicStepOutput(id int64, output, thinking string) error
 
 func (q *Queries) UpdateTopicStepToolCalls(id int64, toolCalls string) error {
 	_, err := q.db.Exec("UPDATE topic_steps SET tool_calls = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", toolCalls, id)
+	return err
+}
+
+func (q *Queries) UpdateTopicStepUsage(id int64, usage string) error {
+	_, err := q.db.Exec("UPDATE topic_steps SET usage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", usage, id)
 	return err
 }
 

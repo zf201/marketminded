@@ -1,7 +1,7 @@
 // step-cards.js — Shared step card rendering for pipeline and topic generator.
 // Step cards are rendered entirely by JS. The server provides data-only shells:
 //   <div class="step-card card" data-step-id="12" data-status="completed"
-//        data-step-type="research" data-round="" data-tool-calls='[...]'
+//        data-step-type="research" data-usage='{"cost":0.06,...}'
 //        data-output='...' data-thinking='...'>
 //   </div>
 // This module reads data attributes and builds all inner DOM.
@@ -29,53 +29,68 @@ var StepCards = (function() {
         return STEP_LABELS[type] || type;
     }
 
-    function addToolPill(pillsEl, type, value) {
-        if (!pillsEl) return;
-        if (type === 'search') {
-            var pill = document.createElement('span');
-            pill.className = 'badge badge-sm badge-secondary gap-1';
-            pill.textContent = '\uD83D\uDD0D ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value);
-            pill.title = value;
-            pillsEl.appendChild(pill);
-        } else if (type === 'fetch') {
-            var a = document.createElement('a');
-            a.className = 'badge badge-sm badge-accent gap-1';
-            a.href = value;
-            a.target = '_blank';
-            var host = value;
-            try { host = new URL(value).hostname; } catch(e) { host = value.substring(0, 25); }
-            a.textContent = '\uD83C\uDF10 ' + host;
-            a.title = value;
-            pillsEl.appendChild(a);
+    // Format usage stats as a compact line
+    function renderUsageStats(container, usageJSON) {
+        if (!usageJSON) return;
+        var usage;
+        try { usage = JSON.parse(usageJSON); } catch(e) { return; }
+
+        var stats = document.createElement('div');
+        stats.className = 'step-usage flex flex-wrap gap-2 mt-2 text-xs text-zinc-500';
+
+        var parts = [];
+
+        if (usage.server_tool_use && usage.server_tool_use.web_search_requests > 0) {
+            parts.push('\uD83D\uDD0D ' + usage.server_tool_use.web_search_requests + ' searches');
         }
+
+        if (usage.total_tokens > 0) {
+            var tokens = usage.total_tokens;
+            var label = tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'k' : tokens;
+            parts.push('\u2699 ' + label + ' tokens');
+        }
+
+        if (usage.cost > 0) {
+            parts.push('$ ' + usage.cost.toFixed(4));
+        }
+
+        if (parts.length === 0) return;
+
+        parts.forEach(function(text) {
+            var pill = document.createElement('span');
+            pill.className = 'badge badge-sm badge-ghost font-mono';
+            pill.textContent = text;
+            stats.appendChild(pill);
+        });
+
+        container.appendChild(stats);
     }
 
-    function renderToolPills(pillsEl, toolCallsJSON) {
-        if (!pillsEl || !toolCallsJSON) return;
-        try {
-            var calls = JSON.parse(toolCallsJSON);
-            calls.forEach(function(tc) {
-                addToolPill(pillsEl, tc.type, tc.value);
-            });
-        } catch(e) {}
+    function createThinkingPulse() {
+        var pulse = document.createElement('span');
+        pulse.className = 'step-thinking-pulse hidden';
+        for (var i = 0; i < 3; i++) {
+            var dot = document.createElement('span');
+            dot.className = 'dot';
+            pulse.appendChild(dot);
+        }
+        return pulse;
     }
 
     // Build the full inner content of a step card based on its data attributes.
-    // Returns an object with references to the streaming elements (for use during streaming).
     function render(card) {
         var status = card.dataset.status || 'pending';
         var stepType = card.dataset.stepType || '';
         var round = card.dataset.round || '';
-        var toolCalls = card.dataset.toolCalls || '';
+        var usageData = card.dataset.usage || '';
         var output = card.dataset.output || '';
 
-        // Wipe existing content
         card.textContent = '';
 
         var inner = document.createElement('div');
         inner.className = 'p-3';
 
-        // Header: [round label] step name [badge]
+        // Header: [round label] step name [thinking pulse] [badge]
         var header = document.createElement('div');
         header.className = 'board-card-header flex items-center gap-2';
 
@@ -91,6 +106,10 @@ var StepCards = (function() {
         nameEl.textContent = stepLabel(stepType);
         header.appendChild(nameEl);
 
+        // Thinking pulse — shown during streaming
+        var pulseEl = createThinkingPulse();
+        header.appendChild(pulseEl);
+
         var badge = document.createElement('span');
         badge.className = 'ml-auto badge ' + (BADGE_CLASSES[status] || 'badge-ghost');
         badge.textContent = status;
@@ -98,13 +117,9 @@ var StepCards = (function() {
 
         inner.appendChild(header);
 
-        // Tool pills
-        var pillsEl = document.createElement('div');
-        pillsEl.className = 'step-tool-pills flex flex-wrap gap-1 mt-2 empty:hidden';
-        inner.appendChild(pillsEl);
-
-        if ((status === 'completed' || status === 'failed') && toolCalls) {
-            renderToolPills(pillsEl, toolCalls);
+        // Usage stats (completed steps only)
+        if ((status === 'completed' || status === 'failed') && usageData) {
+            renderUsageStats(inner, usageData);
         }
 
         // Thinking ticker (for streaming)
@@ -125,13 +140,11 @@ var StepCards = (function() {
         // Render output based on status
         if (status === 'completed' && output) {
             var label = stepLabel(stepType);
-            // Writer output is shown in the piece card — hide it
             if (label === 'Writer') {
                 outputEl.style.display = 'none';
             } else {
                 try {
                     var data = JSON.parse(output);
-                    // Use topic-specific rendering for explorer/reviewer
                     if (stepType === 'topic_explore' && data.topics) {
                         renderTopicExploreOutput(outputEl, data);
                     } else if (stepType === 'topic_review' && data.reviews) {
@@ -164,7 +177,7 @@ var StepCards = (function() {
         card.appendChild(inner);
 
         return {
-            pillsEl: pillsEl,
+            pulseEl: pulseEl,
             tickerEl: tickerEl,
             streamEl: streamEl,
             outputEl: outputEl,
@@ -219,13 +232,15 @@ var StepCards = (function() {
     }
 
     // Stream a step via SSE. Renders the card in running state, then fills it.
-    // Returns the EventSource so the caller can close it if needed.
     function stream(card, url, onDone, onError) {
-        // Clear stale data and set card to running state
         card.dataset.status = 'running';
         card.dataset.toolCalls = '';
+        card.dataset.usage = '';
         card.dataset.output = '';
         var refs = render(card);
+
+        // Show thinking pulse
+        refs.pulseEl.classList.remove('hidden');
 
         var source = new EventSource(url);
 
@@ -238,18 +253,13 @@ var StepCards = (function() {
             } else if (d.type === 'chunk') {
                 refs.streamEl.textContent += d.chunk;
                 refs.streamEl.scrollTop = refs.streamEl.scrollHeight;
-            } else if (d.type === 'tool_start') {
-                if (d.tool === 'web_search' && d.query) {
-                    addToolPill(refs.pillsEl, 'search', d.query);
-                } else if (d.tool === 'fetch_url' && d.url) {
-                    addToolPill(refs.pillsEl, 'fetch', d.url);
-                }
             } else if (d.type === 'content_written') {
                 if (refs.outputEl && typeof renderContentBody === 'function') {
                     renderContentBody(refs.outputEl, d.platform, d.format, JSON.stringify(d.data));
                 }
             } else if (d.type === 'done') {
                 source.close();
+                refs.pulseEl.classList.add('hidden');
                 refs.tickerEl.classList.add('done');
                 refs.badge.textContent = 'completed';
                 refs.badge.className = 'ml-auto badge badge-completed';
@@ -257,6 +267,7 @@ var StepCards = (function() {
                 if (onDone) onDone();
             } else if (d.type === 'error') {
                 source.close();
+                refs.pulseEl.classList.add('hidden');
                 refs.tickerEl.classList.add('done');
                 refs.streamEl.textContent += '\nError: ' + d.error;
                 refs.badge.textContent = 'failed';
@@ -268,6 +279,7 @@ var StepCards = (function() {
 
         source.onerror = function() {
             source.close();
+            refs.pulseEl.classList.add('hidden');
             refs.badge.textContent = 'failed';
             refs.badge.className = 'ml-auto badge badge-failed';
             card.dataset.status = 'failed';
@@ -277,7 +289,6 @@ var StepCards = (function() {
         return source;
     }
 
-    // Create a new step card element (for dynamically added steps like topic generator rounds)
     function create(stepId, stepType, round, status) {
         var card = document.createElement('div');
         card.className = 'step-card card';
@@ -286,19 +297,18 @@ var StepCards = (function() {
         card.dataset.round = round || '';
         card.dataset.status = status || 'running';
         card.dataset.toolCalls = '';
+        card.dataset.usage = '';
         card.dataset.output = '';
         render(card);
         return card;
     }
 
-    // Render all step cards on the page
     function renderAll() {
         document.querySelectorAll('.step-card[data-step-id]').forEach(function(card) {
             render(card);
         });
     }
 
-    // Collapse completed steps (all but the last) with toggle buttons
     function collapseCompleted() {
         var cards = document.querySelectorAll('.step-card[data-step-id]');
         var allCompleted = true;
@@ -309,12 +319,10 @@ var StepCards = (function() {
         if (!allCompleted) return;
 
         cards.forEach(function(card, idx) {
-            if (idx >= cards.length - 1) return; // don't collapse last
+            if (idx >= cards.length - 1) return;
 
             var output = card.querySelector('.step-output');
-            var pills = card.querySelector('.step-tool-pills');
             if (output) output.style.display = 'none';
-            if (pills) pills.style.display = 'none';
             card.dataset.collapsed = 'true';
 
             var headerDiv = card.querySelector('.board-card-header');
@@ -337,10 +345,8 @@ var StepCards = (function() {
             toggleBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 var o = card.querySelector('.step-output');
-                var p = card.querySelector('.step-tool-pills');
                 var isCollapsed = card.dataset.collapsed === 'true';
                 if (o) o.style.display = isCollapsed ? '' : 'none';
-                if (p) p.style.display = isCollapsed ? '' : 'none';
                 card.dataset.collapsed = isCollapsed ? 'false' : 'true';
                 toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
                 toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
@@ -349,13 +355,31 @@ var StepCards = (function() {
         });
     }
 
+    // Set usage data on a card and render the stats
+    function setUsage(card, usageJSON) {
+        if (!usageJSON || usageJSON === 'null') return;
+        card.dataset.usage = typeof usageJSON === 'string' ? usageJSON : JSON.stringify(usageJSON);
+        var inner = card.querySelector('.p-3');
+        if (!inner) return;
+        var existing = inner.querySelector('.step-usage');
+        if (existing) existing.remove();
+        var header = inner.querySelector('.board-card-header');
+        if (header && header.nextSibling) {
+            var tmp = document.createElement('div');
+            renderUsageStats(tmp, card.dataset.usage);
+            if (tmp.firstChild) {
+                header.parentNode.insertBefore(tmp.firstChild, header.nextSibling);
+            }
+        }
+    }
+
     return {
         render: render,
         stream: stream,
         create: create,
         renderAll: renderAll,
         collapseCompleted: collapseCompleted,
-        addToolPill: addToolPill,
+        setUsage: setUsage,
         stepLabel: stepLabel
     };
 })();

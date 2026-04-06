@@ -122,6 +122,7 @@ func (h *TopicHandler) showRun(w http.ResponseWriter, r *http.Request, projectID
 			Output:    s.Output,
 			Thinking:  s.Thinking,
 			ToolCalls: s.ToolCalls,
+			Usage:     s.Usage,
 		}
 	}
 
@@ -225,6 +226,9 @@ func (h *TopicHandler) stream(w http.ResponseWriter, r *http.Request, projectID 
 		if exploreResult.ToolCalls != "" {
 			h.queries.UpdateTopicStepToolCalls(exploreStep.ID, exploreResult.ToolCalls)
 		}
+		if exploreResult.UsageJSON != "" {
+			h.queries.UpdateTopicStepUsage(exploreStep.ID, exploreResult.UsageJSON)
+		}
 
 		if exploreErr != nil {
 			h.queries.UpdateTopicStepStatus(exploreStep.ID, "failed")
@@ -235,7 +239,7 @@ func (h *TopicHandler) stream(w http.ResponseWriter, r *http.Request, projectID 
 			return
 		}
 		h.queries.UpdateTopicStepStatus(exploreStep.ID, "completed")
-		sseStream.SendData(map[string]any{"type": "step_done", "round": round, "step_type": "topic_explore", "status": "completed"})
+		sseStream.SendData(map[string]any{"type": "step_done", "round": round, "step_type": "topic_explore", "status": "completed", "usage": json.RawMessage(exploreResult.UsageJSON)})
 
 		// Parse explorer output
 		var exploreOutput struct {
@@ -270,6 +274,9 @@ func (h *TopicHandler) stream(w http.ResponseWriter, r *http.Request, projectID 
 		if reviewResult.ToolCalls != "" {
 			h.queries.UpdateTopicStepToolCalls(reviewStep.ID, reviewResult.ToolCalls)
 		}
+		if reviewResult.UsageJSON != "" {
+			h.queries.UpdateTopicStepUsage(reviewStep.ID, reviewResult.UsageJSON)
+		}
 
 		if reviewErr != nil {
 			h.queries.UpdateTopicStepStatus(reviewStep.ID, "failed")
@@ -280,7 +287,7 @@ func (h *TopicHandler) stream(w http.ResponseWriter, r *http.Request, projectID 
 			return
 		}
 		h.queries.UpdateTopicStepStatus(reviewStep.ID, "completed")
-		sseStream.SendData(map[string]any{"type": "step_done", "round": round, "step_type": "topic_review", "status": "completed"})
+		sseStream.SendData(map[string]any{"type": "step_done", "round": round, "step_type": "topic_review", "status": "completed", "usage": json.RawMessage(reviewResult.UsageJSON)})
 
 		// Parse reviewer output
 		var reviewOutput struct {

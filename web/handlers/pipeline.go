@@ -157,6 +157,7 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 			Output:    s.Output,
 			Thinking:  s.Thinking,
 			ToolCalls: s.ToolCalls,
+			Usage:     s.Usage,
 		}
 	}
 

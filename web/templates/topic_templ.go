@@ -54,6 +54,7 @@ type TopicStepView struct {
 	Output    string
 	Thinking  string
 	ToolCalls string
+	Usage     string
 }
 
 func topicStepTypeLabel(stepType string) templ.Component {
@@ -666,6 +667,14 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				if err != nil {
 					return err
 				}
+				_, err = templBuffer.WriteString("\" data-usage=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(step.Usage))
+				if err != nil {
+					return err
+				}
 				_, err = templBuffer.WriteString("\" data-output=\"")
 				if err != nil {
 					return err
@@ -776,9 +785,10 @@ func TopicRunPage(data TopicRunData) templ.Component {
 							currentRefs = {
 								tickerEl: currentCard.querySelector('.step-thinking-ticker'),
 								streamEl: currentCard.querySelector('.step-stream'),
-								pillsEl: currentCard.querySelector('.step-tool-pills'),
+								pulseEl: currentCard.querySelector('.step-thinking-pulse'),
 								badge: currentCard.querySelector('.badge')
 							};
+							if (currentRefs.pulseEl) currentRefs.pulseEl.classList.remove('hidden');
 							stepsContainer.appendChild(currentCard);
 						} else if (d.type === 'thinking' && currentRefs) {
 							currentRefs.tickerEl.textContent += d.chunk;
@@ -786,17 +796,13 @@ func TopicRunPage(data TopicRunData) templ.Component {
 						} else if (d.type === 'chunk' && currentRefs) {
 							currentRefs.streamEl.textContent += d.chunk;
 							currentRefs.streamEl.scrollTop = currentRefs.streamEl.scrollHeight;
-						} else if (d.type === 'tool_start' && currentRefs) {
-							if (d.tool === 'web_search' && d.query) {
-								StepCards.addToolPill(currentRefs.pillsEl, 'search', d.query);
-							} else if (d.tool === 'fetch_url' && d.url) {
-								StepCards.addToolPill(currentRefs.pillsEl, 'fetch', d.url);
-							}
 						} else if (d.type === 'step_done' && currentCard) {
+							if (currentRefs.pulseEl) currentRefs.pulseEl.classList.add('hidden');
 							currentRefs.tickerEl.classList.add('done');
 							currentRefs.badge.textContent = d.status;
 							currentRefs.badge.className = 'ml-auto badge ' + (d.status === 'completed' ? 'badge-completed' : 'badge-failed');
 							currentCard.dataset.status = d.status;
+							if (d.usage) StepCards.setUsage(currentCard, JSON.stringify(d.usage));
 							currentCard = null;
 							currentRefs = null;
 						} else if (d.type === 'done') {

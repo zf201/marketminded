@@ -25,6 +25,7 @@ type PipelineStepView struct {
 	Output    string
 	Thinking  string
 	ToolCalls string
+	Usage     string
 }
 
 templ PipelineListPage(data PipelineListData) {
@@ -236,6 +237,7 @@ templ ProductionBoardPage(data ProductionBoardData) {
 							data-status={ step.Status }
 							data-step-type={ step.StepType }
 							data-tool-calls={ step.ToolCalls }
+							data-usage={ step.Usage }
 							data-output={ step.Output }
 						>
 						</div>

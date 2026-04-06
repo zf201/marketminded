@@ -11,6 +11,7 @@ type PipelineStep struct {
 	Output        string
 	Thinking      string
 	ToolCalls     string
+	Usage         string
 	SortOrder     int
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -41,15 +42,15 @@ func (q *Queries) CreatePipelineStep(pipelineRunID int64, stepType string, sortO
 func (q *Queries) GetPipelineStep(id int64) (*PipelineStep, error) {
 	s := &PipelineStep{}
 	err := q.db.QueryRow(
-		`SELECT id, pipeline_run_id, step_type, status, input, output, thinking, tool_calls, sort_order, created_at, updated_at
+		`SELECT id, pipeline_run_id, step_type, status, input, output, thinking, tool_calls, usage, sort_order, created_at, updated_at
 		 FROM pipeline_steps WHERE id = ?`, id,
-	).Scan(&s.ID, &s.PipelineRunID, &s.StepType, &s.Status, &s.Input, &s.Output, &s.Thinking, &s.ToolCalls, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.PipelineRunID, &s.StepType, &s.Status, &s.Input, &s.Output, &s.Thinking, &s.ToolCalls, &s.Usage, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt)
 	return s, err
 }
 
 func (q *Queries) ListPipelineSteps(pipelineRunID int64) ([]PipelineStep, error) {
 	rows, err := q.db.Query(
-		`SELECT id, pipeline_run_id, step_type, status, input, output, thinking, tool_calls, sort_order, created_at, updated_at
+		`SELECT id, pipeline_run_id, step_type, status, input, output, thinking, tool_calls, usage, sort_order, created_at, updated_at
 		 FROM pipeline_steps WHERE pipeline_run_id = ? ORDER BY sort_order ASC`, pipelineRunID,
 	)
 	if err != nil {
@@ -60,7 +61,7 @@ func (q *Queries) ListPipelineSteps(pipelineRunID int64) ([]PipelineStep, error)
 	var steps []PipelineStep
 	for rows.Next() {
 		var s PipelineStep
-		if err := rows.Scan(&s.ID, &s.PipelineRunID, &s.StepType, &s.Status, &s.Input, &s.Output, &s.Thinking, &s.ToolCalls, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.PipelineRunID, &s.StepType, &s.Status, &s.Input, &s.Output, &s.Thinking, &s.ToolCalls, &s.Usage, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		steps = append(steps, s)
@@ -80,6 +81,11 @@ func (q *Queries) UpdatePipelineStepOutput(id int64, output, thinking string) er
 
 func (q *Queries) UpdatePipelineStepToolCalls(id int64, toolCalls string) error {
 	_, err := q.db.Exec("UPDATE pipeline_steps SET tool_calls = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", toolCalls, id)
+	return err
+}
+
+func (q *Queries) UpdatePipelineStepUsage(id int64, usage string) error {
+	_, err := q.db.Exec("UPDATE pipeline_steps SET usage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", usage, id)
 	return err
 }
 
