@@ -9,7 +9,6 @@ type Config struct {
 	Port               string
 	DBPath             string
 	OpenRouterAPIKey   string
-	BraveAPIKey        string
 	DataForSEOLogin    string
 	DataForSEOPassword string
 	ModelContent       string
@@ -19,17 +18,15 @@ type Config struct {
 
 func Load() (*Config, error) {
 	orKey := os.Getenv("OPENROUTER_API_KEY")
-	braveKey := os.Getenv("BRAVE_API_KEY")
 
-	if orKey == "" || braveKey == "" {
-		return nil, fmt.Errorf("OPENROUTER_API_KEY and BRAVE_API_KEY are required")
+	if orKey == "" {
+		return nil, fmt.Errorf("OPENROUTER_API_KEY is required")
 	}
 
 	return &Config{
 		Port:               envOr("MARKETMINDED_PORT", "8080"),
 		DBPath:             envOr("MARKETMINDED_DB_PATH", "./marketminded.db"),
 		OpenRouterAPIKey:   orKey,
-		BraveAPIKey:        braveKey,
 		DataForSEOLogin:    os.Getenv("DATAFORSEO_LOGIN"),
 		DataForSEOPassword: os.Getenv("DATAFORSEO_PASSWORD"),
 		ModelContent:       envOr("MARKETMINDED_MODEL_CONTENT", "x-ai/grok-4.1-fast"),
