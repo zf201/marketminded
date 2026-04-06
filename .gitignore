@@ -7,5 +7,6 @@
 .env
 .worktrees/
 .superpowers/
+logs/
 node_modules/
 web/static/output.css
