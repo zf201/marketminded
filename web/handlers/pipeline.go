@@ -300,7 +300,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
+	fullResponse, _, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
 	if err != nil {
 		sseStream.SendData(map[string]string{"type": "error", "error": err.Error()})
 		return
@@ -423,7 +423,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 	executor, onToolEvent := h.pieceWriteExecutor(pieceID, sseStream)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent,
+	fullResponse, _, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent,
 		func(chunk string) error {
 			sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
 			return nil

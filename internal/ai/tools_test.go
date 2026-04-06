@@ -22,7 +22,7 @@ func TestStreamWithTools_NoToolCalls(t *testing.T) {
 
 	c := NewClient("test-key", WithBaseURL(server.URL))
 	var chunks []string
-	text, err := c.StreamWithTools(
+	text, _, err := c.StreamWithTools(
 		context.Background(), "test-model",
 		[]Message{{Role: "user", Content: "hi"}},
 		nil, // no tools
@@ -64,7 +64,7 @@ func TestStreamWithTools_WithToolCall(t *testing.T) {
 
 	c := NewClient("test-key", WithBaseURL(server.URL))
 	var events []ToolEvent
-	text, err := c.StreamWithTools(
+	text, _, err := c.StreamWithTools(
 		context.Background(), "test-model",
 		[]Message{{Role: "user", Content: "search for test"}},
 		[]Tool{{Type: "function", Function: &ToolFunction{Name: "web_search", Description: "search"}}},

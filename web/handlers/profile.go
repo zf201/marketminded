@@ -412,7 +412,7 @@ Source URLs:
 		start := time.Now()
 		applog.Info("profile generate (tool): section=%s project=%d model=%s starting", sectionName, projectID, model)
 
-		_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent,
+		_, _, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent,
 			func(string) error { return nil },
 			func(string) error { return nil }, &temp, "", maxIter)
 

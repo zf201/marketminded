@@ -100,13 +100,14 @@ func RunWithTools(
 	start := time.Now()
 	applog.Info("%s: model=%s starting (submit=%s, maxIter=%d)", logPrefix, model, submitToolName, maxIter)
 
-	_, err := aiClient.StreamWithTools(ctx, model, aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temperature, submitToolName, maxIter)
+	_, usage, err := aiClient.StreamWithTools(ctx, model, aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temperature, submitToolName, maxIter)
 
 	duration := time.Since(start)
 	result := pipeline.StepResult{
 		Output:    savedOutput,
 		Thinking:  thinkingBuf.String(),
 		ToolCalls: pipeline.ToolCallsJSON(toolCallsList),
+		Usage:     usage,
 	}
 
 	if err != nil {

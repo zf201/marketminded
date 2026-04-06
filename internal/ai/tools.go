@@ -88,6 +88,21 @@ type streamDelta struct {
 
 type streamResponse struct {
 	Choices []streamChoice `json:"choices"`
+	Usage   *StreamUsage   `json:"usage,omitempty"`
+}
+
+// StreamUsage captures token and cost info from the OpenRouter response.
+type StreamUsage struct {
+	PromptTokens     int            `json:"prompt_tokens"`
+	CompletionTokens int            `json:"completion_tokens"`
+	TotalTokens      int            `json:"total_tokens"`
+	Cost             float64        `json:"cost"`
+	ServerToolUse    *ServerToolUse `json:"server_tool_use,omitempty"`
+}
+
+// ServerToolUse tracks server-side tool usage (e.g. web search).
+type ServerToolUse struct {
+	WebSearchRequests int `json:"web_search_requests"`
 }
 
 // ErrToolDone signals that the executor has captured its final output
@@ -125,7 +140,7 @@ func (c *Client) StreamWithTools(
 	temperature *float64,
 	submitToolName string,
 	maxIterations ...int,
-) (string, error) {
+) (string, *StreamUsage, error) {
 	limit := 20
 	if len(maxIterations) > 0 && maxIterations[0] > 0 {
 		limit = maxIterations[0]
@@ -147,6 +162,7 @@ func (c *Client) StreamWithTools(
 	}
 
 	var fullText strings.Builder
+	var totalUsage *StreamUsage
 	forceToolCall := false
 
 	for iteration := 0; iteration < limit; iteration++ {
@@ -154,15 +170,18 @@ func (c *Client) StreamWithTools(
 		if forceToolCall {
 			toolChoice = forceSubmit
 		}
-		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature, toolChoice)
+		text, toolCalls, turnUsage, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature, toolChoice)
+		if turnUsage != nil {
+			totalUsage = mergeUsage(totalUsage, turnUsage)
+		}
 		if err != nil {
-			return fullText.String(), err
+			return fullText.String(), totalUsage, err
 		}
 		fullText.WriteString(text)
 
 		if len(toolCalls) == 0 {
 			if submitToolName == "" || forceSubmit == nil {
-				return fullText.String(), nil
+				return fullText.String(), totalUsage, nil
 			}
 			// Model responded with text instead of a tool call.
 			// Add its text to history, nudge it, and force the specific submit tool next turn.
@@ -228,11 +247,11 @@ func (c *Client) StreamWithTools(
 			})
 		}
 		if done {
-			return fullText.String(), nil
+			return fullText.String(), totalUsage, nil
 		}
 	}
 
-	return fullText.String(), fmt.Errorf("max tool call iterations reached")
+	return fullText.String(), totalUsage, fmt.Errorf("max tool call iterations reached")
 }
 
 // streamOneTurn sends one request and streams the response.
@@ -246,7 +265,7 @@ func (c *Client) streamOneTurn(
 	onReasoning StreamFunc,
 	temperature *float64,
 	toolChoice any,
-) (string, []ToolCall, error) {
+) (string, []ToolCall, *StreamUsage, error) {
 	body, _ := json.Marshal(toolChatRequest{
 		Model:       model,
 		Messages:    messages,
@@ -258,23 +277,24 @@ func (c *Client) streamOneTurn(
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return "", nil, fmt.Errorf("openrouter: %d: %s", resp.StatusCode, string(b))
+		return "", nil, nil, fmt.Errorf("openrouter: %d: %s", resp.StatusCode, string(b))
 	}
 
 	var textContent strings.Builder
+	var lastUsage *StreamUsage
 	pendingToolCalls := make(map[int]*ToolCall)
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -292,6 +312,11 @@ func (c *Client) streamOneTurn(
 		if err := json.Unmarshal([]byte(data), &sr); err != nil {
 			continue
 		}
+		// Capture usage from the final chunk
+		if sr.Usage != nil {
+			lastUsage = sr.Usage
+		}
+
 		if len(sr.Choices) == 0 {
 			continue
 		}
@@ -301,7 +326,7 @@ func (c *Client) streamOneTurn(
 		if choice.Delta.Content != "" {
 			textContent.WriteString(choice.Delta.Content)
 			if err := onChunk(choice.Delta.Content); err != nil {
-				return textContent.String(), nil, err
+				return textContent.String(), nil, lastUsage, err
 			}
 		}
 
@@ -335,7 +360,7 @@ func (c *Client) streamOneTurn(
 	}
 
 	if err := scanner.Err(); err != nil {
-		return textContent.String(), nil, err
+		return textContent.String(), nil, lastUsage, err
 	}
 
 	// Collect tool calls in order
@@ -346,5 +371,26 @@ func (c *Client) streamOneTurn(
 		}
 	}
 
-	return textContent.String(), toolCalls, nil
+	return textContent.String(), toolCalls, lastUsage, nil
+}
+
+// mergeUsage accumulates usage across multiple API turns.
+func mergeUsage(total, turn *StreamUsage) *StreamUsage {
+	if total == nil {
+		return turn
+	}
+	if turn == nil {
+		return total
+	}
+	total.PromptTokens += turn.PromptTokens
+	total.CompletionTokens += turn.CompletionTokens
+	total.TotalTokens += turn.TotalTokens
+	total.Cost += turn.Cost
+	if turn.ServerToolUse != nil {
+		if total.ServerToolUse == nil {
+			total.ServerToolUse = &ServerToolUse{}
+		}
+		total.ServerToolUse.WebSearchRequests += turn.ServerToolUse.WebSearchRequests
+	}
+	return total
 }

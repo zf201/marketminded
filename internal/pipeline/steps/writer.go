@@ -112,7 +112,7 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	applog.Info("%s: model=%s starting", prefix, s.Model())
 
 	temp := 0.3
-	_, err := s.AI.StreamWithTools(ctx, s.Model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
+	_, _, err := s.AI.StreamWithTools(ctx, s.Model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
 
 	duration := time.Since(start)
 	result := pipeline.StepResult{

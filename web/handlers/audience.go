@@ -284,7 +284,7 @@ For each persona, provide:
 	start := time.Now()
 	applog.Info("audience generate: project=%d model=%s starting", projectID, model)
 
-	_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
+	_, _, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {
