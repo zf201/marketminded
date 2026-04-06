@@ -15,13 +15,18 @@ import (
 
 // Tool definitions for the API request
 type Tool struct {
-	Type     string        `json:"type"`
-	Function *ToolFunction `json:"function,omitempty"`
+	Type       string          `json:"type"`
+	Function   *ToolFunction   `json:"function,omitempty"`
+	Parameters json.RawMessage `json:"parameters,omitempty"` // server tool config
 }
 
-// ServerTool creates an OpenRouter server tool (e.g. "openrouter:web_search").
-func ServerTool(toolType string) Tool {
-	return Tool{Type: toolType}
+// ServerTool creates an OpenRouter server tool with optional parameters.
+func ServerTool(toolType string, params ...json.RawMessage) Tool {
+	t := Tool{Type: toolType}
+	if len(params) > 0 {
+		t.Parameters = params[0]
+	}
+	return t
 }
 
 type ToolFunction struct {

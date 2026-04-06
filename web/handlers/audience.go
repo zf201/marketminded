@@ -234,7 +234,7 @@ For each persona, provide:
 	}
 
 	toolList := []ai.Tool{
-		ai.ServerTool("openrouter:web_search"),
+		ai.ServerTool("openrouter:web_search", json.RawMessage(`{"max_results":5,"max_total_results":20}`)),
 		submitPersonasTool,
 	}
 
