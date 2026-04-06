@@ -91,6 +91,8 @@ type TopicStore interface {
 	CreateTopicRun(projectID int64, instructions string) (*TopicRun, error)
 	GetTopicRun(id int64) (*TopicRun, error)
 	ListTopicRuns(projectID int64) ([]TopicRun, error)
+	DeleteTopicRun(id int64) error
+	NullifyTopicBacklogRunID(topicRunID int64) error
 	UpdateTopicRunStatus(id int64, status string) error
 	CreateTopicStep(topicRunID int64, stepType string, round, sortOrder int) (*TopicStep, error)
 	GetTopicStep(id int64) (*TopicStep, error)

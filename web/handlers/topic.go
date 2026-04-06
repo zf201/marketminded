@@ -45,6 +45,10 @@ func (h *TopicHandler) Handle(w http.ResponseWriter, r *http.Request, projectID 
 		h.deleteBacklogItem(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/retry") && r.Method == "POST":
 		h.retry(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/cancel") && r.Method == "POST":
+		h.cancelRun(w, r, projectID, rest)
+	case strings.HasSuffix(rest, "/delete") && r.Method == "POST":
+		h.deleteRun(w, r, projectID, rest)
 	default:
 		h.showRun(w, r, projectID, rest)
 	}
@@ -187,6 +191,10 @@ func (h *TopicHandler) stream(w http.ResponseWriter, r *http.Request, projectID 
 	sortOrder := 0
 
 	for round := 1; round <= 3; round++ {
+		if r.Context().Err() != nil {
+			h.queries.UpdateTopicRunStatus(runID, "failed")
+			return
+		}
 		// --- Explorer step ---
 		exploreStep, err := h.queries.CreateTopicStep(runID, "topic_explore", round, sortOrder)
 		sortOrder++
@@ -335,6 +343,27 @@ func (h *TopicHandler) stream(w http.ResponseWriter, r *http.Request, projectID 
 		"type":   "done",
 		"topics": allApproved,
 	})
+}
+
+func (h *TopicHandler) deleteRun(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	if runID == 0 {
+		http.Error(w, "Invalid run ID", http.StatusBadRequest)
+		return
+	}
+	h.queries.NullifyTopicBacklogRunID(runID)
+	h.queries.DeleteTopicRun(runID)
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/topics", projectID), http.StatusSeeOther)
+}
+
+func (h *TopicHandler) cancelRun(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	if runID == 0 {
+		http.Error(w, "Invalid run ID", http.StatusBadRequest)
+		return
+	}
+	h.queries.UpdateTopicRunStatus(runID, "failed")
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/topics/%d", projectID, runID), http.StatusSeeOther)
 }
 
 func (h *TopicHandler) retry(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {

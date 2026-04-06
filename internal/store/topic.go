@@ -75,6 +75,16 @@ func (q *Queries) ListTopicRuns(projectID int64) ([]TopicRun, error) {
 	return runs, rows.Err()
 }
 
+func (q *Queries) DeleteTopicRun(id int64) error {
+	_, err := q.db.Exec("DELETE FROM topic_runs WHERE id = ?", id)
+	return err
+}
+
+func (q *Queries) NullifyTopicBacklogRunID(topicRunID int64) error {
+	_, err := q.db.Exec("UPDATE topic_backlog SET topic_run_id = NULL WHERE topic_run_id = ?", topicRunID)
+	return err
+}
+
 func (q *Queries) UpdateTopicRunStatus(id int64, status string) error {
 	_, err := q.db.Exec("UPDATE topic_runs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", status, id)
 	return err

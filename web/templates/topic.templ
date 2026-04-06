@@ -111,17 +111,29 @@ templ TopicListPage(data TopicListData) {
 				<p class="text-zinc-500">No topic generation runs yet. Click Generate to start.</p>
 			}
 			for _, run := range data.Runs {
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d", data.ProjectID, run.ID)) } class="card block hover:border-zinc-700 transition-colors">
+				<div class="card hover:border-zinc-700 transition-colors">
 					<div class="p-4 flex items-center justify-between">
-						<div class="flex items-center gap-3">
+						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d", data.ProjectID, run.ID)) } class="flex items-center gap-3 flex-1">
 							<span class="text-sm text-zinc-400">{ run.CreatedAt.Format("Jan 2, 2006 3:04 PM") }</span>
 							if run.TopicCount > 0 {
 								<span class="text-xs text-zinc-500">{ fmt.Sprintf("%d topics", run.TopicCount) }</span>
 							}
+						</a>
+						<div class="flex items-center gap-3">
+							@components.StatusBadge(run.Status)
+							if run.Status == "running" {
+								<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/cancel", data.ProjectID, run.ID)) }>
+									<button type="submit" class="text-zinc-500 hover:text-red-400 transition-colors text-sm">Cancel</button>
+								</form>
+							}
+							if run.Status == "completed" || run.Status == "failed" {
+								<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/delete", data.ProjectID, run.ID)) } onsubmit="return confirm('Delete this run?')">
+									<button type="submit" class="text-zinc-500 hover:text-red-400 transition-colors text-sm">Delete</button>
+								</form>
+							}
 						</div>
-						@components.StatusBadge(run.Status)
 					</div>
-				</a>
+				</div>
 			}
 		</div>
 	}
@@ -140,7 +152,19 @@ templ TopicRunPage(data TopicRunData) {
 					@components.StatusBadge(data.Status)
 					<h1 class="text-2xl font-bold mt-1">Topic Generation</h1>
 				</div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics", data.ProjectID)) } class="btn btn-ghost btn-sm">Back</a>
+				<div class="flex items-center gap-2">
+						if data.Status == "completed" || data.Status == "failed" {
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/delete", data.ProjectID, data.RunID)) } onsubmit="return confirm('Delete this run?')">
+								<button type="submit" class="btn btn-danger btn-sm">Delete</button>
+							</form>
+						}
+						if data.Status == "running" {
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/cancel", data.ProjectID, data.RunID)) } onsubmit="return confirm('Cancel this run?')">
+								<button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+							</form>
+						}
+						<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics", data.ProjectID)) } class="btn btn-ghost btn-sm">Back</a>
+					</div>
 			</div>
 
 			if data.Instructions != "" {
@@ -180,6 +204,7 @@ templ TopicRunPage(data TopicRunData) {
 			if data.Status == "pending" && len(data.Steps) == 0 {
 				<div class="flex items-center gap-2 mt-4">
 					<button class="btn btn-primary" id="run-topics-btn">Run Topic Generator</button>
+					<button class="btn btn-danger hidden" id="cancel-topics-btn">Cancel</button>
 				</div>
 			}
 			if data.Status == "failed" {
@@ -201,6 +226,7 @@ templ TopicRunPage(data TopicRunData) {
 				var status = page.dataset.status;
 				var stepsContainer = document.getElementById('topic-steps');
 				var runBtn = document.getElementById('run-topics-btn');
+				var cancelBtn = document.getElementById('cancel-topics-btn');
 
 				// Render all existing step cards from data attributes
 				StepCards.renderAll();
@@ -209,16 +235,20 @@ templ TopicRunPage(data TopicRunData) {
 					e.preventDefault();
 				};
 
+				var activeSource = null;
+
 				function startStream() {
 					if (runBtn) {
 						runBtn.disabled = true;
 						runBtn.textContent = 'Running...';
 					}
+					if (cancelBtn) cancelBtn.classList.remove('hidden');
 					window.addEventListener('beforeunload', beforeUnloadHandler);
 
 					var currentCard = null;
 					var currentRefs = null;
 					var source = new EventSource('/projects/' + projectID + '/topics/' + runID + '/stream');
+					activeSource = source;
 
 					source.onmessage = function(event) {
 						var d = JSON.parse(event.data);
@@ -253,10 +283,14 @@ templ TopicRunPage(data TopicRunData) {
 							currentRefs = null;
 						} else if (d.type === 'done') {
 							source.close();
+							activeSource = null;
+							if (cancelBtn) cancelBtn.classList.add('hidden');
 							window.removeEventListener('beforeunload', beforeUnloadHandler);
 							window.location.reload();
 						} else if (d.type === 'error') {
 							source.close();
+							activeSource = null;
+							if (cancelBtn) cancelBtn.classList.add('hidden');
 							window.removeEventListener('beforeunload', beforeUnloadHandler);
 							if (currentRefs) {
 								currentRefs.streamEl.textContent += '\nError: ' + d.error;
@@ -268,8 +302,22 @@ templ TopicRunPage(data TopicRunData) {
 
 					source.onerror = function() {
 						source.close();
+						activeSource = null;
+						if (cancelBtn) cancelBtn.classList.add('hidden');
 						window.removeEventListener('beforeunload', beforeUnloadHandler);
 					};
+				}
+
+				if (cancelBtn) {
+					cancelBtn.addEventListener('click', function() {
+						if (activeSource) {
+							activeSource.close();
+							activeSource = null;
+						}
+						window.removeEventListener('beforeunload', beforeUnloadHandler);
+						cancelBtn.classList.add('hidden');
+						window.location.reload();
+					});
 				}
 
 				// Auto-start if run is pending with no steps yet

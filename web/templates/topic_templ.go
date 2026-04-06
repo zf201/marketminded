@@ -302,7 +302,7 @@ func TopicListPage(data TopicListData) templ.Component {
 				}
 			}
 			for _, run := range data.Runs {
-				_, err = templBuffer.WriteString("<a href=\"")
+				_, err = templBuffer.WriteString("<div class=\"card hover:border-zinc-700 transition-colors\"><div class=\"p-4 flex items-center justify-between\"><a href=\"")
 				if err != nil {
 					return err
 				}
@@ -311,7 +311,7 @@ func TopicListPage(data TopicListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("\" class=\"card block hover:border-zinc-700 transition-colors\"><div class=\"p-4 flex items-center justify-between\"><div class=\"flex items-center gap-3\"><span class=\"text-sm text-zinc-400\">")
+				_, err = templBuffer.WriteString("\" class=\"flex items-center gap-3 flex-1\"><span class=\"text-sm text-zinc-400\">")
 				if err != nil {
 					return err
 				}
@@ -339,7 +339,7 @@ func TopicListPage(data TopicListData) templ.Component {
 						return err
 					}
 				}
-				_, err = templBuffer.WriteString("</div>")
+				_, err = templBuffer.WriteString("</a><div class=\"flex items-center gap-3\">")
 				if err != nil {
 					return err
 				}
@@ -347,7 +347,53 @@ func TopicListPage(data TopicListData) templ.Component {
 				if err != nil {
 					return err
 				}
-				_, err = templBuffer.WriteString("</div></a>")
+				if run.Status == "running" {
+					_, err = templBuffer.WriteString("<form method=\"POST\" action=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/cancel", data.ProjectID, run.ID))))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\"><button type=\"submit\" class=\"text-zinc-500 hover:text-red-400 transition-colors text-sm\">")
+					if err != nil {
+						return err
+					}
+					var_22 := `Cancel`
+					_, err = templBuffer.WriteString(var_22)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button></form>")
+					if err != nil {
+						return err
+					}
+				}
+				if run.Status == "completed" || run.Status == "failed" {
+					_, err = templBuffer.WriteString("<form method=\"POST\" action=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/delete", data.ProjectID, run.ID))))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\" onsubmit=\"return confirm(&#39;Delete this run?&#39;)\"><button type=\"submit\" class=\"text-zinc-500 hover:text-red-400 transition-colors text-sm\">")
+					if err != nil {
+						return err
+					}
+					var_23 := `Delete`
+					_, err = templBuffer.WriteString(var_23)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</button></form>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</div></div></div>")
 				if err != nil {
 					return err
 				}
@@ -384,12 +430,12 @@ func TopicRunPage(data TopicRunData) templ.Component {
 			defer templ.ReleaseBuffer(templBuffer)
 		}
 		ctx = templ.InitializeContext(ctx)
-		var_22 := templ.GetChildren(ctx)
-		if var_22 == nil {
-			var_22 = templ.NopComponent
+		var_24 := templ.GetChildren(ctx)
+		if var_24 == nil {
+			var_24 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var_23 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+		var_25 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 			templBuffer, templIsBuffer := w.(*bytes.Buffer)
 			if !templIsBuffer {
 				templBuffer = templ.GetBuffer()
@@ -431,17 +477,67 @@ func TopicRunPage(data TopicRunData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_24 := `Topic Generation`
-			_, err = templBuffer.WriteString(var_24)
+			var_26 := `Topic Generation`
+			_, err = templBuffer.WriteString(var_26)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</h1></div><a href=\"")
+			_, err = templBuffer.WriteString("</h1></div><div class=\"flex items-center gap-2\">")
 			if err != nil {
 				return err
 			}
-			var var_25 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/topics", data.ProjectID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_25)))
+			if data.Status == "completed" || data.Status == "failed" {
+				_, err = templBuffer.WriteString("<form method=\"POST\" action=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/delete", data.ProjectID, data.RunID))))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" onsubmit=\"return confirm(&#39;Delete this run?&#39;)\"><button type=\"submit\" class=\"btn btn-danger btn-sm\">")
+				if err != nil {
+					return err
+				}
+				var_27 := `Delete`
+				_, err = templBuffer.WriteString(var_27)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</button></form>")
+				if err != nil {
+					return err
+				}
+			}
+			if data.Status == "running" {
+				_, err = templBuffer.WriteString("<form method=\"POST\" action=\"")
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/topics/%d/cancel", data.ProjectID, data.RunID))))
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("\" onsubmit=\"return confirm(&#39;Cancel this run?&#39;)\"><button type=\"submit\" class=\"btn btn-danger btn-sm\">")
+				if err != nil {
+					return err
+				}
+				var_28 := `Cancel`
+				_, err = templBuffer.WriteString(var_28)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</button></form>")
+				if err != nil {
+					return err
+				}
+			}
+			_, err = templBuffer.WriteString("<a href=\"")
+			if err != nil {
+				return err
+			}
+			var var_29 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/topics", data.ProjectID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_29)))
 			if err != nil {
 				return err
 			}
@@ -449,12 +545,12 @@ func TopicRunPage(data TopicRunData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_26 := `Back`
-			_, err = templBuffer.WriteString(var_26)
+			var_30 := `Back`
+			_, err = templBuffer.WriteString(var_30)
 			if err != nil {
 				return err
 			}
-			_, err = templBuffer.WriteString("</a></div>")
+			_, err = templBuffer.WriteString("</a></div></div>")
 			if err != nil {
 				return err
 			}
@@ -463,8 +559,8 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_27 := `Instructions`
-				_, err = templBuffer.WriteString(var_27)
+				var_31 := `Instructions`
+				_, err = templBuffer.WriteString(var_31)
 				if err != nil {
 					return err
 				}
@@ -472,8 +568,8 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_28 string = data.Instructions
-				_, err = templBuffer.WriteString(templ.EscapeString(var_28))
+				var var_32 string = data.Instructions
+				_, err = templBuffer.WriteString(templ.EscapeString(var_32))
 				if err != nil {
 					return err
 				}
@@ -487,8 +583,8 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_29 := `Approved Topics`
-				_, err = templBuffer.WriteString(var_29)
+				var_33 := `Approved Topics`
+				_, err = templBuffer.WriteString(var_33)
 				if err != nil {
 					return err
 				}
@@ -501,8 +597,8 @@ func TopicRunPage(data TopicRunData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_30 string = topic.Title
-					_, err = templBuffer.WriteString(templ.EscapeString(var_30))
+					var var_34 string = topic.Title
+					_, err = templBuffer.WriteString(templ.EscapeString(var_34))
 					if err != nil {
 						return err
 					}
@@ -510,8 +606,8 @@ func TopicRunPage(data TopicRunData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_31 string = topic.Angle
-					_, err = templBuffer.WriteString(templ.EscapeString(var_31))
+					var var_35 string = topic.Angle
+					_, err = templBuffer.WriteString(templ.EscapeString(var_35))
 					if err != nil {
 						return err
 					}
@@ -592,8 +688,17 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_32 := `Run Topic Generator`
-				_, err = templBuffer.WriteString(var_32)
+				var_36 := `Run Topic Generator`
+				_, err = templBuffer.WriteString(var_36)
+				if err != nil {
+					return err
+				}
+				_, err = templBuffer.WriteString("</button><button class=\"btn btn-danger hidden\" id=\"cancel-topics-btn\">")
+				if err != nil {
+					return err
+				}
+				var_37 := `Cancel`
+				_, err = templBuffer.WriteString(var_37)
 				if err != nil {
 					return err
 				}
@@ -615,8 +720,8 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_33 := `Retry`
-				_, err = templBuffer.WriteString(var_33)
+				var_38 := `Retry`
+				_, err = templBuffer.WriteString(var_38)
 				if err != nil {
 					return err
 				}
@@ -629,7 +734,7 @@ func TopicRunPage(data TopicRunData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_34 := `
+			var_39 := `
 			(function() {
 				var page = document.getElementById('topic-run-page');
 				if (!page) return;
@@ -639,6 +744,7 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				var status = page.dataset.status;
 				var stepsContainer = document.getElementById('topic-steps');
 				var runBtn = document.getElementById('run-topics-btn');
+				var cancelBtn = document.getElementById('cancel-topics-btn');
 
 				// Render all existing step cards from data attributes
 				StepCards.renderAll();
@@ -647,16 +753,20 @@ func TopicRunPage(data TopicRunData) templ.Component {
 					e.preventDefault();
 				};
 
+				var activeSource = null;
+
 				function startStream() {
 					if (runBtn) {
 						runBtn.disabled = true;
 						runBtn.textContent = 'Running...';
 					}
+					if (cancelBtn) cancelBtn.classList.remove('hidden');
 					window.addEventListener('beforeunload', beforeUnloadHandler);
 
 					var currentCard = null;
 					var currentRefs = null;
 					var source = new EventSource('/projects/' + projectID + '/topics/' + runID + '/stream');
+					activeSource = source;
 
 					source.onmessage = function(event) {
 						var d = JSON.parse(event.data);
@@ -691,10 +801,14 @@ func TopicRunPage(data TopicRunData) templ.Component {
 							currentRefs = null;
 						} else if (d.type === 'done') {
 							source.close();
+							activeSource = null;
+							if (cancelBtn) cancelBtn.classList.add('hidden');
 							window.removeEventListener('beforeunload', beforeUnloadHandler);
 							window.location.reload();
 						} else if (d.type === 'error') {
 							source.close();
+							activeSource = null;
+							if (cancelBtn) cancelBtn.classList.add('hidden');
 							window.removeEventListener('beforeunload', beforeUnloadHandler);
 							if (currentRefs) {
 								currentRefs.streamEl.textContent += '\nError: ' + d.error;
@@ -706,8 +820,22 @@ func TopicRunPage(data TopicRunData) templ.Component {
 
 					source.onerror = function() {
 						source.close();
+						activeSource = null;
+						if (cancelBtn) cancelBtn.classList.add('hidden');
 						window.removeEventListener('beforeunload', beforeUnloadHandler);
 					};
+				}
+
+				if (cancelBtn) {
+					cancelBtn.addEventListener('click', function() {
+						if (activeSource) {
+							activeSource.close();
+							activeSource = null;
+						}
+						window.removeEventListener('beforeunload', beforeUnloadHandler);
+						cancelBtn.classList.add('hidden');
+						window.location.reload();
+					});
 				}
 
 				// Auto-start if run is pending with no steps yet
@@ -723,7 +851,7 @@ func TopicRunPage(data TopicRunData) templ.Component {
 				}
 			})();
 		`
-			_, err = templBuffer.WriteString(var_34)
+			_, err = templBuffer.WriteString(var_39)
 			if err != nil {
 				return err
 			}
@@ -741,7 +869,7 @@ func TopicRunPage(data TopicRunData) templ.Component {
 			{Label: data.ProjectName, URL: fmt.Sprintf("/projects/%d", data.ProjectID)},
 			{Label: "Topics", URL: fmt.Sprintf("/projects/%d/topics", data.ProjectID)},
 			{Label: "Run"},
-		}, data.ProjectID, data.ProjectName, "topics").Render(templ.WithChildren(ctx, var_23), templBuffer)
+		}, data.ProjectID, data.ProjectName, "topics").Render(templ.WithChildren(ctx, var_25), templBuffer)
 		if err != nil {
 			return err
 		}
