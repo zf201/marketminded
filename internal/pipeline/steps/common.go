@@ -65,25 +65,12 @@ func RunWithTools(
 				if json.Unmarshal([]byte(event.Args), &args) == nil && args.URL != "" {
 					toolCallsList = append(toolCallsList, pipeline.ToolCallRecord{Type: "fetch", Value: args.URL})
 				}
-			case "web_search":
-				var args struct{ Query string `json:"query"` }
-				if json.Unmarshal([]byte(event.Args), &args) == nil && args.Query != "" {
-					summary = fmt.Sprintf("Searched: %s", args.Query)
-					toolCallsList = append(toolCallsList, pipeline.ToolCallRecord{Type: "search", Value: args.Query})
-				} else {
-					summary = "Searching..."
-				}
 			}
 			evt := map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary}
 			if event.Tool == "fetch_url" {
 				var a struct{ URL string `json:"url"` }
 				if json.Unmarshal([]byte(event.Args), &a) == nil {
 					evt["url"] = a.URL
-				}
-			} else if event.Tool == "web_search" {
-				var a struct{ Query string `json:"query"` }
-				if json.Unmarshal([]byte(event.Args), &a) == nil {
-					evt["query"] = a.Query
 				}
 			}
 			stream.SendEvent(evt)

@@ -11,21 +11,18 @@ import (
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/applog"
-	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
-	"github.com/zanfridau/marketminded/internal/tools"
 )
 
 type AudienceHandler struct {
-	queries     *store.Queries
-	aiClient    *ai.Client
-	braveClient *search.BraveClient
-	model       func() string
+	queries  *store.Queries
+	aiClient *ai.Client
+	model    func() string
 }
 
-func NewAudienceHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *AudienceHandler {
-	return &AudienceHandler{queries: q, aiClient: aiClient, braveClient: braveClient, model: model}
+func NewAudienceHandler(q *store.Queries, aiClient *ai.Client, model func() string) *AudienceHandler {
+	return &AudienceHandler{queries: q, aiClient: aiClient, model: model}
 }
 
 func (h *AudienceHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -237,18 +234,14 @@ For each persona, provide:
 	}
 
 	toolList := []ai.Tool{
-		tools.NewSearchTool(),
+		ai.ServerTool("openrouter:web_search"),
 		submitPersonasTool,
 	}
-
-	searchExec := tools.NewSearchExecutor(h.braveClient)
 
 	var submittedResult string
 
 	executor := func(ctx context.Context, name, args string) (string, error) {
 		switch name {
-		case "web_search":
-			return searchExec(ctx, args)
 		case "submit_personas":
 			submittedResult = args
 			return "Personas submitted successfully.", ai.ErrToolDone
@@ -261,9 +254,7 @@ For each persona, provide:
 		switch event.Type {
 		case "tool_start":
 			summary := ""
-			if event.Tool == "web_search" {
-				summary = tools.SearchSummary(event.Args)
-			} else if event.Tool == "submit_personas" {
+			if event.Tool == "submit_personas" {
 				summary = "Submitting personas..."
 			}
 			stream.SendData(map[string]string{"type": "status", "status": summary})

@@ -11,7 +11,6 @@ import (
 	"github.com/zanfridau/marketminded/internal/pipeline"
 	"github.com/zanfridau/marketminded/internal/pipeline/steps"
 	"github.com/zanfridau/marketminded/internal/prompt"
-	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
 	"github.com/zanfridau/marketminded/web/handlers"
@@ -33,7 +32,6 @@ func main() {
 
 	// Clients
 	aiClient := ai.NewClient(cfg.OpenRouterAPIKey)
-	braveClient := search.NewBraveClient(cfg.BraveAPIKey)
 
 	// Model resolvers: DB setting > env var default
 	contentModel := func() string {
@@ -61,7 +59,7 @@ func main() {
 	}
 
 	// Tool registry and orchestrator
-	toolRegistry := tools.NewRegistry(braveClient)
+	toolRegistry := tools.NewRegistry()
 
 	orchestrator := pipeline.NewOrchestrator(
 		queries,
@@ -78,10 +76,10 @@ func main() {
 	pipelineHandler := handlers.NewPipelineHandler(queries, orchestrator, aiClient, copywritingModel, promptBuilder)
 	contentHandler := handlers.NewContentHandler(queries)
 	settingsHandler := handlers.NewSettingsHandler(queries)
-	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
+	profileHandler := handlers.NewProfileHandler(queries, aiClient, contentModel)
 	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
 	projectSettingsHandler := handlers.NewProjectSettingsHandler(queries)
-	topicHandler := handlers.NewTopicHandler(queries, aiClient, braveClient, toolRegistry, promptBuilder, ideationModel)
+	topicHandler := handlers.NewTopicHandler(queries, aiClient, toolRegistry, promptBuilder, ideationModel)
 
 	mux := http.NewServeMux()
 

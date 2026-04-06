@@ -10,7 +10,6 @@ import (
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/applog"
-	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
@@ -28,19 +27,17 @@ var sectionDescriptions = map[string]string{
 type ProfileHandler struct {
 	queries          *store.Queries
 	aiClient         *ai.Client
-	braveClient      *search.BraveClient
 	model            func() string
 	audienceHandler  *AudienceHandler
 	voiceToneHandler *VoiceToneHandler
 }
 
-func NewProfileHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, model func() string) *ProfileHandler {
+func NewProfileHandler(q *store.Queries, aiClient *ai.Client, model func() string) *ProfileHandler {
 	return &ProfileHandler{
 		queries:          q,
 		aiClient:         aiClient,
-		braveClient:      braveClient,
 		model:            model,
-		audienceHandler:  NewAudienceHandler(q, aiClient, braveClient, model),
+		audienceHandler:  NewAudienceHandler(q, aiClient, model),
 		voiceToneHandler: NewVoiceToneHandler(q, aiClient, model),
 	}
 }

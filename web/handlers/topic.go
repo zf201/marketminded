@@ -11,7 +11,6 @@ import (
 	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/pipeline/steps"
 	"github.com/zanfridau/marketminded/internal/prompt"
-	"github.com/zanfridau/marketminded/internal/search"
 	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
@@ -21,14 +20,13 @@ import (
 type TopicHandler struct {
 	queries       *store.Queries
 	aiClient      *ai.Client
-	braveClient   *search.BraveClient
 	toolRegistry  *tools.Registry
 	promptBuilder *prompt.Builder
 	model         func() string
 }
 
-func NewTopicHandler(q *store.Queries, aiClient *ai.Client, braveClient *search.BraveClient, toolRegistry *tools.Registry, promptBuilder *prompt.Builder, model func() string) *TopicHandler {
-	return &TopicHandler{queries: q, aiClient: aiClient, braveClient: braveClient, toolRegistry: toolRegistry, promptBuilder: promptBuilder, model: model}
+func NewTopicHandler(q *store.Queries, aiClient *ai.Client, toolRegistry *tools.Registry, promptBuilder *prompt.Builder, model func() string) *TopicHandler {
+	return &TopicHandler{queries: q, aiClient: aiClient, toolRegistry: toolRegistry, promptBuilder: promptBuilder, model: model}
 }
 
 func (h *TopicHandler) Handle(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
