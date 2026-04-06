@@ -14,7 +14,6 @@ import (
 	"github.com/zanfridau/marketminded/internal/prompt"
 	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
-	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
@@ -106,12 +105,7 @@ func (h *PipelineHandler) create(w http.ResponseWriter, r *http.Request, project
 		return
 	}
 
-	// Create cornerstone agent steps
-	h.queries.CreatePipelineStep(run.ID, "research", 0)
-	h.queries.CreatePipelineStep(run.ID, "brand_enricher", 1)
-	h.queries.CreatePipelineStep(run.ID, "factcheck", 2)
-	h.queries.CreatePipelineStep(run.ID, "editor", 3)
-	h.queries.CreatePipelineStep(run.ID, "write", 4)
+	h.queries.CreateDefaultPipelineSteps(run.ID)
 
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, run.ID), http.StatusSeeOther)
 }
@@ -279,7 +273,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 
 	systemPrompt := h.promptBuilder.ForPiece(promptFile, profile, run.Brief, frameworkBlock, piece.RejectionReason)
 
-	aiMsgs := []types.Message{
+	aiMsgs := []ai.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: fmt.Sprintf("Write the %s %s now.", piece.Platform, piece.Format)},
 	}
@@ -290,7 +284,12 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 		return
 	}
 
-	sendEvent := func(v any) { sseStream.SendData(v) }
+	var toolList []ai.Tool
+	if ctOk {
+		toolList = append(toolList, ct.Tool)
+	}
+
+	executor, onToolEvent := h.pieceWriteExecutor(pieceID, sseStream)
 	sendChunk := func(chunk string) error {
 		sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
 		return nil
@@ -299,54 +298,21 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 		sseStream.SendData(map[string]string{"type": "thinking", "chunk": chunk})
 		return nil
 	}
-	sendDone := func() { sseStream.SendData(map[string]string{"type": "done"}) }
-	sendError := func(msg string) { sseStream.SendData(map[string]string{"type": "error", "error": msg}) }
-
-	// Write tool — saves content piece body directly
-	var toolList []ai.Tool
-	if ctOk {
-		toolList = append(toolList, ct.Tool)
-	}
-
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if content.IsWriteTool(name) && pieceID > 0 {
-			h.queries.UpdateContentPieceBody(pieceID, "", args)
-			h.queries.SetContentPieceStatus(pieceID, "draft")
-			return "Content saved successfully. The user will review it.", ai.ErrToolDone
-		}
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
-
-	onToolEvent := func(event ai.ToolEvent) {
-		if event.Type == "tool_result" && content.IsWriteTool(event.Tool) && pieceID > 0 {
-			p, err := h.queries.GetContentPiece(pieceID)
-			if err == nil {
-				sendEvent(map[string]any{
-					"type":     "content_written",
-					"platform": p.Platform,
-					"format":   p.Format,
-					"data":     json.RawMessage(p.Body),
-				})
-			}
-			sendDone()
-		}
-	}
 
 	temp := 0.3
 	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
 	if err != nil {
-		sendError(err.Error())
+		sseStream.SendData(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
-	// If the AI used a write tool, the body was already saved by the executor.
-	// If not (fallback), save the raw text response.
+	// Fallback: if the AI didn't use a write tool, save the raw text response.
 	currentPiece, _ := h.queries.GetContentPiece(pieceID)
 	if currentPiece.Status != "draft" {
 		h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
 		h.queries.SetContentPieceStatus(pieceID, "draft")
 	}
-	sendDone()
+	sseStream.SendData(map[string]string{"type": "done"})
 }
 
 func (h *PipelineHandler) approvePiece(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -438,9 +404,9 @@ func (h *PipelineHandler) streamImprove(w http.ResponseWriter, r *http.Request, 
 
 Apply the user's feedback. Return the complete rewritten version by calling the write tool. Do not explain changes, just provide the improved content.`, piece.Platform, piece.Format, piece.Body)
 
-	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
+	aiMsgs := []ai.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
-		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
+		aiMsgs = append(aiMsgs, ai.Message{Role: m.Role, Content: m.Content})
 	}
 
 	sseStream, err := sse.New(w)
@@ -449,62 +415,35 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		return
 	}
 
-	sendEvent := func(v any) { sseStream.SendData(v) }
-	sendChunk := func(chunk string) error {
-		sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
-		return nil
-	}
-	sendDone := func() { sseStream.SendData(map[string]string{"type": "done"}) }
-	sendError := func(msg string) { sseStream.SendData(map[string]string{"type": "error", "error": msg}) }
-
-	// Only the write tool — no fetch/search for improve (minimal context)
 	var toolList []ai.Tool
 	if ctOk {
 		toolList = []ai.Tool{ct.Tool}
 	}
-	executor := func(ctx context.Context, name, args string) (string, error) {
-		if content.IsWriteTool(name) && pieceID > 0 {
-			h.queries.UpdateContentPieceBody(pieceID, "", args)
-			h.queries.SetContentPieceStatus(pieceID, "draft")
-			return "Content updated.", ai.ErrToolDone
-		}
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
 
-	onToolEvent := func(event ai.ToolEvent) {
-		if event.Type == "tool_result" && content.IsWriteTool(event.Tool) && pieceID > 0 {
-			p, err := h.queries.GetContentPiece(pieceID)
-			if err == nil {
-				sendEvent(map[string]any{
-					"type":     "content_written",
-					"platform": p.Platform,
-					"format":   p.Format,
-					"data":     json.RawMessage(p.Body),
-				})
-			}
-			sendDone()
-		}
-	}
+	executor, onToolEvent := h.pieceWriteExecutor(pieceID, sseStream)
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp, "write_content")
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent,
+		func(chunk string) error {
+			sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
+			return nil
+		},
+		func(string) error { return nil }, &temp, "write_content")
 	if err != nil {
-		sendError(err.Error())
+		sseStream.SendData(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
 	// Save assistant message
 	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse, "")
 
-	// If the AI used a write tool, the body was already saved and content_written was sent.
-	// If not (fallback), save the text response and send content_written.
+	// Fallback: if the AI didn't use a write tool, save the text response.
 	currentPiece, _ := h.queries.GetContentPiece(pieceID)
 	if currentPiece.Body == piece.Body && fullResponse != "" {
-		// Body didn't change via tool — save text response as new body
 		h.queries.UpdateContentPieceBody(pieceID, piece.Title, fullResponse)
 		h.queries.SetContentPieceStatus(pieceID, "draft")
 		dataJSON, _ := json.Marshal(fullResponse)
-		sendEvent(map[string]any{
+		sseStream.SendData(map[string]any{
 			"type":     "content_written",
 			"platform": piece.Platform,
 			"format":   piece.Format,
@@ -512,7 +451,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 		})
 	}
 
-	sendDone()
+	sseStream.SendData(map[string]string{"type": "done"})
 }
 
 // --- Proofread ---
@@ -541,7 +480,7 @@ Fix grammar, spelling, and punctuation. Lightly improve sentence flow where it r
 	if proofModel == "" {
 		proofModel = "openai/gpt-4o-mini"
 	}
-	corrected, err := h.aiClient.Complete(r.Context(), proofModel, []types.Message{
+	corrected, err := h.aiClient.Complete(r.Context(), proofModel, []ai.Message{
 		{Role: "user", Content: correctPrompt},
 	})
 	if err != nil {
@@ -564,6 +503,38 @@ func (h *PipelineHandler) saveProofread(w http.ResponseWriter, r *http.Request, 
 	}
 	runID := h.parseRunID(rest)
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
+}
+
+// --- Write tool helpers ---
+
+// pieceWriteExecutor returns the standard executor and onToolEvent for writing content pieces.
+func (h *PipelineHandler) pieceWriteExecutor(pieceID int64, stream *sse.Stream) (
+	executor func(context.Context, string, string) (string, error),
+	onToolEvent func(ai.ToolEvent),
+) {
+	executor = func(ctx context.Context, name, args string) (string, error) {
+		if content.IsWriteTool(name) && pieceID > 0 {
+			h.queries.UpdateContentPieceBody(pieceID, "", args)
+			h.queries.SetContentPieceStatus(pieceID, "draft")
+			return "Content saved successfully.", ai.ErrToolDone
+		}
+		return "", fmt.Errorf("unknown tool: %s", name)
+	}
+	onToolEvent = func(event ai.ToolEvent) {
+		if event.Type == "tool_result" && content.IsWriteTool(event.Tool) && pieceID > 0 {
+			p, err := h.queries.GetContentPiece(pieceID)
+			if err == nil {
+				stream.SendData(map[string]any{
+					"type":     "content_written",
+					"platform": p.Platform,
+					"format":   p.Format,
+					"data":     json.RawMessage(p.Body),
+				})
+			}
+			stream.SendData(map[string]string{"type": "done"})
+		}
+	}
+	return
 }
 
 // --- URL parsing helpers ---

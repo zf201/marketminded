@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 const defaultBraveURL = "https://api.search.brave.com/res/v1/web/search"
@@ -52,7 +50,14 @@ type webResult struct {
 	Description string `json:"description"`
 }
 
-func (c *BraveClient) Search(ctx context.Context, query string, count int) ([]types.SearchResult, error) {
+// SearchResult represents a single web search result.
+type SearchResult struct {
+	Title       string
+	URL         string
+	Description string
+}
+
+func (c *BraveClient) Search(ctx context.Context, query string, count int) ([]SearchResult, error) {
 	params := url.Values{}
 	params.Set("q", query)
 	params.Set("count", strconv.Itoa(count))
@@ -80,9 +85,9 @@ func (c *BraveClient) Search(ctx context.Context, query string, count int) ([]ty
 		return nil, err
 	}
 
-	results := make([]types.SearchResult, len(braveResp.Web.Results))
+	results := make([]SearchResult, len(braveResp.Web.Results))
 	for i, r := range braveResp.Web.Results {
-		results[i] = types.SearchResult{
+		results[i] = SearchResult{
 			Title:       r.Title,
 			URL:         r.URL,
 			Description: r.Description,

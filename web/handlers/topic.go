@@ -398,11 +398,7 @@ func (h *TopicHandler) startPipeline(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 
-	h.queries.CreatePipelineStep(run.ID, "research", 0)
-	h.queries.CreatePipelineStep(run.ID, "brand_enricher", 1)
-	h.queries.CreatePipelineStep(run.ID, "factcheck", 2)
-	h.queries.CreatePipelineStep(run.ID, "editor", 3)
-	h.queries.CreatePipelineStep(run.ID, "write", 4)
+	h.queries.CreateDefaultPipelineSteps(run.ID)
 
 	h.queries.UpdateTopicBacklogStatus(topicID, "used")
 

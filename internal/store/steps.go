@@ -16,6 +16,16 @@ type PipelineStep struct {
 	UpdatedAt     time.Time
 }
 
+// CreateDefaultPipelineSteps creates the standard pipeline steps for a run.
+func (q *Queries) CreateDefaultPipelineSteps(runID int64) error {
+	for i, stepType := range []string{"research", "brand_enricher", "factcheck", "editor", "write"} {
+		if _, err := q.CreatePipelineStep(runID, stepType, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (q *Queries) CreatePipelineStep(pipelineRunID int64, stepType string, sortOrder int) (*PipelineStep, error) {
 	res, err := q.db.Exec(
 		"INSERT INTO pipeline_steps (pipeline_run_id, step_type, sort_order) VALUES (?, ?, ?)",
@@ -65,11 +75,6 @@ func (q *Queries) UpdatePipelineStepStatus(id int64, status string) error {
 
 func (q *Queries) UpdatePipelineStepOutput(id int64, output, thinking string) error {
 	_, err := q.db.Exec("UPDATE pipeline_steps SET output = ?, thinking = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", output, thinking, id)
-	return err
-}
-
-func (q *Queries) UpdatePipelineStepInput(id int64, input string) error {
-	_, err := q.db.Exec("UPDATE pipeline_steps SET input = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", input, id)
 	return err
 }
 

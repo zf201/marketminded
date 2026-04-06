@@ -12,7 +12,6 @@ import (
 	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/pipeline"
 	"github.com/zanfridau/marketminded/internal/tools"
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 // RunWithTools is the common pattern for streaming a step with tool calling.
@@ -34,7 +33,7 @@ func RunWithTools(
 	// Inject tool call budget into system prompt
 	fullPrompt := systemPrompt + fmt.Sprintf("\n\nCRITICAL BUDGET: You have exactly %d tool calls total. Your submit tool counts as 1 call. If you use all %d calls on search/fetch without submitting, the step FAILS COMPLETELY and ALL your work is lost. You MUST call your submit tool before reaching the limit. A safe strategy: use at most %d calls for search/fetch, then IMMEDIATELY submit your results.", maxIter, maxIter, maxIter-2)
 
-	aiMsgs := []types.Message{
+	aiMsgs := []ai.Message{
 		{Role: "system", Content: fullPrompt},
 		{Role: "user", Content: userPrompt},
 	}

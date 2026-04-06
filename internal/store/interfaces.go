@@ -15,7 +15,6 @@ type PipelineStore interface {
 	ListPipelineSteps(pipelineRunID int64) ([]PipelineStep, error)
 	UpdatePipelineStepStatus(id int64, status string) error
 	UpdatePipelineStepOutput(id int64, output, thinking string) error
-	UpdatePipelineStepInput(id int64, input string) error
 	UpdatePipelineStepToolCalls(id int64, toolCalls string) error
 }
 
@@ -114,9 +113,7 @@ type BrainstormStore interface {
 	ListBrainstormChats(projectID int64) ([]BrainstormChat, error)
 	AddBrainstormMessage(chatID int64, role, content, thinking string) (*BrainstormMessage, error)
 	ListBrainstormMessages(chatID int64) ([]BrainstormMessage, error)
-	GetOrCreateProfileChat(projectID int64) (*BrainstormChat, error)
 	GetOrCreateContextChat(projectID, contextItemID int64) (*BrainstormChat, error)
-	GetOrCreateSectionChat(projectID int64, section string) (*BrainstormChat, error)
 	GetOrCreatePieceChat(projectID, pieceID int64) (*BrainstormChat, error)
 }
 

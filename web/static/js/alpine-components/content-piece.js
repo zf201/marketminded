@@ -1,6 +1,5 @@
 // Alpine.js component: contentPiece
-// Consolidates approve/reject/improve/proofread logic from initCornerstonePipeline
-// and openContentModal into a reusable component for content piece actions.
+// Handles approve/reject/improve/proofread logic for content pieces.
 //
 // Config shape:
 // {

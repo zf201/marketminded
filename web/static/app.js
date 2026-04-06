@@ -48,6 +48,37 @@ document.addEventListener('alpine:init', () => {
 
 });
 
+// --- Shared chat helpers ---
+
+function chatScrollToBottom(el) {
+    el.scrollTop = el.scrollHeight;
+}
+
+function chatAppendText(container, text) {
+    var last = container.lastElementChild;
+    if (!last || !last.classList.contains('chat-text')) {
+        last = document.createElement('span');
+        last.className = 'chat-text';
+        container.appendChild(last);
+    }
+    last.textContent += text;
+}
+
+function chatAddMessage(messagesEl, role, text) {
+    var outer = document.createElement('div');
+    outer.className = 'chat-msg chat-msg-' + role;
+    var roleEl = document.createElement('div');
+    roleEl.className = 'chat-msg-role';
+    roleEl.textContent = role;
+    var bodyEl = document.createElement('div');
+    bodyEl.className = 'whitespace-pre-wrap';
+    bodyEl.textContent = text;
+    outer.appendChild(roleEl);
+    outer.appendChild(bodyEl);
+    messagesEl.appendChild(outer);
+    return bodyEl;
+}
+
 function initProfileChat(projectID) {
     var form = document.getElementById('profile-chat-form');
     var input = document.getElementById('profile-chat-input');
@@ -64,22 +95,6 @@ function initProfileChat(projectID) {
             editCard(editBtn.dataset.section);
         }
     });
-
-    function scrollToBottom() {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    function addChatText(container, text) {
-        // Always append to the LAST .chat-text span — or create one if
-        // the last child isn't a text span (e.g. after a tool/proposal block)
-        var last = container.lastElementChild;
-        if (!last || !last.classList.contains('chat-text')) {
-            last = document.createElement('span');
-            last.className = 'chat-text';
-            container.appendChild(last);
-        }
-        last.textContent += text;
-    }
 
     function createToolIndicator(summary) {
         var el = document.createElement('div');
@@ -270,7 +285,7 @@ function initProfileChat(projectID) {
         aBody.className = 'whitespace-pre-wrap';
         assistantDiv.appendChild(aBody);
         messagesEl.appendChild(assistantDiv);
-        scrollToBottom();
+        chatScrollToBottom(messagesEl);
 
         // Stream with typed SSE events
         fetch('/projects/' + projectID + '/profile/message', {
@@ -286,14 +301,14 @@ function initProfileChat(projectID) {
 
                 switch (d.type) {
                 case 'chunk':
-                    addChatText(aBody, d.chunk);
-                    scrollToBottom();
+                    chatAppendText(aBody, d.chunk);
+                    chatScrollToBottom(messagesEl);
                     break;
 
                 case 'tool_start':
                     lastToolIndicator = createToolIndicator(d.summary);
                     aBody.appendChild(lastToolIndicator);
-                    scrollToBottom();
+                    chatScrollToBottom(messagesEl);
                     break;
 
                 case 'tool_result':
@@ -302,18 +317,18 @@ function initProfileChat(projectID) {
                         lastToolIndicator.replaceWith(resultBlock);
                         lastToolIndicator = null;
                     }
-                    scrollToBottom();
+                    chatScrollToBottom(messagesEl);
                     break;
 
                 case 'proposal':
                     var proposalBlock = createProposalBlock(d.section, d.content);
                     aBody.appendChild(proposalBlock);
-                    scrollToBottom();
+                    chatScrollToBottom(messagesEl);
                     break;
 
                 case 'error':
                     source.close();
-                    addChatText(aBody, '\nError: ' + d.error);
+                    chatAppendText(aBody, '\nError: ' + d.error);
                     input.disabled = false;
                     btn.disabled = false;
                     btn.textContent = 'Send';
@@ -324,7 +339,7 @@ function initProfileChat(projectID) {
                     input.disabled = false;
                     btn.disabled = false;
                     btn.textContent = 'Send';
-                    scrollToBottom();
+                    chatScrollToBottom(messagesEl);
                     break;
                 }
             };
@@ -335,14 +350,14 @@ function initProfileChat(projectID) {
                 btn.textContent = 'Send';
             };
         }).catch(function(err) {
-            addChatText(aBody, 'Error: ' + err.message);
+            chatAppendText(aBody, 'Error: ' + err.message);
             input.disabled = false;
             btn.disabled = false;
             btn.textContent = 'Send';
         });
     });
 
-    scrollToBottom();
+    chatScrollToBottom(messagesEl);
 }
 
 // Auto-init pages
@@ -352,21 +367,10 @@ document.addEventListener('DOMContentLoaded', function() {
         initProfilePage(profilePage.dataset.projectId);
     }
 
-    var board = document.getElementById('production-board');
-    if (board) {
-        initProductionBoard(board.dataset.projectId, board.dataset.runId);
-    }
-
     var contextPage = document.getElementById('context-chat-page');
     if (contextPage) {
         initContextChat(contextPage.dataset.projectId, contextPage.dataset.itemId);
     }
-
-    var cornerstonePage = document.getElementById('cornerstone-pipeline-page');
-    if (cornerstonePage && !cornerstonePage.hasAttribute('x-data')) {
-        initCornerstonePipeline(cornerstonePage.dataset.projectId, cornerstonePage.dataset.runId);
-    }
-
 });
 
 function initProfilePage(projectId) {
@@ -1462,33 +1466,6 @@ function initContextChat(projectID, itemID) {
     var messagesEl = document.getElementById('context-messages');
     if (!form) return;
 
-    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
-
-    function addMsg(role, text) {
-        var outer = document.createElement('div');
-        outer.className = 'chat-msg chat-msg-' + role;
-        var roleEl = document.createElement('div');
-        roleEl.className = 'chat-msg-role';
-        roleEl.textContent = role;
-        var bodyEl = document.createElement('div');
-        bodyEl.className = 'whitespace-pre-wrap';
-        bodyEl.textContent = text;
-        outer.appendChild(roleEl);
-        outer.appendChild(bodyEl);
-        messagesEl.appendChild(outer);
-        return bodyEl;
-    }
-
-    function addChatText(container, text) {
-        var last = container.lastElementChild;
-        if (!last || !last.classList.contains('chat-text')) {
-            last = document.createElement('span');
-            last.className = 'chat-text';
-            container.appendChild(last);
-        }
-        last.textContent += text;
-    }
-
     input.addEventListener('keydown', function(e) {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
             e.preventDefault();
@@ -1506,10 +1483,10 @@ function initContextChat(projectID, itemID) {
         btn.textContent = 'Thinking...';
         input.value = '';
 
-        addMsg('user', msg);
-        var aBody = addMsg('assistant', '');
+        chatAddMessage(messagesEl, 'user', msg);
+        var aBody = chatAddMessage(messagesEl, 'assistant', '');
         aBody.textContent = '';
-        scrollToBottom();
+        chatScrollToBottom(messagesEl);
 
         fetch('/projects/' + projectID + '/context/' + itemID + '/message', {
             method: 'POST',
@@ -1519,9 +1496,9 @@ function initContextChat(projectID, itemID) {
             var source = new EventSource('/projects/' + projectID + '/context/' + itemID + '/stream');
             source.onmessage = function(event) {
                 var d = JSON.parse(event.data);
-                if (d.type === 'chunk') { addChatText(aBody, d.chunk); scrollToBottom(); }
-                else if (d.type === 'error') { source.close(); addChatText(aBody, '\nError: ' + d.error); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; }
-                else if (d.type === 'done') { source.close(); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; scrollToBottom(); }
+                if (d.type === 'chunk') { chatAppendText(aBody, d.chunk); chatScrollToBottom(messagesEl); }
+                else if (d.type === 'error') { source.close(); chatAppendText(aBody, '\nError: ' + d.error); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; }
+                else if (d.type === 'done') { source.close(); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; chatScrollToBottom(messagesEl); }
             };
             source.onerror = function() { source.close(); input.disabled = false; btn.disabled = false; btn.textContent = 'Send'; };
         });
@@ -1561,59 +1538,117 @@ function initContextChat(projectID, itemID) {
         form.submit();
     });
 
-    scrollToBottom();
+    chatScrollToBottom(messagesEl);
 }
 
-// --- Unified Content Modal (improve + proofread) ---
+// --- Content Modal (improve + proofread) ---
+
+function createModalShell(title, onCancel) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal modal-open';
+    var box = document.createElement('div');
+    box.className = 'modal-box max-w-2xl flex flex-col max-h-[85vh]';
+    var header = document.createElement('div');
+    header.className = 'flex justify-between items-center mb-4';
+    var titleEl = document.createElement('h3');
+    titleEl.textContent = title;
+    header.appendChild(titleEl);
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-ghost btn-sm';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = function() { onCancel(); overlay.remove(); };
+    header.appendChild(cancelBtn);
+    box.appendChild(header);
+    overlay.appendChild(box);
+    return { overlay: overlay, box: box, titleEl: titleEl, cancelBtn: cancelBtn };
+}
+
+function createContentPreview(box, platform, format, basePath, pieceId, mode, cancelBtn, onTryAgain) {
+    var previewArea = document.createElement('div');
+    previewArea.className = 'overflow-y-auto flex-1 bg-zinc-800/50 p-3 rounded-lg mb-3 min-h-36 max-h-96 hidden';
+    box.appendChild(previewArea);
+    var actions = document.createElement('div');
+    actions.className = 'hidden gap-2';
+    box.appendChild(actions);
+    var pendingContent = '';
+
+    function show(contentJSON, titleEl, doneTitle) {
+        previewArea.classList.remove('hidden');
+        previewArea.textContent = '';
+        renderContentBody(previewArea, platform, format, contentJSON);
+        pendingContent = contentJSON;
+        titleEl.textContent = doneTitle;
+        actions.textContent = '';
+        actions.classList.remove('hidden'); actions.classList.add('flex');
+
+        var acceptBtn = document.createElement('button');
+        acceptBtn.className = 'btn btn-success btn-sm';
+        acceptBtn.textContent = 'Accept';
+        acceptBtn.onclick = function() {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = basePath + '/piece/' + pieceId + '/save-proofread';
+            var inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = 'corrected'; inp.value = pendingContent;
+            form.appendChild(inp);
+            document.body.appendChild(form);
+            form.submit();
+        };
+        actions.appendChild(acceptBtn);
+
+        var rejectBtn = document.createElement('button');
+        rejectBtn.className = 'btn btn-ghost btn-sm';
+        rejectBtn.textContent = mode === 'improve' ? 'Try Again' : 'Reject';
+        rejectBtn.onclick = function() {
+            if (onTryAgain) {
+                previewArea.classList.add('hidden');
+                actions.classList.add('hidden');
+                cancelBtn.classList.remove('hidden');
+                onTryAgain();
+            } else {
+                box.closest('.modal').remove();
+            }
+        };
+        actions.appendChild(rejectBtn);
+        cancelBtn.classList.add('hidden');
+    }
+
+    return { previewArea: previewArea, actions: actions, show: show };
+}
 
 function openContentModal(opts) {
-    var mode = opts.mode; // 'improve' or 'proofread'
+    var mode = opts.mode;
     var pieceId = opts.pieceId;
     var platform = opts.platform;
     var format = opts.format;
     var basePath = opts.basePath;
     var controller = new AbortController();
 
-    // Build modal DOM
-    var overlay = document.createElement('div');
-    overlay.className = 'modal modal-open';
-
-    var modal = document.createElement('div');
-    modal.className = 'modal-box max-w-2xl flex flex-col max-h-[85vh]';
-
-    var headerRow = document.createElement('div');
-    headerRow.className = 'flex justify-between items-center mb-4';
-    var titleEl = document.createElement('h3');
-    titleEl.textContent = mode === 'proofread' ? 'Proofreading...' : 'Improve Content';
-    headerRow.appendChild(titleEl);
-    var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-ghost btn-sm';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.onclick = function() {
-        controller.abort();
-        overlay.remove();
-    };
-    headerRow.appendChild(cancelBtn);
-    modal.appendChild(headerRow);
-
-    // Chat area (improve only)
-    var chatArea = document.createElement('div');
-    chatArea.className = 'flex flex-col flex-1 overflow-hidden';
-
-    var messages = document.createElement('div');
-    messages.className = 'overflow-y-auto flex-1 mb-3 max-h-52';
-    chatArea.appendChild(messages);
+    var shell = createModalShell(
+        mode === 'proofread' ? 'Proofreading...' : 'Improve Content',
+        function() { controller.abort(); }
+    );
 
     if (mode === 'improve') {
+        // Chat area
+        var messages = document.createElement('div');
+        messages.className = 'overflow-y-auto flex-1 mb-3 max-h-52';
+        shell.box.appendChild(messages);
+
         var textarea = document.createElement('textarea');
         textarea.className = 'textarea textarea-bordered w-full text-sm mb-2';
         textarea.placeholder = 'What should be improved?';
-        chatArea.appendChild(textarea);
+        shell.box.appendChild(textarea);
+
         var sendBtn = document.createElement('button');
         sendBtn.className = 'btn btn-primary btn-sm';
         sendBtn.textContent = 'Send';
-        chatArea.appendChild(sendBtn);
-        modal.appendChild(chatArea);
+        shell.box.appendChild(sendBtn);
+
+        var preview = createContentPreview(shell.box, platform, format, basePath, pieceId, mode, shell.cancelBtn, function() {
+            shell.titleEl.textContent = 'Improve Content';
+            textarea.focus();
+        });
 
         textarea.addEventListener('keydown', function(e) {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); sendBtn.click(); }
@@ -1626,10 +1661,8 @@ function openContentModal(opts) {
             sendBtn.disabled = true;
             sendBtn.textContent = 'Rewriting...';
 
-            // Show user message
             var userDiv = document.createElement('div');
-            userDiv.className = 'chat-msg chat-msg-user';
-            userDiv.className += ' text-sm';
+            userDiv.className = 'chat-msg chat-msg-user text-sm';
             var roleDiv = document.createElement('div');
             roleDiv.className = 'chat-msg-role';
             roleDiv.textContent = 'you';
@@ -1640,11 +1673,9 @@ function openContentModal(opts) {
             messages.appendChild(userDiv);
             messages.scrollTop = messages.scrollHeight;
 
-            // Hide preview if showing from previous round
-            previewArea.classList.add('hidden');
-            actions.classList.add('hidden');
+            preview.previewArea.classList.add('hidden');
+            preview.actions.classList.add('hidden');
 
-            // Post message then stream rewrite
             fetch(basePath + '/piece/' + pieceId + '/improve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1657,18 +1688,15 @@ function openContentModal(opts) {
                     if (d.type === 'chunk') {
                         accumulated += d.chunk;
                     } else if (d.type === 'content_written') {
-                        // AI used write tool — show preview
                         source.close();
-                        showPreview(JSON.stringify(d.data));
+                        preview.show(JSON.stringify(d.data), shell.titleEl, 'New Version Ready');
                         sendBtn.disabled = false;
                         sendBtn.textContent = 'Send';
                     } else if (d.type === 'done') {
                         source.close();
-                        // If we got text but no write tool, show it as chat
-                        if (accumulated && previewArea.classList.contains('hidden')) {
+                        if (accumulated && preview.previewArea.classList.contains('hidden')) {
                             var assistDiv = document.createElement('div');
-                            assistDiv.className = 'chat-msg chat-msg-assistant';
-                            assistDiv.className += ' text-sm';
+                            assistDiv.className = 'chat-msg chat-msg-assistant text-sm';
                             var aRole = document.createElement('div');
                             aRole.className = 'chat-msg-role';
                             aRole.textContent = 'assistant';
@@ -1699,658 +1727,36 @@ function openContentModal(opts) {
                 };
             });
         });
-    }
+    } else {
+        // Proofread mode — spinner + one-shot fetch
+        var spinnerEl = document.createElement('div');
+        spinnerEl.className = 'text-center p-8';
+        var spinnerIcon = document.createElement('span');
+        spinnerIcon.className = 'loading loading-spinner loading-lg';
+        spinnerEl.appendChild(spinnerIcon);
+        var spinnerText = document.createElement('p');
+        spinnerText.className = 'opacity-60 mt-4';
+        spinnerText.textContent = 'Proofreading content...';
+        spinnerEl.appendChild(spinnerText);
+        shell.box.appendChild(spinnerEl);
 
-    // Loading spinner (proofread)
-    var spinnerEl = document.createElement('div');
-    spinnerEl.className = 'text-center p-8 hidden';
-    var spinnerIcon = document.createElement('span');
-    spinnerIcon.className = 'loading loading-spinner loading-lg';
-    spinnerEl.appendChild(spinnerIcon);
-    var spinnerText = document.createElement('p');
-    spinnerText.className = 'opacity-60 mt-4';
-    spinnerText.textContent = 'Proofreading content...';
-    spinnerEl.appendChild(spinnerText);
-    modal.appendChild(spinnerEl);
+        var preview = createContentPreview(shell.box, platform, format, basePath, pieceId, mode, shell.cancelBtn);
 
-    // Preview area — uses renderContentBody
-    var previewArea = document.createElement('div');
-    previewArea.className = 'overflow-y-auto flex-1 bg-zinc-800/50 p-3 rounded-lg mb-3 min-h-36 max-h-96 hidden';
-    modal.appendChild(previewArea);
-
-    // Actions
-    var actions = document.createElement('div');
-    actions.className = 'hidden gap-2';
-    modal.appendChild(actions);
-
-    // Cancel button is in the header row
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    var pendingContent = '';
-
-    function showPreview(contentJSON) {
-        previewArea.classList.remove('hidden');
-        previewArea.textContent = '';
-        renderContentBody(previewArea, platform, format, contentJSON);
-        pendingContent = contentJSON;
-        titleEl.textContent = mode === 'proofread' ? 'Proofread Complete' : 'New Version Ready';
-
-        actions.textContent = '';
-        actions.classList.remove('hidden'); actions.classList.add('flex');
-
-        var acceptBtn = document.createElement('button');
-        acceptBtn.className = 'btn btn-success btn-sm';
-        acceptBtn.textContent = 'Accept';
-        acceptBtn.onclick = function() {
-            var form = document.createElement('form');
-            form.method = 'POST';
-            form.action = basePath + '/piece/' + pieceId + '/save-proofread';
-            var inp = document.createElement('input');
-            inp.type = 'hidden'; inp.name = 'corrected'; inp.value = pendingContent;
-            form.appendChild(inp);
-            document.body.appendChild(form);
-            form.submit();
-        };
-        actions.appendChild(acceptBtn);
-
-        var rejectBtn = document.createElement('button');
-        rejectBtn.className = 'btn btn-ghost btn-sm';
-        rejectBtn.textContent = mode === 'improve' ? 'Try Again' : 'Reject';
-        rejectBtn.onclick = function() {
-            if (mode === 'improve') {
-                // Back to chat
-                previewArea.classList.add('hidden');
-                actions.classList.add('hidden');
-                titleEl.textContent = 'Improve Content';
-                textarea.focus();
-            } else {
-                overlay.remove();
-            }
-        };
-        actions.appendChild(rejectBtn);
-
-        cancelBtn.classList.add('hidden');
-    }
-
-    // Start proofread immediately
-    if (mode === 'proofread') {
-        spinnerEl.classList.remove('hidden');
         fetch(basePath + '/piece/' + pieceId + '/proofread', { signal: controller.signal })
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 spinnerEl.classList.add('hidden');
-                showPreview(data.corrected);
+                preview.show(data.corrected, shell.titleEl, 'Proofread Complete');
             })
             .catch(function(err) {
                 spinnerEl.classList.add('hidden');
                 if (err.name !== 'AbortError') {
-                    previewArea.classList.remove('hidden');
-                    previewArea.textContent = 'Error: ' + err.message;
+                    preview.previewArea.classList.remove('hidden');
+                    preview.previewArea.textContent = 'Error: ' + err.message;
                 }
-                cancelBtn.textContent = 'Close';
+                shell.cancelBtn.textContent = 'Close';
             });
     }
-}
 
-// --- Cornerstone pipeline auto-chaining ---
-
-function initCornerstonePipeline(projectID, runID) {
-    var basePath = '/projects/' + projectID + '/pipeline/' + runID;
-    var runBtn = document.getElementById('run-pipeline-btn');
-    var cancelBtn = document.getElementById('cancel-pipeline-btn');
-    var activeSource = null;
-    var cancelled = false;
-
-    function setBadge(card, text, cls) {
-        var badges = card.querySelectorAll('.badge');
-        var badge = badges[badges.length - 1];
-        if (!badge) return;
-        badge.textContent = text;
-        badge.className = 'badge ' + (cls || '');
-    }
-
-    function syncProgressCircle(index, status) {
-        var indicator = document.querySelector('[data-progress-index="' + index + '"]');
-        if (!indicator) return;
-        indicator.dataset.progressStatus = status;
-
-        var circle = indicator.querySelector('.step-progress-circle');
-        var icon = indicator.querySelector('.step-progress-icon');
-        if (!circle) return;
-
-        // Reset classes
-        circle.className = 'step-progress-circle w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border';
-        if (status === 'completed') {
-            circle.classList.add('bg-green-500/10', 'border-green-500/30');
-            icon.textContent = '\u2713';
-        } else if (status === 'running') {
-            circle.classList.add('bg-yellow-500/10', 'border-yellow-500/30', 'animate-pulse');
-            icon.textContent = '\u25CF';
-        } else if (status === 'failed') {
-            circle.classList.add('bg-red-500/10', 'border-red-500/30');
-            icon.textContent = '\u2717';
-        } else {
-            circle.classList.add('bg-zinc-800', 'border-zinc-700');
-            icon.textContent = '';
-        }
-
-        // Update connector line after this step
-        var line = document.querySelector('[data-line-after="' + index + '"]');
-        if (line) {
-            line.className = 'step-progress-line flex-1 h-px mx-1 ' + (status === 'completed' ? 'bg-green-500/30' : 'bg-zinc-800');
-        }
-
-        // Update text color
-        indicator.className = indicator.className.replace(/text-\S+/g, '');
-        if (status === 'completed') {
-            indicator.classList.add('text-green-400');
-        } else if (status === 'running') {
-            indicator.classList.add('text-yellow-400');
-        } else if (status === 'failed') {
-            indicator.classList.add('text-red-400');
-        } else {
-            indicator.classList.add('text-zinc-600');
-        }
-    }
-
-    function addToolPill(card, type, value) {
-        var pillsEl = card.querySelector('.step-tool-pills');
-        if (!pillsEl) return;
-        if (type === 'search') {
-            var pill = document.createElement('span');
-            pill.className = 'badge badge-sm badge-secondary gap-1';
-            pill.textContent = '\uD83D\uDD0D ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value);
-            pill.title = value;
-            pillsEl.appendChild(pill);
-        } else if (type === 'fetch') {
-            var a = document.createElement('a');
-            a.className = 'badge badge-sm badge-accent gap-1';
-            a.href = value;
-            a.target = '_blank';
-            var host = value;
-            try { host = new URL(value).hostname; } catch(e) { host = value.substring(0, 25); }
-            a.textContent = '\uD83C\uDF10 ' + host;
-            a.title = value;
-            pillsEl.appendChild(a);
-        }
-    }
-
-    function streamStep(stepID, card, stepIndex, onDone, onError) {
-        var streamEl = card.querySelector('.step-stream');
-        var outputEl = card.querySelector('.step-output');
-        var tickerEl = card.querySelector('.step-thinking-ticker');
-
-        if (streamEl) streamEl.textContent = '';
-        if (outputEl) outputEl.textContent = '';
-        if (tickerEl) tickerEl.textContent = '';
-
-        var url = basePath + '/stream/step/' + stepID;
-        var source = new EventSource(url);
-
-        source.onmessage = function(event) {
-            var d = JSON.parse(event.data);
-
-            if (d.type === 'thinking') {
-                // Thinking ticker — show last ~3 lines, auto-scrolls
-                if (tickerEl) {
-                    tickerEl.textContent += d.chunk;
-                    tickerEl.scrollTop = tickerEl.scrollHeight;
-                }
-            } else if (d.type === 'chunk') {
-                // Streamed output — visible while running
-                if (streamEl) {
-                    streamEl.textContent += d.chunk;
-                    streamEl.scrollTop = streamEl.scrollHeight;
-                }
-            } else if (d.type === 'tool_start') {
-                if (d.tool === 'web_search' && d.query) {
-                    addToolPill(card, 'search', d.query);
-                } else if (d.tool === 'fetch_url' && d.url) {
-                    addToolPill(card, 'fetch', d.url);
-                }
-            } else if (d.type === 'content_written') {
-                if (outputEl) renderContentBody(outputEl, d.platform, d.format, JSON.stringify(d.data));
-            } else if (d.type === 'done') {
-                source.close();
-                if (tickerEl) tickerEl.classList.add('done');
-                setBadge(card, 'completed', 'badge-completed');
-                card.dataset.status = 'completed';
-                syncProgressCircle(stepIndex, 'completed');
-                if (onDone) onDone();
-            } else if (d.type === 'error') {
-                source.close();
-                if (tickerEl) tickerEl.classList.add('done');
-                if (streamEl) streamEl.textContent += '\nError: ' + d.error;
-                setBadge(card, 'failed', 'badge-failed');
-                card.dataset.status = 'failed';
-                syncProgressCircle(stepIndex, 'failed');
-                if (onError) onError(d.error);
-            }
-        };
-
-        source.onerror = function() {
-            source.close();
-            setBadge(card, 'failed', 'badge-failed');
-            card.dataset.status = 'failed';
-            syncProgressCircle(stepIndex, 'failed');
-            if (onError) onError('Connection lost');
-        };
-
-        activeSource = source;
-        return source;
-    }
-
-    function runNextStep(cards, index) {
-        if (cancelled) return;
-        if (index >= cards.length) {
-            // All done — reload to show the cornerstone piece
-            window.location.reload();
-            return;
-        }
-
-        var card = cards[index];
-        var status = card.dataset.status;
-
-        if (status === 'completed') {
-            runNextStep(cards, index + 1);
-            return;
-        }
-
-        if (status !== 'pending' && status !== 'failed') {
-            // Skip non-runnable statuses
-            runNextStep(cards, index + 1);
-            return;
-        }
-
-        var stepID = card.dataset.stepId;
-        setBadge(card, 'running', 'badge-running');
-        card.dataset.status = 'running';
-        syncProgressCircle(index, 'running');
-
-        streamStep(stepID, card, index, function() {
-            runNextStep(cards, index + 1);
-        }, function() {
-            // On error, stop chaining
-        });
-    }
-
-    if (runBtn) {
-        runBtn.addEventListener('click', function() {
-            runBtn.disabled = true;
-            runBtn.textContent = 'Running...';
-            if (cancelBtn) cancelBtn.classList.remove('hidden');
-            var abandonForm = document.getElementById('abandon-form');
-            if (abandonForm) abandonForm.classList.add('hidden');
-
-            var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
-            console.log('[pipeline] Run Pipeline clicked, found', cards.length, 'step cards');
-            cards.forEach(function(c) { console.log('[pipeline] card:', c.dataset.stepId, c.dataset.status); });
-            runNextStep(cards, 0);
-        });
-    }
-
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', function() {
-            cancelled = true;
-            if (activeSource) {
-                activeSource.close();
-                activeSource = null;
-            }
-            // Mark current running step as failed in UI
-            var cards = document.querySelectorAll('.step-card[data-step-id]');
-            cards.forEach(function(card, idx) {
-                if (card.dataset.status === 'running') {
-                    setBadge(card, 'cancelled', 'badge-failed');
-                    card.dataset.status = 'failed';
-                    syncProgressCircle(idx, 'failed');
-                }
-            });
-            cancelBtn.classList.add('hidden');
-            var abandonForm = document.getElementById('abandon-form');
-            if (abandonForm) abandonForm.classList.remove('hidden');
-            if (runBtn) {
-                runBtn.disabled = false;
-                runBtn.textContent = 'Run Pipeline';
-            }
-        });
-    }
-
-    // Retry buttons
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.step-retry-btn');
-        if (!btn) return;
-
-        var stepIndex = parseInt(btn.dataset.stepIndex) || 0;
-        var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
-        if (stepIndex < cards.length) {
-            var card = cards[stepIndex];
-            var stepID = card.dataset.stepId;
-            setBadge(card, 'running', 'badge-running');
-            card.dataset.status = 'running';
-            syncProgressCircle(stepIndex, 'running');
-            btn.disabled = true;
-
-            streamStep(stepID, card, stepIndex, function() {
-                // After retry success, continue with next steps
-                runNextStep(cards, stepIndex + 1);
-            }, function() {
-                btn.disabled = false;
-            });
-        }
-    });
-
-    // Approve button
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.piece-approve-btn');
-        if (!btn) return;
-
-        var pieceId = btn.dataset.pieceId;
-        if (!pieceId) return;
-
-        btn.disabled = true;
-        btn.textContent = 'Approving...';
-
-        fetch(basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
-            .then(function() { window.location.reload(); })
-            .catch(function() { window.location.reload(); });
-    });
-
-    // Reject button
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.piece-reject-btn');
-        if (!btn) return;
-        var pieceId = btn.dataset.pieceId;
-        if (!pieceId) return;
-        var reason = prompt('Why should this be rejected?');
-        if (reason === null) return;
-        fetch(basePath + '/piece/' + pieceId + '/reject', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'reason=' + encodeURIComponent(reason)
-        }).then(function() { window.location.reload(); });
-    });
-
-    // Render existing content bodies (cornerstone piece after page load)
-    document.querySelectorAll('.board-card-body').forEach(function(el) {
-        var text = el.textContent.trim();
-        if (text && el.dataset.platform) {
-            renderContentBody(el, el.dataset.platform, el.dataset.format, text);
-        }
-    });
-
-    // Render tool pills from data attribute on page load
-    document.querySelectorAll('.step-card[data-tool-calls]').forEach(function(card) {
-        var raw = card.dataset.toolCalls;
-        if (!raw) return;
-        try {
-            var calls = JSON.parse(raw);
-            calls.forEach(function(tc) {
-                addToolPill(card, tc.type, tc.value);
-            });
-        } catch(e) {}
-    });
-
-    // Render step outputs nicely and collapse completed non-last steps
-    var stepCards = document.querySelectorAll('.step-card[data-step-id]');
-    var allCompleted = true;
-    stepCards.forEach(function(card) {
-        if (card.dataset.status !== 'completed') allCompleted = false;
-    });
-
-    stepCards.forEach(function(card, idx) {
-        var stepType = card.querySelector('.board-card-header strong');
-        var outputEl = card.querySelector('.step-output');
-        if (!outputEl) return;
-        var raw = outputEl.textContent.trim();
-        if (!raw) return;
-        var typeName = stepType ? stepType.textContent.trim() : '';
-
-        // Writer output is shown in the piece card below — hide the raw JSON
-        if (typeName === 'Writer') {
-            outputEl.style.display = 'none';
-        } else {
-            try {
-                var data = JSON.parse(raw);
-                renderStepOutput(outputEl, typeName, data);
-            } catch (e) {
-                // Leave as text
-            }
-        }
-
-        // Collapse completed steps except the last one when all are done
-        if (allCompleted && card.dataset.status === 'completed' && idx < stepCards.length - 1) {
-            var output = card.querySelector('.step-output');
-            var pills = card.querySelector('.step-tool-pills');
-            if (output) output.style.display = 'none';
-            if (pills) pills.style.display = 'none';
-            card.dataset.collapsed = 'true';
-
-            var headerDiv = card.querySelector('.board-card-header');
-            var toggleBtn = document.createElement('button');
-            toggleBtn.className = 'btn btn-secondary btn-xs';
-            toggleBtn.textContent = '+';
-            toggleBtn.title = 'Expand';
-            headerDiv.insertBefore(toggleBtn, headerDiv.firstChild);
-
-            toggleBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var o = card.querySelector('.step-output');
-                var p = card.querySelector('.step-tool-pills');
-                var isCollapsed = card.dataset.collapsed === 'true';
-                if (o) o.style.display = isCollapsed ? '' : 'none';
-                if (p) p.style.display = isCollapsed ? '' : 'none';
-                card.dataset.collapsed = isCollapsed ? 'false' : 'true';
-                toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
-                toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
-            });
-        }
-    });
-
-    // Proofread buttons
-    document.querySelectorAll('.proofread-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var pieceId = btn.dataset.pieceId;
-            var bodyEl = document.getElementById('piece-body-' + pieceId);
-            openContentModal({
-                mode: 'proofread',
-                pieceId: pieceId,
-                platform: bodyEl ? bodyEl.dataset.platform : '',
-                format: bodyEl ? bodyEl.dataset.format : '',
-                basePath: basePath
-            });
-        });
-    });
-
-    // Improve buttons
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.piece-improve-btn');
-        if (!btn) return;
-        var pieceId = btn.dataset.pieceId;
-        if (!pieceId) return;
-        var bodyEl = document.getElementById('piece-body-' + pieceId);
-        openContentModal({
-            mode: 'improve',
-            pieceId: pieceId,
-            platform: bodyEl ? bodyEl.dataset.platform : '',
-            format: bodyEl ? bodyEl.dataset.format : '',
-            basePath: basePath
-        });
-    });
-}
-
-// --- Production board ---
-
-function initProductionBoard(projectID, runID) {
-    var basePath = '/projects/' + projectID + '/pipeline/' + runID;
-    var board = document.getElementById('production-board');
-    var nextPieceID = parseInt(board.dataset.nextPieceId) || 0;
-
-    // Helper: connect SSE stream to an element
-    function streamToElement(url, el, onDone) {
-        el.textContent = '';
-        var thinkingEl = null;
-        var thinkingPre = null;
-        var contentStarted = false;
-        var source = new EventSource(url);
-        source.onmessage = function(event) {
-            var d = JSON.parse(event.data);
-            if (d.type === 'thinking') {
-                if (!thinkingEl) {
-                    thinkingEl = document.createElement('details');
-                    thinkingEl.className = 'thinking-details';
-                    thinkingEl.setAttribute('open', '');
-                    var summary = document.createElement('summary');
-                    summary.textContent = 'Thinking...';
-                    thinkingEl.appendChild(summary);
-                    thinkingPre = document.createElement('pre');
-                    thinkingEl.appendChild(thinkingPre);
-                    el.parentNode.insertBefore(thinkingEl, el);
-                }
-                thinkingPre.textContent += d.chunk;
-                thinkingPre.scrollTop = thinkingPre.scrollHeight;
-            } else if (d.type === 'chunk') {
-                if (!contentStarted && thinkingEl) {
-                    thinkingEl.removeAttribute('open');
-                    thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
-                    contentStarted = true;
-                }
-                el.textContent += d.chunk;
-                el.scrollTop = el.scrollHeight;
-            } else if (d.type === 'tool_start') {
-                if (!contentStarted && thinkingEl) {
-                    thinkingEl.removeAttribute('open');
-                    thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
-                    contentStarted = true;
-                }
-                el.textContent += '\n[' + d.summary + '...]\n';
-            } else if (d.type === 'content_written') {
-                if (!contentStarted && thinkingEl) {
-                    thinkingEl.removeAttribute('open');
-                    thinkingEl.querySelector('summary').textContent = 'Thinking (done)';
-                    contentStarted = true;
-                }
-                renderContentBody(el, d.platform, d.format, JSON.stringify(d.data));
-            } else if (d.type === 'done') {
-                source.close();
-                if (onDone) onDone();
-            } else if (d.type === 'error') {
-                source.close();
-                el.textContent += '\nError: ' + d.error;
-            }
-        };
-        source.onerror = function() {
-            source.close();
-        };
-        return source;
-    }
-
-    // Plan generation
-    var genPlanBtn = document.getElementById('generate-plan-btn');
-    if (genPlanBtn) {
-        genPlanBtn.addEventListener('click', function() {
-            genPlanBtn.disabled = true;
-            genPlanBtn.textContent = 'Generating...';
-            var planBody = document.getElementById('plan-body');
-            streamToElement(basePath + '/stream/plan', planBody, function() {
-                window.location.reload();
-            });
-        });
-    }
-
-    // Piece generation
-    function streamPiece(pieceId) {
-        var bodyEl = document.getElementById('piece-body-' + pieceId);
-        var card = bodyEl.closest('.board-card');
-        card.className = card.className.replace(/board-card-(pending|rejected)/g, '') + ' board-card-generating';
-        bodyEl.classList.remove('collapsed');
-
-        streamToElement(basePath + '/stream/piece/' + pieceId, bodyEl, function() {
-            window.location.reload();
-        });
-    }
-
-    // Event delegation for piece buttons
-    board.addEventListener('click', function(e) {
-        var btn = e.target;
-
-        // Generate button
-        if (btn.classList.contains('piece-generate-btn')) {
-            var pieceId = btn.dataset.pieceId;
-            btn.disabled = true;
-            btn.textContent = 'Generating...';
-            streamPiece(pieceId);
-            return;
-        }
-
-        // Approve button — POST then reload
-        if (btn.classList.contains('piece-approve-btn')) {
-            var pieceId = btn.dataset.pieceId;
-            btn.disabled = true;
-            btn.textContent = 'Approving...';
-            fetch(basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
-                .then(function() { window.location.reload(); })
-                .catch(function() { window.location.reload(); });
-            return;
-        }
-
-        // Reject button
-        if (btn.classList.contains('piece-reject-btn')) {
-            var pieceId = btn.dataset.pieceId;
-            var reason = prompt('Why should this be rejected?');
-            if (reason === null) return;
-            fetch(basePath + '/piece/' + pieceId + '/reject', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'reason=' + encodeURIComponent(reason)
-            }).then(function() {
-                window.location.reload();
-            });
-            return;
-        }
-
-        // Improve button — open content modal in improve mode
-        if (btn.classList.contains('piece-improve-btn')) {
-            var pieceId = btn.dataset.pieceId;
-            var bodyEl = document.getElementById('piece-body-' + pieceId);
-            openContentModal({
-                mode: 'improve',
-                pieceId: pieceId,
-                platform: bodyEl ? bodyEl.dataset.platform : '',
-                format: bodyEl ? bodyEl.dataset.format : '',
-                basePath: basePath
-            });
-            return;
-        }
-    });
-
-    // Render plan card as human-readable
-    var planBody = document.getElementById('plan-body');
-    if (planBody) {
-        renderPlan(planBody);
-    }
-
-    // Render existing content bodies with type-specific renderers
-    document.querySelectorAll('.board-card-body').forEach(function(el) {
-        var text = el.textContent.trim();
-        if (text && el.dataset.platform) {
-            renderContentBody(el, el.dataset.platform, el.dataset.format, text);
-        }
-    });
-
-    // Proofread buttons — open content modal in proofread mode
-    document.querySelectorAll('.proofread-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var pieceId = btn.dataset.pieceId;
-            var bodyEl = document.getElementById('piece-body-' + pieceId);
-            openContentModal({
-                mode: 'proofread',
-                pieceId: pieceId,
-                platform: bodyEl ? bodyEl.dataset.platform : '',
-                format: bodyEl ? bodyEl.dataset.format : '',
-                basePath: basePath
-            });
-        });
-    });
+    document.body.appendChild(shell.overlay);
 }

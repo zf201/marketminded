@@ -12,9 +12,9 @@ import (
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/search"
+	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 type AudienceHandler struct {
@@ -122,24 +122,13 @@ func (h *AudienceHandler) saveContext(w http.ResponseWriter, r *http.Request, pr
 func (h *AudienceHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64) {
 	project, _ := h.queries.GetProject(projectID)
 
-	// SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := sse.New(w)
+	if err != nil {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	sendEvent := func(v any) {
-		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
-	}
-
-	sendEvent(map[string]string{"type": "status", "status": "Gathering context..."})
+	stream.SendData(map[string]string{"type": "status", "status": "Gathering context..."})
 
 	// Gather product & positioning content
 	var productContent string
@@ -163,7 +152,7 @@ func (h *AudienceHandler) streamGenerate(w http.ResponseWriter, r *http.Request,
 	// Existing personas
 	existingPersonas, _ := h.queries.ListAudiencePersonas(projectID)
 
-	sendEvent(map[string]string{"type": "status", "status": "Generating personas..."})
+	stream.SendData(map[string]string{"type": "status", "status": "Generating personas..."})
 
 	// Build system prompt
 	var systemPrompt strings.Builder
@@ -277,7 +266,7 @@ For each persona, provide:
 			} else if event.Tool == "submit_personas" {
 				summary = "Submitting personas..."
 			}
-			sendEvent(map[string]string{"type": "status", "status": summary})
+			stream.SendData(map[string]string{"type": "status", "status": summary})
 		case "tool_result":
 			// no-op for tool results
 		}
@@ -294,7 +283,7 @@ For each persona, provide:
 	maxIter := 15
 	systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call submit_personas when ready. Do NOT keep searching endlessly.", maxIter))
 
-	aiMsgs := []types.Message{
+	aiMsgs := []ai.Message{
 		{Role: "system", Content: systemPrompt.String()},
 		{Role: "user", Content: "Research and build audience personas for this business. Use web_search to gather real market insights, then submit your personas."},
 	}
@@ -304,23 +293,23 @@ For each persona, provide:
 	start := time.Now()
 	applog.Info("audience generate: project=%d model=%s starting", projectID, model)
 
-	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
+	_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {
 		applog.Error("audience generate: project=%d model=%s failed after %s: %s", projectID, model, duration, err.Error())
-		sendEvent(map[string]string{"type": "error", "error": err.Error()})
+		stream.SendData(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
 	if submittedResult != "" {
 		applog.Info("audience generate: project=%d model=%s completed in %s, result=%d bytes", projectID, model, duration, len(submittedResult))
-		sendEvent(map[string]any{"type": "personas", "data": json.RawMessage(submittedResult)})
+		stream.SendData(map[string]any{"type": "personas", "data": json.RawMessage(submittedResult)})
 	} else {
 		applog.Error("audience generate: project=%d model=%s completed in %s but no result submitted", projectID, model, duration)
 	}
 
-	sendEvent(map[string]string{"type": "done"})
+	stream.SendData(map[string]string{"type": "done"})
 }
 
 type generatedPersona struct {

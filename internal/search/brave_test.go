@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 func TestSearch(t *testing.T) {
@@ -56,5 +55,3 @@ func TestSearchError(t *testing.T) {
 	}
 }
 
-// Verify BraveClient implements types.Searcher at compile time
-var _ types.Searcher = (*BraveClient)(nil)

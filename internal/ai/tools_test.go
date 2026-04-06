@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 func TestStreamWithTools_NoToolCalls(t *testing.T) {
@@ -25,7 +24,7 @@ func TestStreamWithTools_NoToolCalls(t *testing.T) {
 	var chunks []string
 	text, err := c.StreamWithTools(
 		context.Background(), "test-model",
-		[]types.Message{{Role: "user", Content: "hi"}},
+		[]Message{{Role: "user", Content: "hi"}},
 		nil, // no tools
 		func(ctx context.Context, name, args string) (string, error) { return "", nil },
 		func(event ToolEvent) {},
@@ -67,7 +66,7 @@ func TestStreamWithTools_WithToolCall(t *testing.T) {
 	var events []ToolEvent
 	text, err := c.StreamWithTools(
 		context.Background(), "test-model",
-		[]types.Message{{Role: "user", Content: "search for test"}},
+		[]Message{{Role: "user", Content: "search for test"}},
 		[]Tool{{Type: "function", Function: ToolFunction{Name: "web_search", Description: "search"}}},
 		func(ctx context.Context, name, args string) (string, error) {
 			return "Search results here", nil

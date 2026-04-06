@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,8 +8,8 @@ import (
 	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
-	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
@@ -128,40 +127,28 @@ Be concise. Don't lecture. Help them turn raw info into something useful.`, time
 		return item.Content
 	}())
 
-	aiMsgs := []types.Message{{Role: "system", Content: systemPrompt}}
+	aiMsgs := []ai.Message{{Role: "system", Content: systemPrompt}}
 	for _, m := range msgs {
-		aiMsgs = append(aiMsgs, types.Message{Role: m.Role, Content: m.Content})
+		aiMsgs = append(aiMsgs, ai.Message{Role: m.Role, Content: m.Content})
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	sseStream, err := sse.New(w)
+	if err != nil {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	sendEvent := func(v any) {
-		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
-	}
-
-	sendChunk := func(chunk string) error {
-		sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
+	fullResponse, err := h.aiClient.Stream(r.Context(), h.model(), aiMsgs, func(chunk string) error {
+		sseStream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
 		return nil
-	}
-
-	fullResponse, err := h.aiClient.Stream(r.Context(), h.model(), aiMsgs, sendChunk)
+	})
 	if err != nil {
-		sendEvent(map[string]string{"type": "error", "error": err.Error()})
+		sseStream.SendData(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
 	h.queries.AddBrainstormMessage(chat.ID, "assistant", fullResponse, "")
-	sendEvent(map[string]string{"type": "done"})
+	sseStream.SendData(map[string]string{"type": "done"})
 }
 
 func (h *ContextHandler) saveContent(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
@@ -172,7 +159,7 @@ func (h *ContextHandler) saveContent(w http.ResponseWriter, r *http.Request, pro
 	// Auto-generate title from content using AI
 	title := ""
 	if content != "" {
-		titleMsgs := []types.Message{
+		titleMsgs := []ai.Message{
 			{Role: "system", Content: "Generate a short title (5-8 words max) for this context item. Return ONLY the title, nothing else."},
 			{Role: "user", Content: content},
 		}

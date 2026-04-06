@@ -11,9 +11,9 @@ import (
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/search"
+	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
-	"github.com/zanfridau/marketminded/internal/types"
 	"github.com/zanfridau/marketminded/web/templates"
 )
 
@@ -23,12 +23,6 @@ var allSections = []string{
 
 var sectionDescriptions = map[string]string{
 	"product_and_positioning": `What the company does, who they serve, industry, business model. Their unique value proposition, what makes them different from alternatives. Core problems they solve, why existing solutions fail. Key products/services, primary CTA (book a call, sign up, buy), and how aggressively content should sell vs. educate. Key competitors and how they differentiate.`,
-	"audience": `Ideal customer profile: demographics, roles, company type/size (if B2B). Their top pain points in their own language. Where they spend time online, what content they consume. Behavioral insights:
-- Push: frustrations driving them to seek a solution
-- Pull: what attracts them to this specific solution
-- Anxiety: concerns that might stop them from acting
-- Habit: what keeps them stuck with the status quo`,
-	"voice_and_tone": `How the brand communicates: personality traits, vocabulary level, sentence style, formality, humor, warmth. Characteristic phrases to use. How they relate to the audience (peer, mentor, authority). Words/phrases to always use and to never use. Ask for examples of writing they like, use THEIR words, not marketing theory. Include content role models: creators, brands, or accounts they admire and why.`,
 }
 
 type ProfileHandler struct {
@@ -251,24 +245,13 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 	}
 	project, _ := h.queries.GetProject(projectID)
 
-	// SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := sse.New(w)
+	if err != nil {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	sendEvent := func(v any) {
-		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
-	}
-
-	sendEvent(map[string]string{"type": "status", "status": "Building profile..."})
+	stream.SendData(map[string]string{"type": "status", "status": "Building profile..."})
 
 	// Pre-fetch source URLs for product_and_positioning
 	var fetchedContent strings.Builder
@@ -278,7 +261,7 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 			var urls []store.SourceURL
 			if json.Unmarshal([]byte(ps.SourceURLs), &urls) == nil {
 				for _, u := range urls {
-					sendEvent(map[string]string{"type": "status", "status": fmt.Sprintf("Fetching %s...", u.URL)})
+					stream.SendData(map[string]string{"type": "status", "status": fmt.Sprintf("Fetching %s...", u.URL)})
 					fetchArgs, _ := json.Marshal(map[string]string{"url": u.URL})
 					result, err := tools.ExecuteFetch(r.Context(), string(fetchArgs))
 					if err != nil {
@@ -324,7 +307,7 @@ func (h *ProfileHandler) streamGenerate(w http.ResponseWriter, r *http.Request, 
 		fmt.Fprintf(&profileContext, "## %s\n%s\n\n", sectionTitle(name), s.Content)
 	}
 
-	sendEvent(map[string]string{"type": "status", "status": "Generating..."})
+	stream.SendData(map[string]string{"type": "status", "status": "Generating..."})
 
 	// Build system prompt
 	var systemPrompt strings.Builder
@@ -415,14 +398,14 @@ Source URLs:
 
 		onToolEvent := func(event ai.ToolEvent) {
 			if event.Type == "tool_start" && event.Tool == "submit_profile" {
-				sendEvent(map[string]string{"type": "status", "status": "Finalizing..."})
+				stream.SendData(map[string]string{"type": "status", "status": "Finalizing..."})
 			}
 		}
 
 		maxIter := 5
 		systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Call submit_profile with your results.", maxIter))
 
-		aiMsgs := []types.Message{
+		aiMsgs := []ai.Message{
 			{Role: "system", Content: systemPrompt.String()},
 			{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section and produce the URL guide."},
 		}
@@ -439,23 +422,23 @@ Source URLs:
 		duration := time.Since(start)
 		if err != nil && submittedResult == "" {
 			applog.Error("profile generate (tool): section=%s project=%d model=%s failed after %s: %s", sectionName, projectID, model, duration, err.Error())
-			sendEvent(map[string]string{"type": "error", "error": err.Error()})
+			stream.SendData(map[string]string{"type": "error", "error": err.Error()})
 			return
 		}
 
 		if submittedResult != "" {
 			applog.Info("profile generate (tool): section=%s project=%d model=%s completed in %s, result=%d bytes", sectionName, projectID, model, duration, len(submittedResult))
-			sendEvent(map[string]any{"type": "result", "data": json.RawMessage(submittedResult)})
+			stream.SendData(map[string]any{"type": "result", "data": json.RawMessage(submittedResult)})
 		} else {
 			applog.Error("profile generate (tool): section=%s project=%d model=%s completed in %s but no result submitted", sectionName, projectID, model, duration)
 		}
 
-		sendEvent(map[string]string{"type": "done"})
+		stream.SendData(map[string]string{"type": "done"})
 	} else {
 		// Simple stream for non-P&P sections (or P&P without URLs)
 		systemPrompt.WriteString("\nWrite the section content now. Output ONLY the section content, no headers or meta-commentary.")
 
-		aiMsgs := []types.Message{
+		aiMsgs := []ai.Message{
 			{Role: "system", Content: systemPrompt.String()},
 			{Role: "user", Content: "Write the " + sectionTitle(sectionName) + " section."},
 		}
@@ -465,19 +448,19 @@ Source URLs:
 		applog.Info("profile generate (stream): section=%s project=%d model=%s starting", sectionName, projectID, model)
 
 		_, err = h.aiClient.Stream(r.Context(), model, aiMsgs, func(chunk string) error {
-			sendEvent(map[string]string{"type": "chunk", "chunk": chunk})
+			stream.SendData(map[string]string{"type": "chunk", "chunk": chunk})
 			return nil
 		})
 
 		duration := time.Since(start)
 		if err != nil {
 			applog.Error("profile generate (stream): section=%s project=%d model=%s failed after %s: %s", sectionName, projectID, model, duration, err.Error())
-			sendEvent(map[string]string{"type": "error", "error": err.Error()})
+			stream.SendData(map[string]string{"type": "error", "error": err.Error()})
 			return
 		}
 
 		applog.Info("profile generate (stream): section=%s project=%d model=%s completed in %s", sectionName, projectID, model, duration)
-		sendEvent(map[string]string{"type": "done"})
+		stream.SendData(map[string]string{"type": "done"})
 	}
 }
 

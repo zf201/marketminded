@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 func TestComplete(t *testing.T) {
@@ -18,7 +17,7 @@ func TestComplete(t *testing.T) {
 
 		resp := chatResponse{
 			Choices: []choice{
-				{Message: types.Message{Role: "assistant", Content: "Hello back!"}},
+				{Message: Message{Role: "assistant", Content: "Hello back!"}},
 			},
 		}
 		json.NewEncoder(w).Encode(resp)
@@ -26,7 +25,7 @@ func TestComplete(t *testing.T) {
 	defer server.Close()
 
 	c := NewClient("test-key", WithBaseURL(server.URL))
-	resp, err := c.Complete(context.Background(), "test-model", []types.Message{
+	resp, err := c.Complete(context.Background(), "test-model", []Message{
 		{Role: "user", Content: "Hello"},
 	})
 	if err != nil {
@@ -45,7 +44,7 @@ func TestCompleteError(t *testing.T) {
 	defer server.Close()
 
 	c := NewClient("test-key", WithBaseURL(server.URL))
-	_, err := c.Complete(context.Background(), "test-model", []types.Message{
+	_, err := c.Complete(context.Background(), "test-model", []Message{
 		{Role: "user", Content: "Hello"},
 	})
 	if err == nil {
@@ -53,5 +52,3 @@ func TestCompleteError(t *testing.T) {
 	}
 }
 
-// Verify Client implements types.AIClient at compile time
-var _ types.AIClient = (*Client)(nil)

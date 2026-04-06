@@ -11,9 +11,9 @@ import (
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/content"
+	"github.com/zanfridau/marketminded/internal/sse"
 	"github.com/zanfridau/marketminded/internal/store"
 	"github.com/zanfridau/marketminded/internal/tools"
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 type VoiceToneHandler struct {
@@ -160,24 +160,13 @@ func (h *VoiceToneHandler) saveProfile(w http.ResponseWriter, r *http.Request, p
 func (h *VoiceToneHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64) {
 	project, _ := h.queries.GetProject(projectID)
 
-	// SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := sse.New(w)
+	if err != nil {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	sendEvent := func(v any) {
-		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
-	}
-
-	sendEvent(map[string]string{"type": "status", "status": "Gathering context..."})
+	stream.SendData(map[string]string{"type": "status", "status": "Gathering context..."})
 
 	// Gather product & positioning content
 	var productContent string
@@ -219,7 +208,7 @@ func (h *VoiceToneHandler) streamGenerate(w http.ResponseWriter, r *http.Request
 	fetchURLs := func(urls []store.SourceURL, label string) []fetchedURL {
 		var results []fetchedURL
 		for _, u := range urls {
-			sendEvent(map[string]string{"type": "status", "status": fmt.Sprintf("Fetching %s...", u.URL)})
+			stream.SendData(map[string]string{"type": "status", "status": fmt.Sprintf("Fetching %s...", u.URL)})
 			fetchArgs, _ := json.Marshal(map[string]string{"url": u.URL})
 			result, err := tools.ExecuteFetch(r.Context(), string(fetchArgs))
 			content := ""
@@ -237,7 +226,7 @@ func (h *VoiceToneHandler) streamGenerate(w http.ResponseWriter, r *http.Request
 	fetchedLiked = fetchURLs(likedArticles, "Liked Articles")
 	fetchedInspiration = fetchURLs(inspirationURLs, "Inspiration Sources")
 
-	sendEvent(map[string]string{"type": "status", "status": "Analyzing voice & tone..."})
+	stream.SendData(map[string]string{"type": "status", "status": "Analyzing voice & tone..."})
 
 	// Build system prompt
 	var systemPrompt strings.Builder
@@ -392,7 +381,7 @@ Call submit_voice_tone with 7 fields:
 				summary = "Submitting voice & tone profile..."
 			}
 			if summary != "" {
-				sendEvent(map[string]string{"type": "status", "status": summary})
+				stream.SendData(map[string]string{"type": "status", "status": summary})
 			}
 		}
 	}
@@ -408,7 +397,7 @@ Call submit_voice_tone with 7 fields:
 	maxIter := 15
 	systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call submit_voice_tone when ready. Do NOT keep fetching endlessly.", maxIter))
 
-	aiMsgs := []types.Message{
+	aiMsgs := []ai.Message{
 		{Role: "system", Content: systemPrompt.String()},
 		{Role: "user", Content: "Analyze the provided sources and build a structured voice & tone profile for this brand. Use fetch_url to read individual blog posts from the listing pages, then submit your analysis."},
 	}
@@ -418,21 +407,21 @@ Call submit_voice_tone with 7 fields:
 	start := time.Now()
 	applog.Info("voice_tone generate: project=%d model=%s starting", projectID, model)
 
-	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
+	_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {
 		applog.Error("voice_tone generate: project=%d model=%s failed after %s: %s", projectID, model, duration, err.Error())
-		sendEvent(map[string]string{"type": "error", "error": err.Error()})
+		stream.SendData(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 
 	if submittedResult != "" {
 		applog.Info("voice_tone generate: project=%d model=%s completed in %s, result=%d bytes", projectID, model, duration, len(submittedResult))
-		sendEvent(map[string]any{"type": "result", "data": json.RawMessage(submittedResult)})
+		stream.SendData(map[string]any{"type": "result", "data": json.RawMessage(submittedResult)})
 	} else {
 		applog.Error("voice_tone generate: project=%d model=%s completed in %s but no result submitted", projectID, model, duration)
 	}
 
-	sendEvent(map[string]string{"type": "done"})
+	stream.SendData(map[string]string{"type": "done"})
 }

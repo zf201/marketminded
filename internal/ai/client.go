@@ -9,15 +9,22 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 const defaultBaseURL = "https://openrouter.ai/api/v1"
 
+// Message represents a chat message for LLM calls.
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// StreamFunc is called for each chunk during streaming LLM responses.
+type StreamFunc func(chunk string) error
+
 type chatRequest struct {
 	Model    string          `json:"model"`
-	Messages []types.Message `json:"messages"`
+	Messages []Message `json:"messages"`
 	Stream   bool            `json:"stream,omitempty"`
 }
 
@@ -26,8 +33,8 @@ type chatResponse struct {
 }
 
 type choice struct {
-	Message types.Message `json:"message"`
-	Delta   types.Message `json:"delta"`
+	Message Message `json:"message"`
+	Delta   Message `json:"delta"`
 }
 
 type Client struct {
@@ -54,7 +61,7 @@ func NewClient(apiKey string, opts ...Option) *Client {
 	return c
 }
 
-func (c *Client) Complete(ctx context.Context, model string, messages []types.Message) (string, error) {
+func (c *Client) Complete(ctx context.Context, model string, messages []Message) (string, error) {
 	body, _ := json.Marshal(chatRequest{
 		Model:    model,
 		Messages: messages,
@@ -88,7 +95,7 @@ func (c *Client) Complete(ctx context.Context, model string, messages []types.Me
 	return chatResp.Choices[0].Message.Content, nil
 }
 
-func (c *Client) Stream(ctx context.Context, model string, messages []types.Message, fn types.StreamFunc) (string, error) {
+func (c *Client) Stream(ctx context.Context, model string, messages []Message, fn StreamFunc) (string, error) {
 	body, _ := json.Marshal(chatRequest{
 		Model:    model,
 		Messages: messages,

@@ -13,7 +13,6 @@ import (
 	"github.com/zanfridau/marketminded/internal/pipeline"
 	"github.com/zanfridau/marketminded/internal/prompt"
 	"github.com/zanfridau/marketminded/internal/store"
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 type WriterStep struct {
@@ -48,7 +47,7 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	}
 	systemPrompt := s.Prompt.ForWriter(promptFile, input.Profile, editorOutput, rejectionReason)
 
-	aiMsgs := []types.Message{
+	aiMsgs := []ai.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: "Write the cornerstone blog post now."},
 	}

@@ -30,7 +30,6 @@ func main() {
 	defer db.Close()
 
 	queries := store.NewQueries(db)
-	queries.MigrateSettingsToSourceURLs()
 
 	// Clients
 	aiClient := ai.NewClient(cfg.OpenRouterAPIKey)

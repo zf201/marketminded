@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/zanfridau/marketminded/internal/types"
 )
 
 // Tool definitions for the API request
@@ -107,12 +106,12 @@ type ToolEvent struct {
 func (c *Client) StreamWithTools(
 	ctx context.Context,
 	model string,
-	messages []types.Message,
+	messages []Message,
 	tools []Tool,
 	executor ToolExecutor,
 	onToolEvent ToolEventFn,
-	onChunk types.StreamFunc,
-	onReasoning types.StreamFunc,
+	onChunk StreamFunc,
+	onReasoning StreamFunc,
 	temperature *float64,
 	submitToolName string,
 	maxIterations ...int,
@@ -131,7 +130,7 @@ func (c *Client) StreamWithTools(
 		}
 	}
 
-	// Convert types.Message to ChatMessage
+	// Convert Message to ChatMessage
 	chatMsgs := make([]ChatMessage, len(messages))
 	for i, m := range messages {
 		chatMsgs[i] = ChatMessage{Role: m.Role, Content: m.Content}
@@ -152,6 +151,9 @@ func (c *Client) StreamWithTools(
 		fullText.WriteString(text)
 
 		if len(toolCalls) == 0 {
+			if submitToolName == "" || forceSubmit == nil {
+				return fullText.String(), nil
+			}
 			// Model responded with text instead of a tool call.
 			// Add its text to history, nudge it, and force the specific submit tool next turn.
 			chatMsgs = append(chatMsgs,
@@ -230,8 +232,8 @@ func (c *Client) streamOneTurn(
 	model string,
 	messages []ChatMessage,
 	tools []Tool,
-	onChunk types.StreamFunc,
-	onReasoning types.StreamFunc,
+	onChunk StreamFunc,
+	onReasoning StreamFunc,
 	temperature *float64,
 	toolChoice any,
 ) (string, []ToolCall, error) {
