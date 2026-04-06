@@ -8,8 +8,6 @@ type SettingsData struct {
 	ModelIdeation      string
 	ModelProofread     string
 	Temperature        string
-	DataForSEOLogin    string
-	DataForSEOPassword string
 	Saved              bool
 }
 
@@ -42,18 +40,6 @@ templ SettingsPage(data SettingsData) {
 				}
 				<p class="text-zinc-600 text-xs mt-2">
 					Popular models: x-ai/grok-4.1-fast, anthropic/claude-sonnet-4-20250514, openai/gpt-4o, google/gemini-2.0-flash-001
-				</p>
-			}
-			@components.Card("SEO / DataForSEO") {
-				<p class="text-zinc-500 text-xs mb-4">Connect DataForSEO to enable keyword research tools in brainstorming. Leave blank to disable SEO tools.</p>
-				@components.FormGroup("Login (email)") {
-					<input type="text" id="dataforseo_login" name="dataforseo_login" value={ data.DataForSEOLogin } placeholder="your@email.com" class="input" autocomplete="off"/>
-				}
-				@components.FormGroup("API Password") {
-					<input type="password" id="dataforseo_password" name="dataforseo_password" value={ data.DataForSEOPassword } placeholder="API password" class="input" autocomplete="off"/>
-				}
-				<p class="text-zinc-600 text-xs mt-2">
-					Get credentials at dataforseo.com/api-access. The brainstorm agent will use these for keyword research, suggestions, and competitor analysis.
 				</p>
 			}
 			<div class="mt-6">

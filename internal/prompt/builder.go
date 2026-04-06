@@ -250,7 +250,7 @@ func (b *Builder) ForTopicExplore(profile, blogContent, homepageContent, rejecte
 	sb.WriteString(b.DateHeader())
 	sb.WriteString(`
 
-You are a sharp editorial strategist who finds blog topics worth reading. Not SEO filler — real topics that make people stop scrolling.
+You are a sharp editorial strategist who finds blog topics worth reading — real topics that make people stop scrolling.
 
 ## What makes a good topic
 - It connects to something happening RIGHT NOW — a news event, industry shift, viral discussion, new regulation, a controversy, a trend

@@ -9,8 +9,6 @@ type Config struct {
 	Port               string
 	DBPath             string
 	OpenRouterAPIKey   string
-	DataForSEOLogin    string
-	DataForSEOPassword string
 	ModelContent       string
 	ModelCopywriting   string
 	ModelIdeation      string
@@ -27,8 +25,6 @@ func Load() (*Config, error) {
 		Port:               envOr("MARKETMINDED_PORT", "8080"),
 		DBPath:             envOr("MARKETMINDED_DB_PATH", "./marketminded.db"),
 		OpenRouterAPIKey:   orKey,
-		DataForSEOLogin:    os.Getenv("DATAFORSEO_LOGIN"),
-		DataForSEOPassword: os.Getenv("DATAFORSEO_PASSWORD"),
 		ModelContent:       envOr("MARKETMINDED_MODEL_CONTENT", "x-ai/grok-4.1-fast"),
 		ModelCopywriting:   envOr("MARKETMINDED_MODEL_COPYWRITING", "x-ai/grok-4.1-fast"),
 		ModelIdeation:      envOr("MARKETMINDED_MODEL_IDEATION", "x-ai/grok-4.1-fast"),
