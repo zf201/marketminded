@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/zanfridau/marketminded/internal/ai"
+	"github.com/zanfridau/marketminded/internal/applog"
 	"github.com/zanfridau/marketminded/internal/content"
 	"github.com/zanfridau/marketminded/internal/pipeline"
 	"github.com/zanfridau/marketminded/internal/prompt"
@@ -106,21 +108,29 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 		return stream.SendThinking(chunk)
 	}
 
-	temp := 0.3
-	_, err := s.AI.StreamWithTools(ctx, s.Model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	prefix := fmt.Sprintf("pipeline run=%d step=%d type=write", input.RunID, input.StepID)
+	start := time.Now()
+	applog.Info("%s: model=%s starting", prefix, s.Model())
 
+	temp := 0.3
+	_, err := s.AI.StreamWithTools(ctx, s.Model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
+
+	duration := time.Since(start)
 	result := pipeline.StepResult{
 		Output:   fmt.Sprintf(`{"piece_id":%d}`, savedPieceID),
 		Thinking: thinkingBuf.String(),
 	}
 
 	if err != nil && savedPieceID == 0 {
+		applog.Error("%s: model=%s failed after %s: %s", prefix, s.Model(), duration, err.Error())
 		return result, err
 	}
 
 	if savedPieceID == 0 {
+		applog.Error("%s: model=%s completed in %s but no content submitted", prefix, s.Model(), duration)
 		return result, fmt.Errorf("writer did not submit content via tool call")
 	}
 
+	applog.Info("%s: model=%s completed in %s, piece_id=%d", prefix, s.Model(), duration, savedPieceID)
 	return result, nil
 }

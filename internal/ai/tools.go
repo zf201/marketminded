@@ -52,7 +52,8 @@ type toolChatRequest struct {
 	Messages    []ChatMessage `json:"messages"`
 	Stream      bool          `json:"stream,omitempty"`
 	Temperature *float64      `json:"temperature,omitempty"`
-	Tools    []Tool        `json:"tools,omitempty"`
+	Tools       []Tool        `json:"tools,omitempty"`
+	ToolChoice  any           `json:"tool_choice,omitempty"`
 }
 
 type streamChoice struct {
@@ -100,6 +101,8 @@ type ToolEvent struct {
 
 // StreamWithTools streams a chat completion with tool calling support.
 // It handles the multi-turn loop: stream text -> detect tool calls -> execute -> send results -> continue.
+// submitToolName is the name of the final submit tool — used to force the model to call it
+// when it tries to respond with text instead of a tool call.
 // Returns the final accumulated text and any error.
 func (c *Client) StreamWithTools(
 	ctx context.Context,
@@ -111,11 +114,21 @@ func (c *Client) StreamWithTools(
 	onChunk types.StreamFunc,
 	onReasoning types.StreamFunc,
 	temperature *float64,
+	submitToolName string,
 	maxIterations ...int,
 ) (string, error) {
 	limit := 20
 	if len(maxIterations) > 0 && maxIterations[0] > 0 {
 		limit = maxIterations[0]
+	}
+
+	// Build the forced tool_choice for when the model tries to skip tool calls
+	var forceSubmit any
+	if submitToolName != "" {
+		forceSubmit = map[string]any{
+			"type":     "function",
+			"function": map[string]string{"name": submitToolName},
+		}
 	}
 
 	// Convert types.Message to ChatMessage
@@ -125,18 +138,30 @@ func (c *Client) StreamWithTools(
 	}
 
 	var fullText strings.Builder
+	forceToolCall := false
 
 	for iteration := 0; iteration < limit; iteration++ {
-		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature)
+		var toolChoice any
+		if forceToolCall {
+			toolChoice = forceSubmit
+		}
+		text, toolCalls, err := c.streamOneTurn(ctx, model, chatMsgs, tools, onChunk, onReasoning, temperature, toolChoice)
 		if err != nil {
 			return fullText.String(), err
 		}
 		fullText.WriteString(text)
 
 		if len(toolCalls) == 0 {
-			// No tool calls — we're done
-			return fullText.String(), nil
+			// Model responded with text instead of a tool call.
+			// Add its text to history, nudge it, and force the specific submit tool next turn.
+			chatMsgs = append(chatMsgs,
+				ChatMessage{Role: "assistant", Content: text},
+				ChatMessage{Role: "user", Content: "You must call the " + submitToolName + " tool now to deliver your results. Do not respond with text."},
+			)
+			forceToolCall = true
+			continue
 		}
+		forceToolCall = false
 
 		// Append assistant message with tool calls
 		assistantMsg := ChatMessage{
@@ -208,6 +233,7 @@ func (c *Client) streamOneTurn(
 	onChunk types.StreamFunc,
 	onReasoning types.StreamFunc,
 	temperature *float64,
+	toolChoice any,
 ) (string, []ToolCall, error) {
 	body, _ := json.Marshal(toolChatRequest{
 		Model:       model,
@@ -215,6 +241,7 @@ func (c *Client) streamOneTurn(
 		Stream:      true,
 		Tools:       tools,
 		Temperature: temperature,
+		ToolChoice:  toolChoice,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))

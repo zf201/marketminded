@@ -21,6 +21,7 @@ type ProjectDetail struct {
 	Language    string
 	HasContext  bool
 	HasMemory   bool
+	TopicCount  int
 }
 
 func ProjectOverview(p ProjectDetail) templ.Component {
@@ -218,7 +219,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_16 := `Content Pipeline`
+			var_16 := `Topics`
 			_, err = templBuffer.WriteString(var_16)
 			if err != nil {
 				return err
@@ -227,7 +228,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_17 string = fmt.Sprintf("%d pipeline runs", p.RunCount)
+			var var_17 string = fmt.Sprintf("%d topics in backlog", p.TopicCount)
 			_, err = templBuffer.WriteString(templ.EscapeString(var_17))
 			if err != nil {
 				return err
@@ -236,7 +237,7 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_18 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID))
+			var var_18 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/topics", p.ID))
 			_, err = templBuffer.WriteString(templ.EscapeString(string(var_18)))
 			if err != nil {
 				return err
@@ -245,8 +246,44 @@ func ProjectOverview(p ProjectDetail) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_19 := `Pipeline Runs`
+			var_19 := `Generate Topics`
 			_, err = templBuffer.WriteString(var_19)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</a></div></div><div class=\"card\"><div class=\"p-5\"><h3 class=\"text-sm font-semibold text-zinc-100\">")
+			if err != nil {
+				return err
+			}
+			var_20 := `Content Pipeline`
+			_, err = templBuffer.WriteString(var_20)
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</h3><p class=\"text-zinc-500 text-sm mt-2\">")
+			if err != nil {
+				return err
+			}
+			var var_21 string = fmt.Sprintf("%d pipeline runs", p.RunCount)
+			_, err = templBuffer.WriteString(templ.EscapeString(var_21))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("</p><a href=\"")
+			if err != nil {
+				return err
+			}
+			var var_22 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", p.ID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_22)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" class=\"btn btn-secondary btn-sm mt-3\">")
+			if err != nil {
+				return err
+			}
+			var_23 := `Pipeline Runs`
+			_, err = templBuffer.WriteString(var_23)
 			if err != nil {
 				return err
 			}

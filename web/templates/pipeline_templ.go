@@ -260,13 +260,20 @@ func (d ProductionBoardData) hasPendingSteps() bool {
 	return false
 }
 
+func (d ProductionBoardData) hasFailedSteps() bool {
+	for _, s := range d.Steps {
+		if s.Status == "failed" {
+			return true
+		}
+	}
+	return false
+}
+
 func stepProgressClass(status string) string {
 	base := "flex flex-col items-center gap-1 text-xs"
 	switch status {
 	case "completed":
 		return base + " text-green-400"
-	case "running":
-		return base + " text-yellow-400"
 	case "failed":
 		return base + " text-red-400"
 	default:
@@ -278,8 +285,6 @@ func stepIcon(status string) string {
 	switch status {
 	case "completed":
 		return "✓"
-	case "running":
-		return "●"
 	case "failed":
 		return "✗"
 	default:
@@ -381,7 +386,15 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 				templBuffer = templ.GetBuffer()
 				defer templ.ReleaseBuffer(templBuffer)
 			}
-			_, err = templBuffer.WriteString("<div id=\"cornerstone-pipeline-page\" data-project-id=\"")
+			_, err = templBuffer.WriteString("<div id=\"cornerstone-pipeline-page\" x-data=\"")
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("pipelineBoard({projectID:%d,runID:%d,isProduction:false})", data.ProjectID, data.RunID)))
+			if err != nil {
+				return err
+			}
+			_, err = templBuffer.WriteString("\" data-project-id=\"")
 			if err != nil {
 				return err
 			}
@@ -427,7 +440,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 				return err
 			}
 			if data.Status != "complete" && data.Status != "abandoned" {
-				_, err = templBuffer.WriteString("<form method=\"POST\" action=\"")
+				_, err = templBuffer.WriteString("<form id=\"abandon-form\" method=\"POST\" action=\"")
 				if err != nil {
 					return err
 				}
@@ -504,16 +517,31 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
+					_, err = templBuffer.WriteString("\" data-progress-index=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", i)))
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("\" data-progress-status=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(step.Status))
+					if err != nil {
+						return err
+					}
 					_, err = templBuffer.WriteString("\">")
 					if err != nil {
 						return err
 					}
 					var var_25 = []any{
-						"w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border",
+						"step-progress-circle w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border",
 						templ.KV("bg-green-500/10 border-green-500/30", step.Status == "completed"),
-						templ.KV("bg-yellow-500/10 border-yellow-500/30 animate-pulse", step.Status == "running"),
 						templ.KV("bg-red-500/10 border-red-500/30", step.Status == "failed"),
-						templ.KV("bg-zinc-800 border-zinc-700", step.Status != "completed" && step.Status != "running" && step.Status != "failed"),
+						templ.KV("bg-zinc-800 border-zinc-700", step.Status != "completed" && step.Status != "failed"),
 					}
 					err = templ.RenderCSSItems(ctx, templBuffer, var_25...)
 					if err != nil {
@@ -527,7 +555,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\">")
+					_, err = templBuffer.WriteString("\"><span class=\"step-progress-icon\">")
 					if err != nil {
 						return err
 					}
@@ -536,7 +564,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</div><span class=\"text-[10px] whitespace-nowrap\">")
+					_, err = templBuffer.WriteString("</span></div><span class=\"text-[10px] whitespace-nowrap\">")
 					if err != nil {
 						return err
 					}
@@ -550,7 +578,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					}
 					if i < len(data.Steps)-1 {
 						var var_27 = []any{
-							"flex-1 h-px mx-1",
+							"step-progress-line flex-1 h-px mx-1",
 							templ.KV("bg-green-500/30", step.Status == "completed"),
 							templ.KV("bg-zinc-800", step.Status != "completed"),
 						}
@@ -563,6 +591,14 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 							return err
 						}
 						_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_27).String()))
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("\" data-line-after=\"")
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", i)))
 						if err != nil {
 							return err
 						}
@@ -611,7 +647,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					return err
 				}
 				for _, step := range data.Steps {
-					_, err = templBuffer.WriteString("<div class=\"step-card board-card card\" data-step-id=\"")
+					_, err = templBuffer.WriteString("<div class=\"step-card card\" data-step-id=\"")
 					if err != nil {
 						return err
 					}
@@ -627,6 +663,14 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
+					_, err = templBuffer.WriteString("\" data-step-type=\"")
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString(templ.EscapeString(step.StepType))
+					if err != nil {
+						return err
+					}
 					_, err = templBuffer.WriteString("\" data-tool-calls=\"")
 					if err != nil {
 						return err
@@ -635,70 +679,15 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\"><div class=\"p-3\"><div class=\"board-card-header flex items-center gap-2\"><strong class=\"text-sm\">")
+					_, err = templBuffer.WriteString("\" data-output=\"")
 					if err != nil {
 						return err
 					}
-					err = stepTypeLabel(step.StepType).Render(ctx, templBuffer)
+					_, err = templBuffer.WriteString(templ.EscapeString(step.Output))
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("</strong><span class=\"ml-auto\">")
-					if err != nil {
-						return err
-					}
-					err = components.StatusBadge(step.Status).Render(ctx, templBuffer)
-					if err != nil {
-						return err
-					}
-					_, err = templBuffer.WriteString("</span></div><div class=\"step-tool-pills flex flex-wrap gap-1 mt-2 empty:hidden\"></div><div class=\"step-thinking-ticker font-mono text-xs max-h-24 overflow-y-auto mt-1 empty:hidden\"></div>")
-					if err != nil {
-						return err
-					}
-					if step.Status == "completed" && step.Output != "" {
-						_, err = templBuffer.WriteString("<div class=\"step-output mt-2\">")
-						if err != nil {
-							return err
-						}
-						var var_30 string = step.Output
-						_, err = templBuffer.WriteString(templ.EscapeString(var_30))
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("</div>")
-						if err != nil {
-							return err
-						}
-					} else if step.Status == "failed" && step.Output != "" {
-						_, err = templBuffer.WriteString("<details class=\"mt-2\"><summary class=\"cursor-pointer text-sm text-red-400\">")
-						if err != nil {
-							return err
-						}
-						var_31 := `View failed output`
-						_, err = templBuffer.WriteString(var_31)
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("</summary><div class=\"step-stream whitespace-pre-wrap text-xs mt-2 max-h-72 overflow-y-auto p-2 bg-red-500/5 border border-red-500/20 rounded\">")
-						if err != nil {
-							return err
-						}
-						var var_32 string = step.Output
-						_, err = templBuffer.WriteString(templ.EscapeString(var_32))
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("</div></details>")
-						if err != nil {
-							return err
-						}
-					} else {
-						_, err = templBuffer.WriteString("<div class=\"step-stream whitespace-pre-wrap text-sm mt-2 max-h-72 overflow-y-auto empty:hidden\"></div> <div class=\"step-output mt-2 empty:hidden\"></div>")
-						if err != nil {
-							return err
-						}
-					}
-					_, err = templBuffer.WriteString("</div></div>")
+					_, err = templBuffer.WriteString("\"></div>")
 					if err != nil {
 						return err
 					}
@@ -708,19 +697,77 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					return err
 				}
 				if data.hasPendingSteps() {
-					_, err = templBuffer.WriteString("<div class=\"mt-4\"><button class=\"btn btn-primary\" id=\"run-pipeline-btn\" data-run-id=\"")
+					_, err = templBuffer.WriteString("<div class=\"mt-4 flex items-center gap-2\">")
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", data.RunID)))
+					if data.hasFailedSteps() {
+						_, err = templBuffer.WriteString("<button class=\"btn btn-primary\" id=\"run-pipeline-btn\" data-run-id=\"")
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", data.RunID)))
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("\">")
+						if err != nil {
+							return err
+						}
+						var_30 := `Retry`
+						_, err = templBuffer.WriteString(var_30)
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("</button> <form method=\"POST\" action=\"")
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString(templ.EscapeString(templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/restart", data.ProjectID, data.RunID))))
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("\" class=\"inline\"><button type=\"submit\" class=\"btn btn-secondary\">")
+						if err != nil {
+							return err
+						}
+						var_31 := `Retry from Start`
+						_, err = templBuffer.WriteString(var_31)
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("</button></form>")
+						if err != nil {
+							return err
+						}
+					} else {
+						_, err = templBuffer.WriteString("<button class=\"btn btn-primary\" id=\"run-pipeline-btn\" data-run-id=\"")
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", data.RunID)))
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("\">")
+						if err != nil {
+							return err
+						}
+						var_32 := `Run Pipeline`
+						_, err = templBuffer.WriteString(var_32)
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("</button>")
+						if err != nil {
+							return err
+						}
+					}
+					_, err = templBuffer.WriteString("<button class=\"btn btn-danger hidden\" id=\"cancel-pipeline-btn\">")
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString("\">")
-					if err != nil {
-						return err
-					}
-					var_33 := `Run Pipeline`
+					var_33 := `Cancel`
 					_, err = templBuffer.WriteString(var_33)
 					if err != nil {
 						return err

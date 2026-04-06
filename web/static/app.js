@@ -46,113 +46,6 @@ document.addEventListener('alpine:init', () => {
         }
     }));
 
-    // Brainstorm chat with streaming responses
-    Alpine.data('brainstormChat', (projectID, chatID) => ({
-        input: '',
-        pendingMessage: '',
-        streamContent: '',
-        thinkingContent: '',
-        thinkingDone: false,
-        streaming: false,
-        error: '',
-        source: null,
-
-        scrollToBottom() {
-            this.$nextTick(() => {
-                const el = this.$refs.messages;
-                if (el) el.scrollTop = el.scrollHeight;
-            });
-        },
-
-        async sendMessage() {
-            const msg = this.input.trim();
-            if (!msg || this.streaming) return;
-
-            // Show user message immediately
-            this.input = '';
-            this.pendingMessage = msg;
-            this.streamContent = '';
-            this.thinkingContent = '';
-            this.thinkingDone = false;
-            this.error = '';
-            this.streaming = true;
-            this.scrollToBottom();
-
-            try {
-                // POST the user message
-                const res = await fetch(`/projects/${projectID}/brainstorm/${chatID}/message`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'content=' + encodeURIComponent(msg)
-                });
-
-                if (!res.ok) {
-                    throw new Error('Failed to send message: ' + res.statusText);
-                }
-
-                // Open SSE stream for the AI response
-                this.source = new EventSource(
-                    `/projects/${projectID}/brainstorm/${chatID}/stream`
-                );
-
-                this.source.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-
-                    if (data.type === 'done') {
-                        this.source.close();
-                        this.source = null;
-                        this.streaming = false;
-                        // Reload page to get server-rendered messages
-                        // (keeps chat state clean)
-                        window.location.reload();
-                        return;
-                    }
-                    if (data.type === 'error') {
-                        this.error = data.error;
-                        this.source.close();
-                        this.source = null;
-                        this.streaming = false;
-                        return;
-                    }
-                    if (data.type === 'thinking') {
-                        this.thinkingContent += data.chunk;
-                        this.scrollToBottom();
-                    }
-                    if (data.type === 'chunk') {
-                        if (!this.thinkingDone && this.thinkingContent) {
-                            this.thinkingDone = true;
-                        }
-                        this.streamContent += data.chunk;
-                        this.scrollToBottom();
-                    }
-                    if (data.type === 'tool_start') {
-                        this.streamContent += '\n[' + data.summary + '...]\n';
-                        this.scrollToBottom();
-                    }
-                    if (data.type === 'tool_result') {
-                        // Tool result received, AI will continue
-                    }
-                };
-
-                this.source.onerror = () => {
-                    if (this.source) this.source.close();
-                    this.source = null;
-                    this.streaming = false;
-                    if (!this.streamContent) {
-                        this.error = 'Connection lost. Try again.';
-                    }
-                };
-
-            } catch (e) {
-                this.error = e.message;
-                this.streaming = false;
-            }
-        },
-
-        destroy() {
-            if (this.source) this.source.close();
-        }
-    }));
 });
 
 function initProfileChat(projectID) {
@@ -470,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     var cornerstonePage = document.getElementById('cornerstone-pipeline-page');
-    if (cornerstonePage) {
+    if (cornerstonePage && !cornerstonePage.hasAttribute('x-data')) {
         initCornerstonePipeline(cornerstonePage.dataset.projectId, cornerstonePage.dataset.runId);
     }
 
@@ -1906,6 +1799,9 @@ function openContentModal(opts) {
 function initCornerstonePipeline(projectID, runID) {
     var basePath = '/projects/' + projectID + '/pipeline/' + runID;
     var runBtn = document.getElementById('run-pipeline-btn');
+    var cancelBtn = document.getElementById('cancel-pipeline-btn');
+    var activeSource = null;
+    var cancelled = false;
 
     function setBadge(card, text, cls) {
         var badges = card.querySelectorAll('.badge');
@@ -1913,6 +1809,50 @@ function initCornerstonePipeline(projectID, runID) {
         if (!badge) return;
         badge.textContent = text;
         badge.className = 'badge ' + (cls || '');
+    }
+
+    function syncProgressCircle(index, status) {
+        var indicator = document.querySelector('[data-progress-index="' + index + '"]');
+        if (!indicator) return;
+        indicator.dataset.progressStatus = status;
+
+        var circle = indicator.querySelector('.step-progress-circle');
+        var icon = indicator.querySelector('.step-progress-icon');
+        if (!circle) return;
+
+        // Reset classes
+        circle.className = 'step-progress-circle w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border';
+        if (status === 'completed') {
+            circle.classList.add('bg-green-500/10', 'border-green-500/30');
+            icon.textContent = '\u2713';
+        } else if (status === 'running') {
+            circle.classList.add('bg-yellow-500/10', 'border-yellow-500/30', 'animate-pulse');
+            icon.textContent = '\u25CF';
+        } else if (status === 'failed') {
+            circle.classList.add('bg-red-500/10', 'border-red-500/30');
+            icon.textContent = '\u2717';
+        } else {
+            circle.classList.add('bg-zinc-800', 'border-zinc-700');
+            icon.textContent = '';
+        }
+
+        // Update connector line after this step
+        var line = document.querySelector('[data-line-after="' + index + '"]');
+        if (line) {
+            line.className = 'step-progress-line flex-1 h-px mx-1 ' + (status === 'completed' ? 'bg-green-500/30' : 'bg-zinc-800');
+        }
+
+        // Update text color
+        indicator.className = indicator.className.replace(/text-\S+/g, '');
+        if (status === 'completed') {
+            indicator.classList.add('text-green-400');
+        } else if (status === 'running') {
+            indicator.classList.add('text-yellow-400');
+        } else if (status === 'failed') {
+            indicator.classList.add('text-red-400');
+        } else {
+            indicator.classList.add('text-zinc-600');
+        }
     }
 
     function addToolPill(card, type, value) {
@@ -1937,7 +1877,7 @@ function initCornerstonePipeline(projectID, runID) {
         }
     }
 
-    function streamStep(stepID, card, onDone, onError) {
+    function streamStep(stepID, card, stepIndex, onDone, onError) {
         var streamEl = card.querySelector('.step-stream');
         var outputEl = card.querySelector('.step-output');
         var tickerEl = card.querySelector('.step-thinking-ticker');
@@ -1977,6 +1917,7 @@ function initCornerstonePipeline(projectID, runID) {
                 if (tickerEl) tickerEl.classList.add('done');
                 setBadge(card, 'completed', 'badge-completed');
                 card.dataset.status = 'completed';
+                syncProgressCircle(stepIndex, 'completed');
                 if (onDone) onDone();
             } else if (d.type === 'error') {
                 source.close();
@@ -1984,6 +1925,7 @@ function initCornerstonePipeline(projectID, runID) {
                 if (streamEl) streamEl.textContent += '\nError: ' + d.error;
                 setBadge(card, 'failed', 'badge-failed');
                 card.dataset.status = 'failed';
+                syncProgressCircle(stepIndex, 'failed');
                 if (onError) onError(d.error);
             }
         };
@@ -1992,13 +1934,16 @@ function initCornerstonePipeline(projectID, runID) {
             source.close();
             setBadge(card, 'failed', 'badge-failed');
             card.dataset.status = 'failed';
+            syncProgressCircle(stepIndex, 'failed');
             if (onError) onError('Connection lost');
         };
 
+        activeSource = source;
         return source;
     }
 
     function runNextStep(cards, index) {
+        if (cancelled) return;
         if (index >= cards.length) {
             // All done — reload to show the cornerstone piece
             window.location.reload();
@@ -2022,8 +1967,9 @@ function initCornerstonePipeline(projectID, runID) {
         var stepID = card.dataset.stepId;
         setBadge(card, 'running', 'badge-running');
         card.dataset.status = 'running';
+        syncProgressCircle(index, 'running');
 
-        streamStep(stepID, card, function() {
+        streamStep(stepID, card, index, function() {
             runNextStep(cards, index + 1);
         }, function() {
             // On error, stop chaining
@@ -2034,11 +1980,40 @@ function initCornerstonePipeline(projectID, runID) {
         runBtn.addEventListener('click', function() {
             runBtn.disabled = true;
             runBtn.textContent = 'Running...';
+            if (cancelBtn) cancelBtn.classList.remove('hidden');
+            var abandonForm = document.getElementById('abandon-form');
+            if (abandonForm) abandonForm.classList.add('hidden');
 
             var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
             console.log('[pipeline] Run Pipeline clicked, found', cards.length, 'step cards');
             cards.forEach(function(c) { console.log('[pipeline] card:', c.dataset.stepId, c.dataset.status); });
             runNextStep(cards, 0);
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            cancelled = true;
+            if (activeSource) {
+                activeSource.close();
+                activeSource = null;
+            }
+            // Mark current running step as failed in UI
+            var cards = document.querySelectorAll('.step-card[data-step-id]');
+            cards.forEach(function(card, idx) {
+                if (card.dataset.status === 'running') {
+                    setBadge(card, 'cancelled', 'badge-failed');
+                    card.dataset.status = 'failed';
+                    syncProgressCircle(idx, 'failed');
+                }
+            });
+            cancelBtn.classList.add('hidden');
+            var abandonForm = document.getElementById('abandon-form');
+            if (abandonForm) abandonForm.classList.remove('hidden');
+            if (runBtn) {
+                runBtn.disabled = false;
+                runBtn.textContent = 'Run Pipeline';
+            }
         });
     }
 
@@ -2054,9 +2029,10 @@ function initCornerstonePipeline(projectID, runID) {
             var stepID = card.dataset.stepId;
             setBadge(card, 'running', 'badge-running');
             card.dataset.status = 'running';
+            syncProgressCircle(stepIndex, 'running');
             btn.disabled = true;
 
-            streamStep(stepID, card, function() {
+            streamStep(stepID, card, stepIndex, function() {
                 // After retry success, continue with next steps
                 runNextStep(cards, stepIndex + 1);
             }, function() {

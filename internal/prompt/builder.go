@@ -125,7 +125,9 @@ Search the web thoroughly. Look for:
 
 Fetch pages when search snippets are insufficient. Aim for at least 3-5 solid sources.
 
-When you have gathered enough material, call submit_research with your sources and a comprehensive brief.`, b.DateHeader(), profile, brief)
+When you have gathered enough material, call submit_research with your sources and a comprehensive brief.
+
+CRITICAL: Every response MUST include a tool call. You may think/reason, but you must ALWAYS also call a tool in the same response. A response with only text and no tool call is treated as a failure. When done researching, put all your findings directly into the submit_research tool call arguments.`, b.DateHeader(), profile, brief)
 }
 
 // ForBrandEnricher builds the system prompt for the brand enricher step.
@@ -156,7 +158,9 @@ You are a brand enricher. You receive market research about a specific topic and
 - Ask yourself: "Would a writer need this specific detail for THIS article?" If not, leave it out.
 - Include specific numbers (pricing, terms, features) that strengthen the article's argument.
 - Your sources list MUST include ALL sources from the original research, plus the brand URLs you fetched. Never drop sources.
-- When done, call submit_brand_enrichment. This is your only way to deliver results.`, b.DateHeader(), profile, researchOutput, urlList)
+
+## CRITICAL: You MUST use tool calls
+Every response MUST include a tool call. You may think/reason, but you must ALWAYS also call a tool in the same response. A response with only text and no tool call is treated as a failure. After fetching all URLs, call submit_brand_enrichment IMMEDIATELY. Put all your analysis directly into the submit_brand_enrichment tool call arguments.`, b.DateHeader(), profile, researchOutput, urlList)
 }
 
 // ForFactcheck builds the system prompt for the factcheck step.
@@ -178,7 +182,9 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 - Focus on claims that would embarrass the brand if wrong (prices, percentages, dates).
 - Accept reasonable claims from credible sources without re-verifying.
 - Your sources list MUST include ALL sources from the input above, plus any new ones. Never drop sources.
-- Call submit_factcheck when done. This is your only way to deliver results.`, b.DateHeader(), researchOutput)
+
+## CRITICAL: You MUST use tool calls
+Every response MUST include a tool call. You may think/reason, but you must ALWAYS also call a tool in the same response. A response with only text and no tool call is treated as a failure. After verifying claims, call submit_factcheck IMMEDIATELY. Put all your findings directly into the submit_factcheck tool call arguments.`, b.DateHeader(), researchOutput)
 }
 
 // ForEditor builds the system prompt for the editor step.
@@ -236,5 +242,101 @@ func (b *Builder) ForWriter(promptFile, profile, editorOutput, rejectionReason s
 	}
 
 	sb.WriteString(antiAIRules)
+	return sb.String()
+}
+
+func (b *Builder) ForTopicExplore(profile, blogContent, homepageContent, rejectedTopics, approvedTopics, instructions string) string {
+	var sb strings.Builder
+	sb.WriteString(b.DateHeader())
+	sb.WriteString(`
+
+You are a sharp editorial strategist who finds blog topics worth reading. Not SEO filler — real topics that make people stop scrolling.
+
+## What makes a good topic
+- It connects to something happening RIGHT NOW — a news event, industry shift, viral discussion, new regulation, a controversy, a trend
+- It has a specific angle that only THIS brand can credibly write about
+- A reader would forward it to a colleague or share it because it says something useful or surprising
+- It teaches something, challenges a common belief, or reveals a hidden pattern
+
+## What makes a BAD topic (avoid these)
+- Generic "Ultimate Guide to X" or "Top 10 Tips for Y" — these are content mill topics
+- Anything that reads like a rephrased keyword search — "What is [term]?" or "Benefits of [thing]"
+- Topics disconnected from current events or the real world — timeless-sounding but actually just bland
+- Topics where the brand connection is forced or purely self-promotional
+
+## Your process
+1. Review the brand profile to understand their niche, audience, and expertise
+2. Search the web for CURRENT events, news, trends, discussions, controversies, and developments in the brand's space — use today's date as reference
+3. Search for what the audience is actually talking about, struggling with, or debating right now
+4. If a blog URL was provided, fetch it to see recent posts and avoid duplicates
+5. Find the intersection between what's happening in the world and what this brand can uniquely say about it
+6. Propose 3-5 topics that are timely, specific, and have a clear narrative angle
+
+## Rules
+- Every topic MUST connect to something current — a recent event, trend, or shift. No evergreen filler.
+- Each topic needs a sharp angle, not just a subject area
+- The angle should be something this brand can credibly argue or demonstrate
+- Do NOT propose topics the blog has already covered
+- Think like a journalist: what's the story? What's the hook?
+
+## Client profile
+`)
+	sb.WriteString(profile)
+
+	if blogContent != "" {
+		sb.WriteString("\n\n## Recent blog posts (avoid duplicating these)\n")
+		sb.WriteString(blogContent)
+	}
+
+	if homepageContent != "" {
+		sb.WriteString("\n\n## Homepage content (for brand context)\n")
+		sb.WriteString(homepageContent)
+	}
+
+	if approvedTopics != "" {
+		sb.WriteString("\n\n## Already approved topics (do NOT re-propose these)\n")
+		sb.WriteString(approvedTopics)
+	}
+
+	if rejectedTopics != "" {
+		sb.WriteString("\n\n## Previously rejected topics (explore different angles)\n")
+		sb.WriteString(rejectedTopics)
+	}
+
+	if instructions != "" {
+		sb.WriteString("\n\n## Extra instructions from the user\nThe user has provided specific guidance for this run. Factor this into your topic selection:\n")
+		sb.WriteString(instructions)
+	}
+
+	return sb.String()
+}
+
+func (b *Builder) ForTopicReview(profile, topicsJSON string) string {
+	var sb strings.Builder
+	sb.WriteString(b.DateHeader())
+	sb.WriteString(`
+
+You are a common-sense editorial reviewer. You receive proposed blog topics and evaluate whether each one can be logically angled into a coherent story for this brand's blog.
+
+## Evaluation criteria
+For each topic, ask yourself:
+1. **Brand fit:** Is the connection between this topic and the brand natural, or does it feel forced?
+2. **Angle clarity:** Is the proposed angle specific enough to write a focused, interesting article?
+3. **Scope:** Is the topic too broad (unfocused) or too narrow (not enough to say)?
+4. **Reader logic:** Would a reader of this brand's blog understand why the brand is writing about this? Would they find it valuable?
+5. **Story potential:** Can this be turned into a compelling narrative, not just an informational dump?
+
+## Rules
+- Approve topics where the brand connection is natural and the angle is clear
+- Reject topics where the angle is forced, too vague, or doesn't serve the audience
+- Be specific in your reasoning — say exactly what works or what doesn't
+- You are a filter, not a perfectionist. If a topic is good enough with minor adjustments, approve it.
+
+## Client profile
+`)
+	sb.WriteString(profile)
+	sb.WriteString("\n\n## Proposed topics to review\n")
+	sb.WriteString(topicsJSON)
+
 	return sb.String()
 }

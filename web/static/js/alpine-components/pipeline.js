@@ -1,6 +1,5 @@
 // Alpine.js component: pipelineBoard
-// Consolidates initCornerstonePipeline and initProductionBoard into a single
-// reusable component for pipeline step streaming, chaining, and piece generation.
+// Uses StepCards (step-cards.js) for all step card rendering and streaming.
 //
 // Config shape:
 // {
@@ -15,107 +14,16 @@ document.addEventListener('alpine:init', function() {
         return {
             basePath: '/projects/' + config.projectID + '/pipeline/' + config.runID,
 
-            // --- Helpers ---
-
-            setBadge(card, text, cls) {
-                var badges = card.querySelectorAll('.badge');
-                var badge = badges[badges.length - 1];
-                if (!badge) return;
-                badge.textContent = text;
-                badge.className = 'badge ' + (cls || '');
-            },
-
-            addToolPill(card, type, value) {
-                var pillsEl = card.querySelector('.step-tool-pills');
-                if (!pillsEl) return;
-                if (type === 'search') {
-                    var pill = document.createElement('span');
-                    pill.className = 'badge badge-sm badge-secondary gap-1';
-                    pill.textContent = '\uD83D\uDD0D ' + (value.length > 30 ? value.substring(0, 30) + '\u2026' : value);
-                    pill.title = value;
-                    pillsEl.appendChild(pill);
-                } else if (type === 'fetch') {
-                    var a = document.createElement('a');
-                    a.className = 'badge badge-sm badge-accent gap-1';
-                    a.href = value;
-                    a.target = '_blank';
-                    var host = value;
-                    try { host = new URL(value).hostname; } catch(e) { host = value.substring(0, 25); }
-                    a.textContent = '\uD83C\uDF10 ' + host;
-                    a.title = value;
-                    pillsEl.appendChild(a);
-                }
-            },
-
-            // --- Step streaming (cornerstone) ---
-
-            streamStep(stepID, card, onDone, onError) {
-                var self = this;
-                var streamEl = card.querySelector('.step-stream');
-                var outputEl = card.querySelector('.step-output');
-                var tickerEl = card.querySelector('.step-thinking-ticker');
-
-                if (streamEl) streamEl.textContent = '';
-                if (outputEl) outputEl.textContent = '';
-                if (tickerEl) tickerEl.textContent = '';
-
-                var url = self.basePath + '/stream/step/' + stepID;
-                var source = new EventSource(url);
-
-                source.onmessage = function(event) {
-                    var d = JSON.parse(event.data);
-
-                    if (d.type === 'thinking') {
-                        if (tickerEl) {
-                            tickerEl.textContent += d.chunk;
-                            tickerEl.scrollTop = tickerEl.scrollHeight;
-                        }
-                    } else if (d.type === 'chunk') {
-                        if (streamEl) {
-                            streamEl.textContent += d.chunk;
-                            streamEl.scrollTop = streamEl.scrollHeight;
-                        }
-                    } else if (d.type === 'tool_start') {
-                        if (d.tool === 'web_search' && d.query) {
-                            self.addToolPill(card, 'search', d.query);
-                        } else if (d.tool === 'fetch_url' && d.url) {
-                            self.addToolPill(card, 'fetch', d.url);
-                        }
-                    } else if (d.type === 'content_written') {
-                        if (outputEl) renderContentBody(outputEl, d.platform, d.format, JSON.stringify(d.data));
-                    } else if (d.type === 'done') {
-                        source.close();
-                        if (tickerEl) tickerEl.classList.add('done');
-                        self.setBadge(card, 'completed', 'badge-completed');
-                        card.dataset.status = 'completed';
-                        if (onDone) onDone();
-                    } else if (d.type === 'error') {
-                        source.close();
-                        if (tickerEl) tickerEl.classList.add('done');
-                        if (streamEl) streamEl.textContent += '\nError: ' + d.error;
-                        self.setBadge(card, 'failed', 'badge-failed');
-                        card.dataset.status = 'failed';
-                        if (onError) onError(d.error);
-                    }
-                };
-
-                source.onerror = function() {
-                    source.close();
-                    self.setBadge(card, 'failed', 'badge-failed');
-                    card.dataset.status = 'failed';
-                    if (onError) onError('Connection lost');
-                };
-
-                return source;
-            },
-
             // --- Step chaining (cornerstone) ---
+
+            activeSource: null,
+            beforeUnloadHandler: null,
 
             runNextStep(cards, index) {
                 var self = this;
 
                 if (index >= cards.length) {
-                    // All done — reload to show the cornerstone piece
+                    if (self.beforeUnloadHandler) window.removeEventListener('beforeunload', self.beforeUnloadHandler);
                     window.location.reload();
                     return;
                 }
@@ -134,13 +42,22 @@ document.addEventListener('alpine:init', function() {
                 }
 
                 var stepID = card.dataset.stepId;
-                self.setBadge(card, 'running', 'badge-running');
-                card.dataset.status = 'running';
+                var url = self.basePath + '/stream/step/' + stepID;
 
-                self.streamStep(stepID, card, function() {
+                self.activeSource = StepCards.stream(card, url, function() {
+                    self.activeSource = null;
                     self.runNextStep(cards, index + 1);
                 }, function() {
-                    // On error, stop chaining
+                    self.activeSource = null;
+                    if (self.beforeUnloadHandler) window.removeEventListener('beforeunload', self.beforeUnloadHandler);
+                    var cancelBtn = document.getElementById('cancel-pipeline-btn');
+                    if (cancelBtn) cancelBtn.classList.add('hidden');
+                    var runBtn = document.getElementById('run-pipeline-btn');
+                    if (runBtn) {
+                        runBtn.disabled = false;
+                        runBtn.textContent = 'Retry';
+                        runBtn.classList.remove('hidden');
+                    }
                 });
             },
 
@@ -221,24 +138,13 @@ document.addEventListener('alpine:init', function() {
                 });
             },
 
-            // --- Run pipeline button ---
-
-            runPipeline() {
-                var self = this;
-                var runBtn = this.$refs.runBtn || document.getElementById('run-pipeline-btn');
-                if (runBtn) {
-                    runBtn.disabled = true;
-                    runBtn.textContent = 'Running...';
-                }
-
-                var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
-                self.runNextStep(cards, 0);
-            },
-
             // --- Init ---
 
             init() {
                 var self = this;
+
+                // Render all step cards from data attributes (shared module)
+                StepCards.renderAll();
 
                 if (config.isProduction) {
                     // --- Production board init ---
@@ -339,51 +245,49 @@ document.addEventListener('alpine:init', function() {
                 } else {
                     // --- Cornerstone pipeline init ---
 
-                    // Run pipeline button
+                    // Collapse completed steps
+                    StepCards.collapseCompleted();
+
+                    // Run pipeline / Retry button
                     var runBtn = document.getElementById('run-pipeline-btn');
+                    var cancelBtn = document.getElementById('cancel-pipeline-btn');
+
+                    self.beforeUnloadHandler = function(e) {
+                        e.preventDefault();
+                    };
+
                     if (runBtn) {
                         runBtn.addEventListener('click', function() {
                             runBtn.disabled = true;
                             runBtn.textContent = 'Running...';
-
+                            if (cancelBtn) cancelBtn.classList.remove('hidden');
+                            window.addEventListener('beforeunload', self.beforeUnloadHandler);
                             var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
                             self.runNextStep(cards, 0);
                         });
                     }
 
-                    // Retry buttons
-                    document.addEventListener('click', function(e) {
-                        var btn = e.target.closest('.step-retry-btn');
-                        if (!btn) return;
-
-                        var stepIndex = parseInt(btn.dataset.stepIndex) || 0;
-                        var cards = Array.prototype.slice.call(document.querySelectorAll('.step-card[data-step-id]'));
-                        if (stepIndex < cards.length) {
-                            var card = cards[stepIndex];
-                            var stepID = card.dataset.stepId;
-                            self.setBadge(card, 'running', 'badge-running');
-                            card.dataset.status = 'running';
-                            btn.disabled = true;
-
-                            self.streamStep(stepID, card, function() {
-                                self.runNextStep(cards, stepIndex + 1);
-                            }, function() {
-                                btn.disabled = false;
-                            });
-                        }
-                    });
+                    if (cancelBtn) {
+                        cancelBtn.addEventListener('click', function() {
+                            if (self.activeSource) {
+                                self.activeSource.close();
+                                self.activeSource = null;
+                            }
+                            window.removeEventListener('beforeunload', self.beforeUnloadHandler);
+                            cancelBtn.classList.add('hidden');
+                            // Reload to get clean state from server
+                            window.location.reload();
+                        });
+                    }
 
                     // Approve button
                     document.addEventListener('click', function(e) {
                         var btn = e.target.closest('.piece-approve-btn');
                         if (!btn) return;
-
                         var pieceId = btn.dataset.pieceId;
                         if (!pieceId) return;
-
                         btn.disabled = true;
                         btn.textContent = 'Approving...';
-
                         fetch(self.basePath + '/piece/' + pieceId + '/approve', { method: 'POST' })
                             .then(function() { window.location.reload(); })
                             .catch(function() { window.location.reload(); });
@@ -434,84 +338,6 @@ document.addEventListener('alpine:init', function() {
                             topicHeader.style.marginBottom = isCollapsed ? '' : '0';
                         });
                     }
-
-                    // Render tool pills from data attribute on page load
-                    document.querySelectorAll('.step-card[data-tool-calls]').forEach(function(card) {
-                        var raw = card.dataset.toolCalls;
-                        if (!raw) return;
-                        try {
-                            var calls = JSON.parse(raw);
-                            calls.forEach(function(tc) {
-                                self.addToolPill(card, tc.type, tc.value);
-                            });
-                        } catch(e) {}
-                    });
-
-                    // Render step outputs and collapse completed non-last steps
-                    var stepCards = document.querySelectorAll('.step-card[data-step-id]');
-                    var allCompleted = true;
-                    stepCards.forEach(function(card) {
-                        if (card.dataset.status !== 'completed') allCompleted = false;
-                    });
-
-                    stepCards.forEach(function(card, idx) {
-                        var stepType = card.querySelector('.board-card-header strong');
-                        var outputEl = card.querySelector('.step-output');
-                        if (!outputEl) return;
-                        var raw = outputEl.textContent.trim();
-                        if (!raw) return;
-                        var typeName = stepType ? stepType.textContent.trim() : '';
-
-                        // Writer output is shown in the piece card below — hide the raw JSON
-                        if (typeName === 'Writer') {
-                            outputEl.style.display = 'none';
-                        } else {
-                            try {
-                                var data = JSON.parse(raw);
-                                renderStepOutput(outputEl, typeName, data);
-                            } catch (e) {
-                                // Leave as text
-                            }
-                        }
-
-                        // Collapse completed steps except the last one when all are done
-                        if (allCompleted && card.dataset.status === 'completed' && idx < stepCards.length - 1) {
-                            var output = card.querySelector('.step-output');
-                            var pills = card.querySelector('.step-tool-pills');
-                            if (output) output.style.display = 'none';
-                            if (pills) pills.style.display = 'none';
-                            card.dataset.collapsed = 'true';
-
-                            var headerDiv = card.querySelector('.board-card-header');
-                            var badge = headerDiv.querySelector('.badge');
-                            var rightGroup = document.createElement('div');
-                            rightGroup.className = 'flex items-center gap-1';
-                            if (badge) {
-                                badge.parentNode.removeChild(badge);
-                                rightGroup.appendChild(badge);
-                            }
-                            var toggleBtn = document.createElement('button');
-                            toggleBtn.className = 'btn btn-secondary btn-xs';
-                            toggleBtn.textContent = '+';
-                            toggleBtn.title = 'Expand';
-                            rightGroup.appendChild(toggleBtn);
-                            headerDiv.appendChild(rightGroup);
-                            headerDiv.style.marginBottom = '0';
-
-                            toggleBtn.addEventListener('click', function(e) {
-                                e.stopPropagation();
-                                var o = card.querySelector('.step-output');
-                                var p = card.querySelector('.step-tool-pills');
-                                var isCollapsed = card.dataset.collapsed === 'true';
-                                if (o) o.style.display = isCollapsed ? '' : 'none';
-                                if (p) p.style.display = isCollapsed ? '' : 'none';
-                                card.dataset.collapsed = isCollapsed ? 'false' : 'true';
-                                toggleBtn.textContent = isCollapsed ? '\u2212' : '+';
-                                toggleBtn.title = isCollapsed ? 'Collapse' : 'Expand';
-                                headerDiv.style.marginBottom = isCollapsed ? '' : '0';
-                            });
-                        }
-                    });
 
                     // Proofread buttons
                     document.querySelectorAll('.proofread-btn').forEach(function(btn) {

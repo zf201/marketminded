@@ -75,18 +75,16 @@ func (o *Orchestrator) RunStep(ctx context.Context, stepID int64, run *store.Pip
 		PriorOutputs: priorOutputs,
 	}
 
-	ok, err = o.store.TrySetStepRunning(stepID)
-	if err != nil || !ok {
-		return fmt.Errorf("step already running or completed")
-	}
-
 	result, runErr := runner.Run(ctx, input, stream)
 
 	if runErr != nil {
-		o.store.UpdatePipelineStepOutput(stepID, result.Output, result.Thinking)
-		if result.ToolCalls != "" {
-			o.store.UpdatePipelineStepToolCalls(stepID, result.ToolCalls)
+		// On failure: clear output unless the AI returned a meaningful error
+		errOutput := ""
+		if result.Output != "" && ctx.Err() == nil {
+			errOutput = result.Output
 		}
+		o.store.UpdatePipelineStepOutput(stepID, errOutput, "")
+		o.store.UpdatePipelineStepToolCalls(stepID, "")
 		o.store.UpdatePipelineStepStatus(stepID, "failed")
 		return runErr
 	}

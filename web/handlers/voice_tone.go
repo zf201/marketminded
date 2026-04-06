@@ -418,7 +418,7 @@ Call submit_voice_tone with 7 fields:
 	start := time.Now()
 	applog.Info("voice_tone generate: project=%d model=%s starting", projectID, model)
 
-	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, maxIter)
+	_, err := h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
 
 	duration := time.Since(start)
 	if err != nil && submittedResult == "" {

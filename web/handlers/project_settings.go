@@ -31,10 +31,14 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 		return
 	}
 	settings, _ := h.queries.AllProjectSettings(projectID)
+	blogURL, _ := h.queries.GetProjectSetting(projectID, "blog_url")
+	homepageURL, _ := h.queries.GetProjectSetting(projectID, "homepage_url")
 	templates.ProjectSettingsPage(templates.ProjectSettingsData{
 		ProjectID:   projectID,
 		ProjectName: project.Name,
 		Language:    settings["language"],
+		BlogURL:     blogURL,
+		HomepageURL: homepageURL,
 		Saved:       r.URL.Query().Get("saved") == "1",
 	}).Render(r.Context(), w)
 }
@@ -42,5 +46,7 @@ func (h *ProjectSettingsHandler) show(w http.ResponseWriter, r *http.Request, pr
 func (h *ProjectSettingsHandler) save(w http.ResponseWriter, r *http.Request, projectID int64) {
 	r.ParseForm()
 	h.queries.SetProjectSetting(projectID, "language", r.FormValue("language"))
+	h.queries.SetProjectSetting(projectID, "blog_url", r.FormValue("blog_url"))
+	h.queries.SetProjectSetting(projectID, "homepage_url", r.FormValue("homepage_url"))
 	http.Redirect(w, r, fmt.Sprintf("/projects/%d/settings?saved=1", projectID), http.StatusSeeOther)
 }

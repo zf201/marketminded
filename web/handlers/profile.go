@@ -434,7 +434,7 @@ Source URLs:
 
 		_, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent,
 			func(string) error { return nil },
-			func(string) error { return nil }, &temp, maxIter)
+			func(string) error { return nil }, &temp, "", maxIter)
 
 		duration := time.Since(start)
 		if err != nil && submittedResult == "" {

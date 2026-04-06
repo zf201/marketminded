@@ -13,7 +13,6 @@ type PipelineStore interface {
 	CreatePipelineStep(pipelineRunID int64, stepType string, sortOrder int) (*PipelineStep, error)
 	GetPipelineStep(id int64) (*PipelineStep, error)
 	ListPipelineSteps(pipelineRunID int64) ([]PipelineStep, error)
-	TrySetStepRunning(id int64) (bool, error)
 	UpdatePipelineStepStatus(id int64, status string) error
 	UpdatePipelineStepOutput(id int64, output, thinking string) error
 	UpdatePipelineStepInput(id int64, input string) error
@@ -87,6 +86,25 @@ type ProjectSettingsStore interface {
 	AllProjectSettings(projectID int64) (map[string]string, error)
 }
 
+// TopicStore handles topic runs, steps, and backlog.
+type TopicStore interface {
+	CreateTopicRun(projectID int64, instructions string) (*TopicRun, error)
+	GetTopicRun(id int64) (*TopicRun, error)
+	ListTopicRuns(projectID int64) ([]TopicRun, error)
+	UpdateTopicRunStatus(id int64, status string) error
+	CreateTopicStep(topicRunID int64, stepType string, round, sortOrder int) (*TopicStep, error)
+	GetTopicStep(id int64) (*TopicStep, error)
+	ListTopicSteps(topicRunID int64) ([]TopicStep, error)
+	UpdateTopicStepStatus(id int64, status string) error
+	UpdateTopicStepOutput(id int64, output, thinking string) error
+	UpdateTopicStepToolCalls(id int64, toolCalls string) error
+	CreateTopicBacklogItem(projectID, topicRunID int64, title, angle, sources string) (*TopicBacklogItem, error)
+	GetTopicBacklogItem(id int64) (*TopicBacklogItem, error)
+	ListTopicBacklog(projectID int64) ([]TopicBacklogItem, error)
+	UpdateTopicBacklogStatus(id int64, status string) error
+	CountTopicRunTopics(topicRunID int64) (int, error)
+}
+
 // BrainstormStore handles brainstorm chats and messages.
 type BrainstormStore interface {
 	CreateBrainstormChat(projectID int64, title, section string, contentPieceID *int64) (*BrainstormChat, error)
@@ -121,3 +139,4 @@ var _ BrainstormStore = (*Queries)(nil)
 var _ ContextStore = (*Queries)(nil)
 var _ AudienceStore = (*Queries)(nil)
 var _ VoiceToneStore = (*Queries)(nil)
+var _ TopicStore = (*Queries)(nil)

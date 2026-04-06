@@ -55,7 +55,6 @@ func main() {
 		}
 		return cfg.ModelIdeation
 	}
-
 	// Prompt builder
 	promptBuilder, err := prompt.NewBuilder("prompts")
 	if err != nil {
@@ -79,11 +78,11 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(queries)
 	pipelineHandler := handlers.NewPipelineHandler(queries, orchestrator, aiClient, copywritingModel, promptBuilder)
 	contentHandler := handlers.NewContentHandler(queries)
-brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClient, ideationModel)
 	settingsHandler := handlers.NewSettingsHandler(queries)
 	profileHandler := handlers.NewProfileHandler(queries, aiClient, braveClient, contentModel)
 	contextHandler := handlers.NewContextHandler(queries, aiClient, contentModel)
 	projectSettingsHandler := handlers.NewProjectSettingsHandler(queries)
+	topicHandler := handlers.NewTopicHandler(queries, aiClient, braveClient, toolRegistry, promptBuilder, ideationModel)
 
 	mux := http.NewServeMux()
 
@@ -115,11 +114,11 @@ brainstormHandler := handlers.NewBrainstormHandler(queries, aiClient, braveClien
 		switch {
 		case strings.HasPrefix(rest, "pipeline"):
 			pipelineHandler.Handle(w, r, projectID, rest)
+		case strings.HasPrefix(rest, "topics"):
+			topicHandler.Handle(w, r, projectID, rest)
 		case strings.HasPrefix(rest, "content"):
 			contentHandler.Handle(w, r, projectID, rest)
-case strings.HasPrefix(rest, "brainstorm"):
-			brainstormHandler.Handle(w, r, projectID, rest)
-		case strings.HasPrefix(rest, "profile"):
+case strings.HasPrefix(rest, "profile"):
 			profileHandler.Handle(w, r, projectID, rest)
 		case rest == "context-memory" || rest == "context-memory/":
 			projectHandler.HandleContextMemory(w, r, projectID)

@@ -78,14 +78,7 @@ func (q *Queries) UpdatePipelineStepToolCalls(id int64, toolCalls string) error 
 	return err
 }
 
-// TrySetStepRunning atomically sets status to running if currently pending or failed.
-func (q *Queries) TrySetStepRunning(id int64) (bool, error) {
-	res, err := q.db.Exec(
-		"UPDATE pipeline_steps SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('pending', 'failed')", id,
-	)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+func (q *Queries) ResetPipelineSteps(pipelineRunID int64) error {
+	_, err := q.db.Exec("UPDATE pipeline_steps SET status = 'pending', output = '', thinking = '', tool_calls = '', updated_at = CURRENT_TIMESTAMP WHERE pipeline_run_id = ?", pipelineRunID)
+	return err
 }

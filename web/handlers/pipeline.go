@@ -36,6 +36,8 @@ func (h *PipelineHandler) Handle(w http.ResponseWriter, r *http.Request, project
 		h.list(w, r, projectID)
 	case rest == "pipeline" && r.Method == "POST":
 		h.create(w, r, projectID)
+	case strings.HasSuffix(rest, "/restart") && r.Method == "POST":
+		h.restart(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/abandon") && r.Method == "POST":
 		h.abandon(w, r, projectID, rest)
 	case strings.HasSuffix(rest, "/delete") && r.Method == "POST":
@@ -179,6 +181,13 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 	}).Render(r.Context(), w)
 }
 
+func (h *PipelineHandler) restart(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
+	runID := h.parseRunID(rest)
+	h.queries.ResetPipelineSteps(runID)
+	h.queries.UpdatePipelineStatus(runID, "pending")
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/pipeline/%d", projectID, runID), http.StatusSeeOther)
+}
+
 func (h *PipelineHandler) abandon(w http.ResponseWriter, r *http.Request, projectID int64, rest string) {
 	runID := h.parseRunID(rest)
 	h.queries.UpdatePipelineStatus(runID, "abandoned")
@@ -233,6 +242,7 @@ func (h *PipelineHandler) streamStep(w http.ResponseWriter, r *http.Request, pro
 
 	if err := h.orchestrator.RunStep(r.Context(), stepID, run, profile, stream); err != nil {
 		stream.SendError(err.Error())
+		return
 	}
 
 	stream.SendDone()
@@ -323,7 +333,7 @@ func (h *PipelineHandler) streamPiece(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
 	if err != nil {
 		sendError(err.Error())
 		return
@@ -477,7 +487,7 @@ Apply the user's feedback. Return the complete rewritten version by calling the 
 	}
 
 	temp := 0.3
-	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp)
+	fullResponse, err := h.aiClient.StreamWithTools(r.Context(), h.writerModel(), aiMsgs, toolList, executor, onToolEvent, sendChunk, func(string) error { return nil }, &temp, "write_content")
 	if err != nil {
 		sendError(err.Error())
 		return

@@ -16,11 +16,10 @@ templ pageHead(title string) {
 	<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 	<script src="/static/js/renderers/markdown.js"></script>
 	<script src="/static/js/renderers/step-output.js"></script>
+	<script src="/static/js/step-cards.js"></script>
 	<script src="/static/js/renderers/content-body.js"></script>
-	<script src="/static/js/alpine-components/chat.js"></script>
 	<script src="/static/js/alpine-components/pipeline.js"></script>
 	<script src="/static/js/alpine-components/content-piece.js"></script>
-	<script src="/static/js/chat-drawer.js"></script>
 	<script src="/static/app.js" defer></script>
 }
 
@@ -143,6 +142,10 @@ templ ProjectPageShell(title string, breadcrumbs []Breadcrumb, projectID int64, 
 						<svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"></path></svg>
 						Pipeline
 					</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics", projectID)) } class={ sidebarLinkClass(activePage, "topics") }>
+						<svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"></path></svg>
+						Topics
+					</a>
 					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/context-memory", projectID)) } class={ sidebarLinkClass(activePage, "context-memory") }>
 						<svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"></path></svg>
 						Context & Memory
@@ -186,66 +189,6 @@ templ ProjectPageShell(title string, breadcrumbs []Breadcrumb, projectID int64, 
 			</div>
 		</div>
 
-		@chatDrawer(projectID)
 	</body>
 	</html>
-}
-
-templ chatDrawer(projectID int64) {
-	<!-- Floating chat button -->
-	<button
-		id="chat-fab"
-		class="btn btn-secondary shadow-lg fixed bottom-6 right-6 z-20 rounded-full w-12 h-12 p-0"
-		onclick="window.chatDrawer && window.chatDrawer.open()"
-	>
-		<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-		</svg>
-	</button>
-
-	<!-- Chat drawer overlay -->
-	<div
-		id="chat-drawer"
-		class="fixed inset-0 z-50 hidden"
-		data-project-id={ fmt.Sprintf("%d", projectID) }
-	>
-		<!-- Backdrop -->
-		<div class="absolute inset-0 bg-black/60" onclick="window.chatDrawer && window.chatDrawer.close()"></div>
-
-		<!-- Drawer panel -->
-		<div class="absolute right-0 top-0 h-full w-[70%] max-w-2xl bg-zinc-900 border-l border-zinc-800 flex flex-col">
-			<!-- Header -->
-			<div class="flex items-center justify-between p-3 border-b border-zinc-800">
-				<div class="flex items-center gap-2">
-					<button id="chat-drawer-back" class="btn btn-secondary btn-xs" onclick="window.chatDrawer && window.chatDrawer.showList()">Back</button>
-					<h3 class="font-semibold text-sm text-zinc-100" id="chat-drawer-title">Chats</h3>
-				</div>
-				<button class="btn btn-ghost btn-xs" onclick="window.chatDrawer && window.chatDrawer.close()">&#x2715;</button>
-			</div>
-
-			<!-- Chat list view -->
-			<div id="chat-drawer-list" class="flex-1 overflow-y-auto p-3">
-				<p class="text-zinc-600 text-sm">Loading chats...</p>
-			</div>
-
-			<!-- Active chat view -->
-			<div id="chat-drawer-chat" class="flex-1 flex-col hidden">
-				<!-- Messages -->
-				<div id="chat-drawer-messages" class="flex-1 overflow-y-auto p-3 space-y-3"></div>
-
-				<!-- Input -->
-				<div class="border-t border-zinc-800 p-3">
-					<div class="flex gap-2">
-						<textarea
-							id="chat-drawer-input"
-							class="textarea flex-1 min-h-[40px]"
-							placeholder="Type a message... (Cmd+Enter to send)"
-							rows="2"
-						></textarea>
-						<button id="chat-drawer-send" class="btn btn-primary btn-sm self-end" onclick="window.chatDrawer && window.chatDrawer.send()">Send</button>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
 }

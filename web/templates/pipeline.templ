@@ -104,13 +104,20 @@ func (d ProductionBoardData) hasPendingSteps() bool {
 	return false
 }
 
+func (d ProductionBoardData) hasFailedSteps() bool {
+	for _, s := range d.Steps {
+		if s.Status == "failed" {
+			return true
+		}
+	}
+	return false
+}
+
 func stepProgressClass(status string) string {
 	base := "flex flex-col items-center gap-1 text-xs"
 	switch status {
 	case "completed":
 		return base + " text-green-400"
-	case "running":
-		return base + " text-yellow-400"
 	case "failed":
 		return base + " text-red-400"
 	default:
@@ -122,8 +129,6 @@ func stepIcon(status string) string {
 	switch status {
 	case "completed":
 		return "✓"
-	case "running":
-		return "●"
 	case "failed":
 		return "✗"
 	default:
@@ -172,7 +177,7 @@ templ ProductionBoardPage(data ProductionBoardData) {
 		{Label: "Pipeline", URL: fmt.Sprintf("/projects/%d/pipeline", data.ProjectID)},
 		{Label: data.Topic},
 	}, data.ProjectID, data.ProjectName, "pipeline") {
-		<div id="cornerstone-pipeline-page" data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-run-id={ fmt.Sprintf("%d", data.RunID) } data-next-piece-id={ fmt.Sprintf("%d", data.NextPieceID) }>
+		<div id="cornerstone-pipeline-page" x-data={ fmt.Sprintf("pipelineBoard({projectID:%d,runID:%d,isProduction:false})", data.ProjectID, data.RunID) } data-project-id={ fmt.Sprintf("%d", data.ProjectID) } data-run-id={ fmt.Sprintf("%d", data.RunID) } data-next-piece-id={ fmt.Sprintf("%d", data.NextPieceID) }>
 			<div class="flex items-center justify-between mb-4">
 				<div>
 					@components.StatusBadge(data.Status)
@@ -180,7 +185,7 @@ templ ProductionBoardPage(data ProductionBoardData) {
 				</div>
 				<div class="flex items-center gap-2">
 					if data.Status != "complete" && data.Status != "abandoned" {
-						<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } class="inline-block">
+						<form id="abandon-form" method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/abandon", data.ProjectID, data.RunID)) } class="inline-block">
 							<button type="submit" class="btn btn-danger btn-sm">Abandon</button>
 						</form>
 					}
@@ -196,24 +201,23 @@ templ ProductionBoardPage(data ProductionBoardData) {
 				<!-- Step progress indicator -->
 				<div class="flex items-center justify-between mb-6 px-2">
 					for i, step := range data.Steps {
-						<div class={ stepProgressClass(step.Status) }>
+						<div class={ stepProgressClass(step.Status) } data-progress-index={ fmt.Sprintf("%d", i) } data-progress-status={ step.Status }>
 							<div class={
-								"w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border",
+								"step-progress-circle w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border",
 								templ.KV("bg-green-500/10 border-green-500/30", step.Status == "completed"),
-								templ.KV("bg-yellow-500/10 border-yellow-500/30 animate-pulse", step.Status == "running"),
 								templ.KV("bg-red-500/10 border-red-500/30", step.Status == "failed"),
-								templ.KV("bg-zinc-800 border-zinc-700", step.Status != "completed" && step.Status != "running" && step.Status != "failed"),
+								templ.KV("bg-zinc-800 border-zinc-700", step.Status != "completed" && step.Status != "failed"),
 							}>
-								{ stepIcon(step.Status) }
+								<span class="step-progress-icon">{ stepIcon(step.Status) }</span>
 							</div>
 							<span class="text-[10px] whitespace-nowrap">@stepTypeLabel(step.StepType)</span>
 						</div>
 						if i < len(data.Steps) - 1 {
 							<div class={
-								"flex-1 h-px mx-1",
+								"step-progress-line flex-1 h-px mx-1",
 								templ.KV("bg-green-500/30", step.Status == "completed"),
 								templ.KV("bg-zinc-800", step.Status != "completed"),
-							}></div>
+							} data-line-after={ fmt.Sprintf("%d", i) }></div>
 						}
 					}
 				</div>
@@ -227,37 +231,28 @@ templ ProductionBoardPage(data ProductionBoardData) {
 				<div class="flex flex-col gap-3 mt-4">
 					for _, step := range data.Steps {
 						<div
-							class="step-card board-card card"
+							class="step-card card"
 							data-step-id={ fmt.Sprintf("%d", step.ID) }
 							data-status={ step.Status }
+							data-step-type={ step.StepType }
 							data-tool-calls={ step.ToolCalls }
+							data-output={ step.Output }
 						>
-							<div class="p-3">
-								<div class="board-card-header flex items-center gap-2">
-									<strong class="text-sm">@stepTypeLabel(step.StepType)</strong>
-									<span class="ml-auto">@components.StatusBadge(step.Status)</span>
-								</div>
-								<div class="step-tool-pills flex flex-wrap gap-1 mt-2 empty:hidden"></div>
-								<div class="step-thinking-ticker font-mono text-xs max-h-24 overflow-y-auto mt-1 empty:hidden"></div>
-								if step.Status == "completed" && step.Output != "" {
-									<div class="step-output mt-2">{ step.Output }</div>
-								} else if step.Status == "failed" && step.Output != "" {
-									<details class="mt-2">
-										<summary class="cursor-pointer text-sm text-red-400">View failed output</summary>
-										<div class="step-stream whitespace-pre-wrap text-xs mt-2 max-h-72 overflow-y-auto p-2 bg-red-500/5 border border-red-500/20 rounded">{ step.Output }</div>
-									</details>
-								} else {
-									<div class="step-stream whitespace-pre-wrap text-sm mt-2 max-h-72 overflow-y-auto empty:hidden"></div>
-									<div class="step-output mt-2 empty:hidden"></div>
-								}
-							</div>
 						</div>
 					}
 				</div>
 
 				if data.hasPendingSteps() {
-					<div class="mt-4">
-						<button class="btn btn-primary" id="run-pipeline-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Run Pipeline</button>
+					<div class="mt-4 flex items-center gap-2">
+						if data.hasFailedSteps() {
+							<button class="btn btn-primary" id="run-pipeline-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Retry</button>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline/%d/restart", data.ProjectID, data.RunID)) } class="inline">
+								<button type="submit" class="btn btn-secondary">Retry from Start</button>
+							</form>
+						} else {
+							<button class="btn btn-primary" id="run-pipeline-btn" data-run-id={ fmt.Sprintf("%d", data.RunID) }>Run Pipeline</button>
+						}
+						<button class="btn btn-danger hidden" id="cancel-pipeline-btn">Cancel</button>
 					</div>
 				}
 			}

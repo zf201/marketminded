@@ -4,8 +4,6 @@ func badgeClass(status string) string {
 	switch status {
 	case "pending":
 		return "badge badge-ghost"
-	case "running":
-		return "badge badge-warning animate-pulse"
 	case "completed", "complete":
 		return "badge badge-success"
 	case "failed":

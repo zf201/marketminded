@@ -50,6 +50,18 @@ func NewRegistry(braveClient *search.BraveClient) *Registry {
 		`{"type":"object","properties":{"angle":{"type":"string","description":"The core narrative angle in one sentence"},"sections":{"type":"array","description":"Ordered sections of the article","items":{"type":"object","properties":{"heading":{"type":"string","description":"Suggested section heading"},"framework_beat":{"type":"string","description":"Storytelling framework beat this maps to, if any"},"key_points":{"type":"array","items":{"type":"string"},"description":"Specific points to make, with data/stats where relevant"},"sources_to_use":{"type":"array","items":{"type":"string"},"description":"Source URLs that back the points in this section"},"editorial_notes":{"type":"string","description":"Tone and approach guidance for this section"}},"required":["heading","key_points"]}},"conclusion_strategy":{"type":"string","description":"How to close: what ties back, what CTA, what feeling to leave"}},"required":["angle","sections","conclusion_strategy"]}`,
 	)}
 
+	r.stepTools["topic_explore"] = []ai.Tool{fetchTool, searchTool, submitTool(
+		"submit_topics",
+		"Submit your discovered topic candidates. Call this when you have 3-5 well-researched topics ready.",
+		`{"type":"object","properties":{"topics":{"type":"array","description":"3-5 topic candidates","items":{"type":"object","properties":{"title":{"type":"string","description":"Topic title — specific and compelling"},"angle":{"type":"string","description":"Why this topic fits the brand and what angle to take, 1-2 sentences"},"evidence":{"type":"string","description":"What research supports this topic — trends, gaps, audience interest"}},"required":["title","angle","evidence"]}}},"required":["topics"]}`,
+	)}
+
+	r.stepTools["topic_review"] = []ai.Tool{submitTool(
+		"submit_review",
+		"Submit your review of the proposed topics. Approve or reject each one with clear reasoning.",
+		`{"type":"object","properties":{"reviews":{"type":"array","description":"One review per proposed topic","items":{"type":"object","properties":{"title":{"type":"string","description":"Echo back the topic title exactly"},"verdict":{"type":"string","enum":["approved","rejected"],"description":"Whether this topic passes the common sense check"},"reasoning":{"type":"string","description":"Why this topic was approved or rejected"}},"required":["title","verdict","reasoning"]}}},"required":["reviews"]}`,
+	)}
+
 	// Writer step uses the blog_post content type tool
 	ct, ok := content.LookupType("blog", "post")
 	if ok {

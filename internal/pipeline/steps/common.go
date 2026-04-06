@@ -15,8 +15,9 @@ import (
 	"github.com/zanfridau/marketminded/internal/types"
 )
 
-// runWithTools is the common pattern for streaming a step with tool calling.
-func runWithTools(
+// RunWithTools is the common pattern for streaming a step with tool calling.
+// logPrefix identifies the caller in logs, e.g. "pipeline run=5 step=12 type=research"
+func RunWithTools(
 	ctx context.Context,
 	aiClient *ai.Client,
 	model string,
@@ -28,9 +29,10 @@ func runWithTools(
 	stream pipeline.StepStream,
 	temp float64,
 	maxIter int,
+	logPrefix string,
 ) (pipeline.StepResult, error) {
 	// Inject tool call budget into system prompt
-	fullPrompt := systemPrompt + fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call your submit tool when ready. Do NOT keep searching endlessly.", maxIter)
+	fullPrompt := systemPrompt + fmt.Sprintf("\n\nCRITICAL BUDGET: You have exactly %d tool calls total. Your submit tool counts as 1 call. If you use all %d calls on search/fetch without submitting, the step FAILS COMPLETELY and ALL your work is lost. You MUST call your submit tool before reaching the limit. A safe strategy: use at most %d calls for search/fetch, then IMMEDIATELY submit your results.", maxIter, maxIter, maxIter-2)
 
 	aiMsgs := []types.Message{
 		{Role: "system", Content: fullPrompt},
@@ -104,10 +106,13 @@ func runWithTools(
 	}
 
 	temperature := temp
+	if logPrefix == "" {
+		logPrefix = submitToolName
+	}
 	start := time.Now()
-	applog.Info("pipeline step %s: model=%s starting (submit=%s, maxIter=%d)", submitToolName, model, submitToolName, maxIter)
+	applog.Info("%s: model=%s starting (submit=%s, maxIter=%d)", logPrefix, model, submitToolName, maxIter)
 
-	_, err := aiClient.StreamWithTools(ctx, model, aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temperature, maxIter)
+	_, err := aiClient.StreamWithTools(ctx, model, aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temperature, submitToolName, maxIter)
 
 	duration := time.Since(start)
 	result := pipeline.StepResult{
@@ -117,7 +122,7 @@ func runWithTools(
 	}
 
 	if err != nil {
-		applog.Error("pipeline step %s: model=%s failed after %s: %s", submitToolName, model, duration, err.Error())
+		applog.Error("%s: model=%s failed after %s: %s", logPrefix, model, duration, err.Error())
 		if result.Output == "" {
 			result.Output = chunkBuf.String()
 		}
@@ -125,11 +130,11 @@ func runWithTools(
 	}
 
 	if savedOutput == "" {
-		applog.Error("pipeline step %s: model=%s completed in %s but no result submitted", submitToolName, model, duration)
+		applog.Error("%s: model=%s completed in %s but no result submitted", logPrefix, model, duration)
 		result.Output = chunkBuf.String()
 		return result, fmt.Errorf("step did not submit results via tool call")
 	}
 
-	applog.Info("pipeline step %s: model=%s completed in %s, output=%d bytes, tools=%d", submitToolName, model, duration, len(savedOutput), len(toolCallsList))
+	applog.Info("%s: model=%s completed in %s, output=%d bytes, tools=%d", logPrefix, model, duration, len(savedOutput), len(toolCallsList))
 	return result, nil
 }

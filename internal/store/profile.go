@@ -149,8 +149,17 @@ func (q *Queries) BuildSourceURLList(projectID int64) (string, error) {
 }
 
 func (q *Queries) prependMemory(projectID int64, b *strings.Builder) {
+	if lang, err := q.GetProjectSetting(projectID, "language"); err == nil && lang != "" {
+		fmt.Fprintf(b, "## Language\nAll output MUST be written in %s.\n\n", lang)
+	}
 	if mem, err := q.GetProjectSetting(projectID, "memory"); err == nil && mem != "" {
 		fmt.Fprintf(b, "## Important rules and facts\n%s\n\n", mem)
+	}
+	if ctx, err := q.GetProjectSetting(projectID, "context"); err == nil && ctx != "" {
+		fmt.Fprintf(b, "## Context & editorial direction\n%s\n\n", ctx)
+	}
+	if items, err := q.BuildContextString(projectID); err == nil && items != "" {
+		fmt.Fprintf(b, "## Background knowledge\n%s\n", items)
 	}
 }
 

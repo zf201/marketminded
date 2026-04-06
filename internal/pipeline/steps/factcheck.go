@@ -2,6 +2,7 @@ package steps
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/pipeline"
@@ -22,5 +23,6 @@ func (s *FactcheckStep) Run(ctx context.Context, input pipeline.StepInput, strea
 	enricherOutput := input.PriorOutputs["brand_enricher"]
 	systemPrompt := s.Prompt.ForFactcheck(enricherOutput)
 	toolList := s.Tools.ForStep("factcheck")
-	return runWithTools(ctx, s.AI, s.Model(), systemPrompt, "Begin fact-checking now.", toolList, s.Tools, "submit_factcheck", stream, 0.2, 20)
+	prefix := fmt.Sprintf("pipeline run=%d step=%d type=factcheck", input.RunID, input.StepID)
+	return RunWithTools(ctx, s.AI, s.Model(), systemPrompt, "Begin fact-checking now.", toolList, s.Tools, "submit_factcheck", stream, 0.2, 20, prefix)
 }

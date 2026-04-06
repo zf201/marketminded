@@ -3,6 +3,7 @@ package steps
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/pipeline"
@@ -46,5 +47,6 @@ func (s *EditorStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 
 	systemPrompt := s.Prompt.ForEditor(input.Profile, brief, sourcesText, frameworkBlock)
 	toolList := s.Tools.ForStep("editor")
-	return runWithTools(ctx, s.AI, s.Model(), systemPrompt, "Create the editorial outline now.", toolList, s.Tools, "submit_editorial_outline", stream, 0.3, 5)
+	prefix := fmt.Sprintf("pipeline run=%d step=%d type=editor", input.RunID, input.StepID)
+	return RunWithTools(ctx, s.AI, s.Model(), systemPrompt, "Create the editorial outline now.", toolList, s.Tools, "submit_editorial_outline", stream, 0.3, 5, prefix)
 }

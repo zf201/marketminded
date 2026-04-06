@@ -82,6 +82,7 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 	}
 
 	runs, _ := h.queries.ListPipelineRuns(id)
+	backlog, _ := h.queries.ListTopicBacklog(id)
 
 	sections, _ := h.queries.ListProfileSections(id)
 	hasProfile := len(sections) > 0
@@ -97,6 +98,7 @@ func (h *ProjectHandler) ShowProject(w http.ResponseWriter, r *http.Request, id 
 		Language:    settings["language"],
 		HasContext:  settings["context"] != "",
 		HasMemory:   settings["memory"] != "",
+		TopicCount:  len(backlog),
 	}
 
 	templates.ProjectOverview(detail).Render(r.Context(), w)

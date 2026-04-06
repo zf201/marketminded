@@ -46,23 +46,6 @@ func TestListPipelineStepsOrder(t *testing.T) {
 	}
 }
 
-func TestTrySetStepRunning(t *testing.T) {
-	q := testDB(t)
-	p, _ := q.CreateProject("Test", "test")
-	run, _ := q.CreatePipelineRun(p.ID, "test topic")
-	step, _ := q.CreatePipelineStep(run.ID, "research", 0)
-
-	ok, _ := q.TrySetStepRunning(step.ID)
-	if !ok {
-		t.Error("expected first TrySetStepRunning to succeed")
-	}
-
-	ok2, _ := q.TrySetStepRunning(step.ID)
-	if ok2 {
-		t.Error("expected second TrySetStepRunning to fail (already running)")
-	}
-}
-
 func TestUpdatePipelineStepOutput(t *testing.T) {
 	q := testDB(t)
 	p, _ := q.CreateProject("Test", "test")

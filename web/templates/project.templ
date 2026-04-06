@@ -12,6 +12,7 @@ type ProjectDetail struct {
 	Language    string
 	HasContext  bool
 	HasMemory   bool
+	TopicCount  int
 }
 
 templ ProjectOverview(p ProjectDetail) {
@@ -63,6 +64,14 @@ templ ProjectOverview(p ProjectDetail) {
 						}
 					</p>
 					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/settings", p.ID)) } class="btn btn-secondary btn-sm mt-3">Manage Settings</a>
+				</div>
+			</div>
+
+			<div class="card">
+				<div class="p-5">
+					<h3 class="text-sm font-semibold text-zinc-100">Topics</h3>
+					<p class="text-zinc-500 text-sm mt-2">{ fmt.Sprintf("%d topics in backlog", p.TopicCount) }</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics", p.ID)) } class="btn btn-secondary btn-sm mt-3">Generate Topics</a>
 				</div>
 			</div>
 

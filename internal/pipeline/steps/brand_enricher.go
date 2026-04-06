@@ -2,6 +2,7 @@ package steps
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/pipeline"
@@ -26,11 +27,11 @@ func (s *BrandEnricherStep) Run(ctx context.Context, input pipeline.StepInput, s
 	urlList, _ := s.Profile.BuildSourceURLList(input.ProjectID)
 
 	if urlList == "" {
-		stream.SendDone()
 		return pipeline.StepResult{Output: researchOutput}, nil
 	}
 
 	systemPrompt := s.Prompt.ForBrandEnricher(input.Profile, researchOutput, urlList)
 	toolList := s.Tools.ForStep("brand_enricher")
-	return runWithTools(ctx, s.AI, s.Model(), systemPrompt, "Fetch the brand URLs and enrich the research with brand context.", toolList, s.Tools, "submit_brand_enrichment", stream, 0.3, 12)
+	prefix := fmt.Sprintf("pipeline run=%d step=%d type=brand_enricher", input.RunID, input.StepID)
+	return RunWithTools(ctx, s.AI, s.Model(), systemPrompt, "Fetch the brand URLs and enrich the research with brand context.", toolList, s.Tools, "submit_brand_enrichment", stream, 0.3, 15, prefix)
 }
