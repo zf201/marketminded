@@ -7,24 +7,21 @@ import (
 
 	"github.com/zanfridau/marketminded/internal/ai"
 	"github.com/zanfridau/marketminded/internal/content"
-	"github.com/zanfridau/marketminded/internal/search"
 )
 
 // Registry holds tool definitions and executors for each pipeline step.
 type Registry struct {
-	braveClient *search.BraveClient
-	stepTools   map[string][]ai.Tool
+	stepTools map[string][]ai.Tool
 }
 
 // NewRegistry creates a Registry with tool definitions for each step type.
-func NewRegistry(braveClient *search.BraveClient) *Registry {
+func NewRegistry() *Registry {
 	r := &Registry{
-		braveClient: braveClient,
-		stepTools:   make(map[string][]ai.Tool),
+		stepTools: make(map[string][]ai.Tool),
 	}
 
 	fetchTool := NewFetchTool()
-	searchTool := NewSearchTool()
+	searchTool := ai.ServerTool("openrouter:web_search")
 
 	r.stepTools["research"] = []ai.Tool{fetchTool, searchTool, submitTool(
 		"submit_research",
@@ -82,12 +79,6 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 	switch name {
 	case "fetch_url":
 		return ExecuteFetch(ctx, argsJSON)
-	case "web_search":
-		if r.braveClient == nil {
-			return "", fmt.Errorf("web_search not available: no Brave client configured")
-		}
-		exec := NewSearchExecutor(r.braveClient)
-		return exec(ctx, argsJSON)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -96,7 +87,7 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 func submitTool(name, description, paramsJSON string) ai.Tool {
 	return ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        name,
 			Description: description,
 			Parameters:  json.RawMessage(paramsJSON),

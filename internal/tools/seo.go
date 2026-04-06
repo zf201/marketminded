@@ -15,7 +15,7 @@ import (
 func NewKeywordResearchTool() ai.Tool {
 	return ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        "keyword_research",
 			Description: "Look up search volume, CPC, and competition data for specific keywords. COSTS MONEY — use sparingly.",
 			Parameters: json.RawMessage(`{"type":"object","properties":{"keywords":{"type":"array","items":{"type":"string"},"description":"Keywords to research (max 5)"},"location":{"type":"string","description":"Target location (e.g. \"United States\"). Defaults to United States if omitted."}},"required":["keywords"]}`),
@@ -26,7 +26,7 @@ func NewKeywordResearchTool() ai.Tool {
 func NewKeywordSuggestionsTool() ai.Tool {
 	return ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        "keyword_suggestions",
 			Description: "Get related keyword suggestions for a seed keyword, including search volume and difficulty. COSTS MONEY — use sparingly.",
 			Parameters: json.RawMessage(`{"type":"object","properties":{"seed_keyword":{"type":"string","description":"The seed keyword to find related keywords for"},"location":{"type":"string","description":"Target location (e.g. \"United States\"). Defaults to United States if omitted."}},"required":["seed_keyword"]}`),
@@ -37,7 +37,7 @@ func NewKeywordSuggestionsTool() ai.Tool {
 func NewDomainKeywordsTool() ai.Tool {
 	return ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        "domain_keywords",
 			Description: "Get the top keywords a domain ranks for, including position, search volume, and difficulty. COSTS MONEY — use sparingly.",
 			Parameters: json.RawMessage(`{"type":"object","properties":{"domain":{"type":"string","description":"The domain to check rankings for (e.g. \"example.com\")"},"location":{"type":"string","description":"Target location (e.g. \"United States\"). Defaults to United States if omitted."}},"required":["domain"]}`),

@@ -67,7 +67,7 @@ func TestStreamWithTools_WithToolCall(t *testing.T) {
 	text, err := c.StreamWithTools(
 		context.Background(), "test-model",
 		[]Message{{Role: "user", Content: "search for test"}},
-		[]Tool{{Type: "function", Function: ToolFunction{Name: "web_search", Description: "search"}}},
+		[]Tool{{Type: "function", Function: &ToolFunction{Name: "web_search", Description: "search"}}},
 		func(ctx context.Context, name, args string) (string, error) {
 			return "Search results here", nil
 		},

@@ -72,7 +72,7 @@ func register(platform, format, displayName, promptFile, toolName, paramsJSON st
 		ToolName:    toolName,
 		Tool: ai.Tool{
 			Type: "function",
-			Function: ai.ToolFunction{
+			Function: &ai.ToolFunction{
 				Name:        toolName,
 				Description: "Write a " + displayName + ". Provide the structured content. Include instructions field with production notes (image guidance, visual direction, etc.).",
 				Parameters:  json.RawMessage(paramsJSON),

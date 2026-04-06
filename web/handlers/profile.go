@@ -378,7 +378,7 @@ Source URLs:
 
 		submitTool := ai.Tool{
 			Type: "function",
-			Function: ai.ToolFunction{
+			Function: &ai.ToolFunction{
 				Name:        "submit_profile",
 				Description: "Submit the profile section content and URL guide for pipeline agents.",
 				Parameters:  json.RawMessage(`{"type":"object","properties":{"content":{"type":"string","description":"The full profile section content"},"url_guide":{"type":"string","description":"One-line instruction per source URL explaining what data to extract and when it's relevant. Format: one line per URL, starting with the URL."}},"required":["content","url_guide"]}`),

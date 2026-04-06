@@ -66,10 +66,12 @@ func RunWithTools(
 					toolCallsList = append(toolCallsList, pipeline.ToolCallRecord{Type: "fetch", Value: args.URL})
 				}
 			case "web_search":
-				summary = tools.SearchSummary(event.Args)
 				var args struct{ Query string `json:"query"` }
 				if json.Unmarshal([]byte(event.Args), &args) == nil && args.Query != "" {
+					summary = fmt.Sprintf("Searched: %s", args.Query)
 					toolCallsList = append(toolCallsList, pipeline.ToolCallRecord{Type: "search", Value: args.Query})
+				} else {
+					summary = "Searching..."
 				}
 			}
 			evt := map[string]string{"type": "tool_start", "tool": event.Tool, "summary": summary}

@@ -15,8 +15,13 @@ import (
 
 // Tool definitions for the API request
 type Tool struct {
-	Type     string       `json:"type"`
-	Function ToolFunction `json:"function"`
+	Type     string        `json:"type"`
+	Function *ToolFunction `json:"function,omitempty"`
+}
+
+// ServerTool creates an OpenRouter server tool (e.g. "openrouter:web_search").
+func ServerTool(toolType string) Tool {
+	return Tool{Type: toolType}
 }
 
 type ToolFunction struct {

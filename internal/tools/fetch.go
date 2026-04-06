@@ -19,7 +19,7 @@ var fetchHTTPClient = &http.Client{Timeout: 10 * time.Second}
 func NewFetchTool() ai.Tool {
 	return ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        "fetch_url",
 			Description: "Fetch a URL and extract the main text content from the page. Use this when the user shares a link or you need to read a webpage.",
 			Parameters:  json.RawMessage(`{"type":"object","properties":{"url":{"type":"string","description":"The URL to fetch"}},"required":["url"]}`),

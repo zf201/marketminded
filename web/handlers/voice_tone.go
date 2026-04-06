@@ -333,7 +333,7 @@ Call submit_voice_tone with 7 fields:
 	// Build tools
 	submitVoiceToneTool := ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        "submit_voice_tone",
 			Description: "Submit the structured voice & tone analysis.",
 			Parameters: json.RawMessage(`{

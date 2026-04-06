@@ -229,7 +229,7 @@ For each persona, provide:
 	// Build tools
 	submitPersonasTool := ai.Tool{
 		Type: "function",
-		Function: ai.ToolFunction{
+		Function: &ai.ToolFunction{
 			Name:        "submit_personas",
 			Description: "Submit the final set of audience personas after research is complete.",
 			Parameters:  json.RawMessage(`{"type":"object","properties":{"personas":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer","description":"Existing persona ID if updating/unchanged/removing, omit if new"},"status":{"type":"string","enum":["new","updated","unchanged","removed"]},"label":{"type":"string"},"description":{"type":"string"},"pain_points":{"type":"string"},"push":{"type":"string"},"pull":{"type":"string"},"anxiety":{"type":"string"},"habit":{"type":"string"},"role":{"type":"string"},"demographics":{"type":"string"},"company_info":{"type":"string"},"content_habits":{"type":"string"},"buying_triggers":{"type":"string"}},"required":["status","label","description","pain_points","push","pull","anxiety","habit"]}},"reasoning":{"type":"string","description":"Brief explanation of why these personas were chosen"}},"required":["personas","reasoning"]}`),
