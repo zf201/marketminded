@@ -112,12 +112,20 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	applog.Info("%s: model=%s starting", prefix, s.Model())
 
 	temp := 0.3
-	_, _, err := s.AI.StreamWithTools(ctx, s.Model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
+	_, usage, err := s.AI.StreamWithTools(ctx, s.Model(), aiMsgs, toolList, executor, onToolEvent, sendChunk, sendThinking, &temp, "write_content")
 
 	duration := time.Since(start)
+	var usageJSON string
+	if usage != nil {
+		if uj, mErr := json.Marshal(usage); mErr == nil {
+			usageJSON = string(uj)
+		}
+	}
+
 	result := pipeline.StepResult{
-		Output:   fmt.Sprintf(`{"piece_id":%d}`, savedPieceID),
-		Thinking: thinkingBuf.String(),
+		Output:    fmt.Sprintf(`{"piece_id":%d}`, savedPieceID),
+		Thinking:  thinkingBuf.String(),
+		UsageJSON: usageJSON,
 	}
 
 	if err != nil && savedPieceID == 0 {
