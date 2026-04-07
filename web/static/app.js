@@ -939,6 +939,119 @@ function initProfilePage(projectId) {
         document.getElementById('audience-build-modal').close();
     });
 
+    // --- Audience Add modal ---
+    var audienceAddedPersonas = [];
+
+    document.querySelectorAll('.audience-add-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = document.getElementById('audience-add-modal');
+            var promptInput = document.getElementById('audience-add-prompt');
+            var actions = document.getElementById('audience-add-actions');
+            var results = document.getElementById('audience-add-results');
+            var resultActions = document.getElementById('audience-add-result-actions');
+            var genBtn = document.getElementById('audience-add-generate-btn');
+            var container = document.getElementById('audience-add-personas-container');
+
+            promptInput.value = '';
+            container.textContent = '';
+            results.classList.add('hidden');
+            resultActions.classList.add('hidden');
+            actions.classList.remove('hidden');
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate';
+            audienceAddedPersonas = [];
+
+            modal.showModal();
+            promptInput.focus();
+        });
+    });
+
+    document.getElementById('audience-add-generate-btn').addEventListener('click', function() {
+        var promptInput = document.getElementById('audience-add-prompt');
+        var genBtn = document.getElementById('audience-add-generate-btn');
+        var actions = document.getElementById('audience-add-actions');
+        var results = document.getElementById('audience-add-results');
+        var resultActions = document.getElementById('audience-add-result-actions');
+        var container = document.getElementById('audience-add-personas-container');
+
+        var promptText = promptInput.value.trim();
+        if (!promptText) {
+            promptInput.focus();
+            return;
+        }
+
+        genBtn.disabled = true;
+        genBtn.textContent = 'Generating...';
+        container.textContent = '';
+        audienceAddedPersonas = [];
+
+        var url = '/projects/' + projectId + '/profile/audience/generate?prompt=' + encodeURIComponent(promptText);
+        var source = new EventSource(url);
+        source.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            switch (d.type) {
+            case 'status':
+                genBtn.textContent = d.status;
+                break;
+            case 'personas':
+                var parsed = typeof d.data === 'string' ? JSON.parse(d.data) : d.data;
+                var personas = (parsed.personas || []).filter(function(p) {
+                    return p.status === 'new';
+                });
+                audienceAddedPersonas = personas;
+                container.textContent = '';
+                personas.forEach(function(persona, idx) {
+                    var card = buildAudienceResultCard(persona, idx);
+                    container.appendChild(card);
+                });
+                break;
+            case 'error':
+                source.close();
+                genBtn.disabled = false;
+                genBtn.textContent = 'Retry';
+                break;
+            case 'done':
+                source.close();
+                if (audienceAddedPersonas.length > 0) {
+                    actions.classList.add('hidden');
+                    results.classList.remove('hidden');
+                    resultActions.classList.remove('hidden');
+                } else {
+                    genBtn.disabled = false;
+                    genBtn.textContent = 'Retry';
+                }
+                break;
+            }
+        };
+        source.onerror = function() {
+            source.close();
+            genBtn.disabled = false;
+            genBtn.textContent = 'Retry';
+        };
+    });
+
+    document.getElementById('audience-add-save-btn').addEventListener('click', function() {
+        var container = document.getElementById('audience-add-personas-container');
+        var cards = container.querySelectorAll('.card');
+        var accepted = [];
+        cards.forEach(function(card) {
+            var idx = parseInt(card.dataset.idx);
+            var toggleBtn = card.querySelector('.persona-toggle-btn');
+            if (toggleBtn && toggleBtn.dataset.accepted === 'true') {
+                accepted.push(audienceAddedPersonas[idx]);
+            }
+        });
+        fetch('/projects/' + projectId + '/profile/audience/save-generated', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({personas: accepted})
+        }).then(function() { window.location.reload(); });
+    });
+
+    document.getElementById('audience-add-discard-btn').addEventListener('click', function() {
+        document.getElementById('audience-add-modal').close();
+    });
+
     // --- Audience Edit Persona modal ---
     var editingPersonaId = null;
 

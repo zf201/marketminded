@@ -119,6 +119,11 @@ func (h *AudienceHandler) saveContext(w http.ResponseWriter, r *http.Request, pr
 func (h *AudienceHandler) streamGenerate(w http.ResponseWriter, r *http.Request, projectID int64) {
 	project, _ := h.queries.GetProject(projectID)
 
+	// "add" mode: a non-empty prompt query param means the user wants to add
+	// one or more new personas matching their request, not rebuild the whole set.
+	userRequest := strings.TrimSpace(r.URL.Query().Get("prompt"))
+	addMode := userRequest != ""
+
 	stream, err := sse.New(w)
 	if err != nil {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
@@ -173,7 +178,11 @@ func (h *AudienceHandler) streamGenerate(w http.ResponseWriter, r *http.Request,
 	}
 
 	if len(existingPersonas) > 0 {
-		systemPrompt.WriteString("## Existing Personas (review and update/keep/remove as needed)\n")
+		if addMode {
+			systemPrompt.WriteString("## Existing Personas (DO NOT duplicate or modify these — they already exist)\n")
+		} else {
+			systemPrompt.WriteString("## Existing Personas (review and update/keep/remove as needed)\n")
+		}
 		for i, p := range existingPersonas {
 			fmt.Fprintf(&systemPrompt, "### Persona %d (ID: %d): %s\n", i+1, p.ID, p.Label)
 			fmt.Fprintf(&systemPrompt, "Description: %s\n", p.Description)
@@ -185,10 +194,21 @@ func (h *AudienceHandler) streamGenerate(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	systemPrompt.WriteString(`## Your Task
+	if addMode {
+		fmt.Fprintf(&systemPrompt, "## User Request — the persona(s) to add\n%s\n\n", userRequest)
+		systemPrompt.WriteString(`## Your Task
+This is an ADD operation, not a rebuild. Generate one or more NEW personas that match the user's request above. Do not touch the existing personas listed above — they are context only, so you don't accidentally duplicate them.
+
+Use web_search to research the market for the requested persona(s). Generate as many as the user's request implies — usually 1, sometimes 2-3 if the request describes a cluster.
+
+For each persona, provide:`)
+	} else {
+		systemPrompt.WriteString(`## Your Task
 Research and define 3-5 detailed audience personas for this business. Use web_search to research the market, competitors, and target audience.
 
-For each persona, provide:
+For each persona, provide:`)
+	}
+	systemPrompt.WriteString(`
 - label: A short memorable name (e.g. "The Overwhelmed Founder")
 - description: 2-3 sentences describing who they are
 - pain_points: Their specific frustrations and problems
@@ -211,7 +231,14 @@ For each persona, provide:
 - Each persona should be distinct and non-overlapping.
 `)
 
-	if len(existingPersonas) > 0 {
+	if addMode {
+		systemPrompt.WriteString(`
+## Output rules for ADD mode
+- Set status to "new" for every persona you return. Do NOT return "updated", "unchanged", or "removed" — this is purely additive.
+- Do NOT include any of the existing personas listed above.
+- Return only the persona(s) the user requested, nothing else.
+`)
+	} else if len(existingPersonas) > 0 {
 		systemPrompt.WriteString(`
 ## Handling Existing Personas
 - For each existing persona you want to keep as-is, set status to "unchanged" and include its "id"
@@ -274,15 +301,24 @@ For each persona, provide:
 	maxIter := 15
 	systemPrompt.WriteString(fmt.Sprintf("\n\nIMPORTANT: You have a MAXIMUM of %d tool calls. Plan efficiently and call submit_personas when ready. Do NOT keep searching endlessly.", maxIter))
 
+	userMessage := "Research and build audience personas for this business. Use web_search to gather real market insights, then submit your personas."
+	if addMode {
+		userMessage = fmt.Sprintf("The user has requested a new persona: %q. Research the market for this specific persona using web_search, then submit ONLY the new persona(s) with status=\"new\". Do not return any of the existing personas.", userRequest)
+	}
+
 	aiMsgs := []ai.Message{
 		{Role: "system", Content: systemPrompt.String()},
-		{Role: "user", Content: "Research and build audience personas for this business. Use web_search to gather real market insights, then submit your personas."},
+		{Role: "user", Content: userMessage},
 	}
 
 	temp := 0.5
 	model := h.model()
 	start := time.Now()
-	applog.Info("audience generate: project=%d model=%s starting", projectID, model)
+	mode := "rebuild"
+	if addMode {
+		mode = "add"
+	}
+	applog.Info("audience generate (%s): project=%d model=%s starting", mode, projectID, model)
 
 	_, _, err = h.aiClient.StreamWithTools(r.Context(), model, aiMsgs, toolList, executor, onToolEvent, onChunk, onReasoning, &temp, "", maxIter)
 

@@ -58,6 +58,11 @@ templ ProfilePage(data ProfilePageData) {
 									}
 								</div>
 								<div class="flex items-center gap-1">
+									if len(card.Personas) > 0 {
+										<button type="button" class="btn btn-ghost btn-sm audience-add-btn">
+											Add
+										</button>
+									}
 									<button type="button" class="btn btn-secondary btn-sm audience-build-btn">
 										if len(card.Personas) > 0 {
 											Rebuild
@@ -442,6 +447,30 @@ templ ProfilePage(data ProfilePageData) {
 				<div id="audience-build-result-actions" class="flex justify-end gap-2 mt-6 hidden">
 					<button type="button" id="audience-save-generated-btn" class="btn btn-primary">Save accepted</button>
 					<button type="button" id="audience-discard-btn" class="btn btn-ghost">Discard</button>
+				</div>
+			</div>
+			<form method="dialog"><button class="hidden">close</button></form>
+		</dialog>
+
+		<!-- Audience Add modal -->
+		<dialog id="audience-add-modal" class="modal">
+			<div class="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[90%] max-w-3xl p-6 mx-auto mt-[10vh]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="font-bold text-lg">Add Audience Persona</h3>
+					<button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('dialog').close()">&#x2715;</button>
+				</div>
+				<label class="block text-sm font-medium text-zinc-300 mb-1.5">Describe the persona to add</label>
+				<p class="text-xs text-zinc-500 mb-2">Tell the agent who you want. It will research the market and produce a fully-formed persona card. Existing personas stay untouched.</p>
+				<textarea id="audience-add-prompt" class="textarea w-full text-sm" rows="4" placeholder="e.g. A municipal procurement officer responsible for green public tenders in Slovenia, focused on EV fleets..."></textarea>
+				<div id="audience-add-actions" class="mt-4">
+					<button type="button" id="audience-add-generate-btn" class="btn btn-secondary">Generate</button>
+				</div>
+				<div id="audience-add-results" class="hidden mt-4">
+					<div id="audience-add-personas-container" class="space-y-2 mb-4"></div>
+				</div>
+				<div id="audience-add-result-actions" class="flex justify-end gap-2 mt-6 hidden">
+					<button type="button" id="audience-add-save-btn" class="btn btn-primary">Save accepted</button>
+					<button type="button" id="audience-add-discard-btn" class="btn btn-ghost">Discard</button>
 				</div>
 			</div>
 			<form method="dialog"><button class="hidden">close</button></form>
