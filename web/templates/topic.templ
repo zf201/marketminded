@@ -91,16 +91,18 @@ templ TopicListPage(data TopicListData) {
 								<span class="badge badge-sm badge-ghost shrink-0">Used</span>
 							}
 						</div>
-						if item.Status == "available" {
-							<div class="flex gap-2 mt-3">
-								<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/backlog/%d/start", data.ProjectID, item.ID)) } class="inline">
+						<div class="flex gap-2 mt-3">
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/backlog/%d/start", data.ProjectID, item.ID)) } class="inline">
+								if item.Status == "used" {
+									<button type="submit" class="btn btn-ghost btn-xs">Run Again</button>
+								} else {
 									<button type="submit" class="btn btn-primary btn-xs">Start Pipeline</button>
-								</form>
-								<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/backlog/%d/delete", data.ProjectID, item.ID)) } class="inline" onsubmit="return confirm('Delete this topic?')">
-									<button type="submit" class="btn btn-ghost btn-xs text-red-400">Delete</button>
-								</form>
-							</div>
-						}
+								}
+							</form>
+							<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/projects/%d/topics/backlog/%d/delete", data.ProjectID, item.ID)) } class="inline" onsubmit="return confirm('Delete this topic?')">
+								<button type="submit" class="btn btn-ghost btn-xs text-red-400">Delete</button>
+							</form>
+						</div>
 					</div>
 				}
 			</div>
