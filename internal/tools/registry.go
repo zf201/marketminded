@@ -9,6 +9,15 @@ import (
 	"github.com/zanfridau/marketminded/internal/content"
 )
 
+// Per-step OpenRouter web_search caps. max_total_results is enforced
+// server-side across the whole turn — these are the safety net, not the
+// number we want the model to actually hit. Keep prompt guidance well below.
+const (
+	ResearchSearchCap    = 30
+	FactcheckSearchCap   = 15
+	TopicExploreSearchCap = 25
+)
+
 // Registry holds tool definitions and executors for each pipeline step.
 type Registry struct {
 	stepTools map[string][]ai.Tool
@@ -22,10 +31,10 @@ func NewRegistry() *Registry {
 
 	fetchTool := NewFetchTool()
 
-	// Server tool search limits: max_results per search, max_total_results across all searches
-	researchSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(`{"max_results":5,"max_total_results":30}`))
-	factcheckSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(`{"max_results":3,"max_total_results":15}`))
-	topicSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(`{"max_results":5,"max_total_results":25}`))
+	// Server tool search limits: max_results per query, max_total_results across all queries.
+	researchSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":5,"max_total_results":%d}`, ResearchSearchCap)))
+	factcheckSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":3,"max_total_results":%d}`, FactcheckSearchCap)))
+	topicSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":5,"max_total_results":%d}`, TopicExploreSearchCap)))
 
 	r.stepTools["research"] = []ai.Tool{fetchTool, researchSearch, submitTool(
 		"submit_research",

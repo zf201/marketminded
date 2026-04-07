@@ -30,11 +30,11 @@ func RunWithTools(
 	maxIter int,
 	logPrefix string,
 ) (pipeline.StepResult, error) {
-	// Inject tool call budget into system prompt
-	fullPrompt := systemPrompt + fmt.Sprintf("\n\nCRITICAL BUDGET: You have exactly %d tool calls total. Your submit tool counts as 1 call. If you use all %d calls on search/fetch without submitting, the step FAILS COMPLETELY and ALL your work is lost. You MUST call your submit tool before reaching the limit. A safe strategy: use at most %d calls for search/fetch, then IMMEDIATELY submit your results.", maxIter, maxIter, maxIter-2)
-
+	// Each step's prompt builder owns its own workflow/budget guidance.
+	// Server-side searches do NOT count against maxIter (they're capped by
+	// max_total_results in the registry); only function-tool calls do.
 	aiMsgs := []ai.Message{
-		{Role: "system", Content: fullPrompt},
+		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
 	}
 

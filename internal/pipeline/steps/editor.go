@@ -48,5 +48,5 @@ func (s *EditorStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	systemPrompt := s.Prompt.ForEditor(input.Profile, brief, sourcesText, frameworkBlock)
 	toolList := s.Tools.ForStep("editor")
 	prefix := fmt.Sprintf("pipeline run=%d step=%d type=editor", input.RunID, input.StepID)
-	return RunWithTools(ctx, s.AI, s.Model(), systemPrompt, "Create the editorial outline now.", toolList, s.Tools, "submit_editorial_outline", stream, 0.3, 5, prefix)
+	return RunWithTools(ctx, s.AI, s.Model(), systemPrompt, "Submit the editorial outline now via submit_editorial_outline.", toolList, s.Tools, "submit_editorial_outline", stream, 0.3, 3, prefix)
 }

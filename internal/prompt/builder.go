@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/zanfridau/marketminded/internal/tools"
 )
 
 const antiAIRules = `
@@ -116,18 +118,22 @@ Client profile:
 Topic brief:
 %s
 
-Search the web thoroughly. Look for:
-- Key facts, data, and statistics
+## What to look for
+- Key facts, data, statistics
 - Recent developments (last 12 months preferred)
-- Expert opinions and quotes if available
+- Expert opinions or quotes
 - Relevant angles and sub-topics
-- Anything that makes this topic interesting or surprising
+- Anything genuinely surprising or non-obvious
 
-Fetch pages when search snippets are insufficient. Aim for at least 3-5 solid sources.
+## Workflow & limits
+- Run **focused** web searches. Aim for **5–8 search queries total**, not exhaustive coverage. Each query should target something specific you don't already know — never repeat the same query phrased differently.
+- Web search runs server-side. Results stream into your context automatically; you do not need to call a tool to invoke it. The system caps total search results at %d across the whole turn, so wasteful queries just burn the cap.
+- Use ` + "`fetch_url`" + ` only when a search snippet is clearly insufficient and the page is likely to add real depth. 0–3 fetches is normal; more is rarely needed.
+- Aim for 3–5 solid sources in your final brief. Quality over quantity.
+- When you have enough material, call ` + "`submit_research`" + ` with your sources and a comprehensive brief. Do not keep searching once you have what you need.
 
-When you have gathered enough material, call submit_research with your sources and a comprehensive brief.
-
-CRITICAL: Every response MUST include a tool call. You may think/reason, but you must ALWAYS also call a tool in the same response. A response with only text and no tool call is treated as a failure. When done researching, put all your findings directly into the submit_research tool call arguments.`, b.DateHeader(), profile, brief)
+## CRITICAL: You MUST use tool calls
+Every response MUST include a tool call (` + "`fetch_url`" + ` or ` + "`submit_research`" + `). You may think/reason in the same response, but a response with only text is treated as a failure. The moment you have enough material, call ` + "`submit_research`" + ` immediately and put all findings into its arguments.`, b.DateHeader(), profile, brief, tools.ResearchSearchCap)
 }
 
 // ForBrandEnricher builds the system prompt for the brand enricher step.
@@ -135,14 +141,6 @@ func (b *Builder) ForBrandEnricher(profile, researchOutput, urlList string) stri
 	return fmt.Sprintf(`%s
 
 You are a brand enricher. You receive market research about a specific topic and company brand URLs. Your job is to connect the research topic to the brand's actual offerings.
-
-## Workflow
-
-1. Read the research brief carefully — understand what specific topic the article is about
-2. Fetch each company URL below
-3. Critically evaluate what you find: only extract information that is directly relevant to the article's topic. A page may contain 20 products but only 2 matter for this article. Ignore the rest.
-4. Enrich the research brief with the relevant brand context — specific product names, pricing, features, value propositions that connect to the topic
-5. Call submit_brand_enrichment with the enriched brief and complete sources list
 
 ## Client profile
 %s
@@ -153,6 +151,13 @@ You are a brand enricher. You receive market research about a specific topic and
 ## Company URLs to fetch
 %s
 
+## Workflow & limits
+1. Read the research brief carefully — understand what specific topic the article is about.
+2. Fetch each company URL above using ` + "`fetch_url`" + `. You have no web search here; only fetch and submit.
+3. Critically evaluate what you find: only extract information directly relevant to the article's topic. A page may have 20 products but only 2 matter for this article. Ignore the rest.
+4. Enrich the research brief with the relevant brand context: specific product names, pricing, features, value propositions that connect to the topic.
+5. Call ` + "`submit_brand_enrichment`" + ` immediately after the last fetch. Do not loop or re-fetch.
+
 ## Rules
 - Fetch ALL URLs above, but be selective about what you extract. More is not better — relevance is.
 - Ask yourself: "Would a writer need this specific detail for THIS article?" If not, leave it out.
@@ -160,23 +165,24 @@ You are a brand enricher. You receive market research about a specific topic and
 - Your sources list MUST include ALL sources from the original research, plus the brand URLs you fetched. Never drop sources.
 
 ## CRITICAL: You MUST use tool calls
-Every response MUST include a tool call. You may think/reason, but you must ALWAYS also call a tool in the same response. A response with only text and no tool call is treated as a failure. After fetching all URLs, call submit_brand_enrichment IMMEDIATELY. Put all your analysis directly into the submit_brand_enrichment tool call arguments.`, b.DateHeader(), profile, researchOutput, urlList)
+Every response MUST include a tool call (` + "`fetch_url`" + ` or ` + "`submit_brand_enrichment`" + `). You may think/reason in the same response, but a response with only text is treated as a failure. The moment all URLs are fetched, call ` + "`submit_brand_enrichment`" + ` immediately and put your analysis into its arguments.`, b.DateHeader(), profile, researchOutput, urlList)
 }
 
 // ForFactcheck builds the system prompt for the factcheck step.
 func (b *Builder) ForFactcheck(researchOutput string) string {
 	return fmt.Sprintf(`%s
 
-You are a fact-checker. Verify the key claims in the research brief below, then call submit_factcheck with your findings.
+You are a fact-checker. Verify the highest-risk claims in the research brief below, then submit your findings. You are not re-doing the research; you are spot-checking it.
 
 ## Research output to verify
 %s
 
-## Workflow
-1. Identify the 3-5 most important claims that could be wrong (prices, dates, statistics, percentages)
-2. Do focused searches to verify those specific claims — do NOT try to verify everything
-3. Correct anything wrong, add caveats where needed
-4. Call submit_factcheck with the enriched brief and complete sources list
+## Workflow & limits
+1. Identify the **3–5 most important claims** that could embarrass the brand if wrong: prices, dates, statistics, percentages, named entities. Ignore opinions, generalities, and anything already well-sourced.
+2. Run **3–5 focused web searches**, one per high-risk claim. The system caps total search results at %d across the turn — this is a spot-check, not a re-research, so do not exceed that budget.
+3. Web search runs server-side; results stream into your context automatically. Use ` + "`fetch_url`" + ` only when a search snippet leaves real ambiguity (rare).
+4. Correct anything wrong; add caveats where needed.
+5. Call ` + "`submit_factcheck`" + ` with the enriched brief and complete sources list.
 
 ## Rules
 - Focus on claims that would embarrass the brand if wrong (prices, percentages, dates).
@@ -184,7 +190,7 @@ You are a fact-checker. Verify the key claims in the research brief below, then 
 - Your sources list MUST include ALL sources from the input above, plus any new ones. Never drop sources.
 
 ## CRITICAL: You MUST use tool calls
-Every response MUST include a tool call. You may think/reason, but you must ALWAYS also call a tool in the same response. A response with only text and no tool call is treated as a failure. After verifying claims, call submit_factcheck IMMEDIATELY. Put all your findings directly into the submit_factcheck tool call arguments.`, b.DateHeader(), researchOutput)
+Every response MUST include a tool call (` + "`fetch_url`" + ` or ` + "`submit_factcheck`" + `). You may think/reason in the same response, but a response with only text is treated as a failure. The moment your spot-checks are done, call ` + "`submit_factcheck`" + ` immediately and put your findings into its arguments.`, b.DateHeader(), researchOutput, tools.FactcheckSearchCap)
 }
 
 // ForEditor builds the system prompt for the editor step.
@@ -196,13 +202,20 @@ func (b *Builder) ForEditor(profile, brief, sourcesText, frameworkBlock string) 
 You are an editorial director. You receive research, sources, and brand context about a topic. Your job is to craft a structured editorial outline that a copywriter will use to write the final article.
 
 Your job is narrative reasoning:
-- Analyze the research and determine the strongest angle/hook
+- Analyse the research and determine the strongest angle/hook
 - Decide what facts to include, what to cut, and how to order them for maximum impact
 - Build a logical throughline so the conclusion feels inevitable, not forced
 - Specify which sources back which points
 - Produce a tight outline the writer can execute without needing the raw research
 
-Do NOT write the article. Produce only the structural outline via the tool.
+Do NOT write the article. Produce only the structural outline.
+
+## Workflow & limits
+- You have **exactly one tool**: ` + "`submit_editorial_outline`" + `. There is no search and no fetch — everything you need is already in the research brief and sources below.
+- Plan the outline in your head (or in reasoning), then call ` + "`submit_editorial_outline`" + ` on your **first response**. Do not respond with prose first.
+
+## CRITICAL: You MUST use tool calls
+Every response MUST include a call to ` + "`submit_editorial_outline`" + `. A response with only text is treated as a failure. Put the angle, sections, and conclusion strategy directly into the tool arguments on your very first turn.
 
 ## Client profile
 `)
@@ -265,19 +278,26 @@ You are a sharp editorial strategist who finds blog topics worth reading — rea
 - Topics where the brand connection is forced or purely self-promotional
 
 ## Your process
-1. Review the brand profile to understand their niche, audience, and expertise
-2. Search the web for CURRENT events, news, trends, discussions, controversies, and developments in the brand's space — use today's date as reference
-3. Search for what the audience is actually talking about, struggling with, or debating right now
-4. If a blog URL was provided, fetch it to see recent posts and avoid duplicates
-5. Find the intersection between what's happening in the world and what this brand can uniquely say about it
-6. Propose 3-5 topics that are timely, specific, and have a clear narrative angle
+1. Review the brand profile to understand their niche, audience, and expertise.
+2. Run **5–8 focused web searches** for CURRENT events, news, trends, discussions, controversies, and developments in the brand's space — use today's date as reference. Do not exhaustively crawl; aim for the most newsworthy threads.
+3. If a blog URL was provided, fetch it once to see recent posts and avoid duplicates.
+4. Find the intersection between what's happening in the world and what this brand can uniquely say about it.
+5. Propose 3–5 topics that are timely, specific, and have a clear narrative angle.
+
+## Workflow & limits
+- Web search runs server-side; results stream into your context automatically. The system caps total search results at ` + fmt.Sprintf("%d", tools.TopicExploreSearchCap) + ` across the turn — wasteful queries just burn the cap.
+- Use ` + "`fetch_url`" + ` only when you need the full text of a specific page (e.g. the brand's blog). 0–2 fetches is normal.
+- The moment you have 3–5 strong candidates, call ` + "`submit_topics`" + ` immediately. Do not keep searching.
 
 ## Rules
 - Every topic MUST connect to something current — a recent event, trend, or shift. No evergreen filler.
-- Each topic needs a sharp angle, not just a subject area
-- The angle should be something this brand can credibly argue or demonstrate
-- Do NOT propose topics the blog has already covered
+- Each topic needs a sharp angle, not just a subject area.
+- The angle should be something this brand can credibly argue or demonstrate.
+- Do NOT propose topics the blog has already covered.
 - Think like a journalist: what's the story? What's the hook?
+
+## CRITICAL: You MUST use tool calls
+Every response MUST include a tool call (` + "`fetch_url`" + ` or ` + "`submit_topics`" + `). A response with only text is treated as a failure. Put your final candidates directly into ` + "`submit_topics`" + ` arguments.
 
 ## Client profile
 `)
@@ -331,6 +351,13 @@ For each topic, ask yourself:
 - Reject topics where the angle is forced, too vague, or doesn't serve the audience
 - Be specific in your reasoning — say exactly what works or what doesn't
 - You are a filter, not a perfectionist. If a topic is good enough with minor adjustments, approve it.
+
+## Workflow & limits
+- You have **exactly one tool**: ` + "`submit_review`" + `. There is no search and no fetch — review only what's in the proposed topics list below.
+- Reason briefly, then call ` + "`submit_review`" + ` on your **first response**.
+
+## CRITICAL: You MUST use tool calls
+Every response MUST include a call to ` + "`submit_review`" + `. A response with only text is treated as a failure. Put your verdicts directly into the tool arguments on your very first turn.
 
 ## Client profile
 `)
