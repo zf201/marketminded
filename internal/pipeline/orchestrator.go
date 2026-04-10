@@ -7,14 +7,18 @@ import (
 	"github.com/zanfridau/marketminded/internal/store"
 )
 
-// StepDependencies returns the dependency map: step type -> required prior step types.
+// StepDependencies returns the static dependency map: step type -> required prior step types.
+// The editor's runtime dep on claim_verifier (when present in a run) is handled
+// dynamically inside RunStep.
 func StepDependencies() map[string][]string {
 	return map[string][]string{
-		"research":       {},
-		"brand_enricher": {"research"},
-		"factcheck":      {"brand_enricher"},
-		"editor":         {"factcheck"},
-		"write":          {"editor"},
+		"research":        {},
+		"audience_picker": {"research"},
+		"brand_enricher":  {"research"},
+		"claim_verifier":  {"brand_enricher"},
+		"editor":          {"brand_enricher"},
+		"style_reference": {"editor"},
+		"write":           {"editor"},
 	}
 }
 
@@ -52,6 +56,38 @@ func (o *Orchestrator) RunStep(ctx context.Context, stepID int64, run *store.Pip
 	}
 
 	deps := StepDependencies()
+	required := append([]string(nil), deps[step.StepType]...)
+
+	// Editor must wait for claim_verifier whenever the run includes one.
+	if step.StepType == "editor" {
+		for _, s := range steps {
+			if s.StepType == "claim_verifier" {
+				required = append(required, "claim_verifier")
+				break
+			}
+		}
+	}
+
+	// brand_enricher must wait for audience_picker whenever the run includes one.
+	if step.StepType == "brand_enricher" {
+		for _, s := range steps {
+			if s.StepType == "audience_picker" {
+				required = append(required, "audience_picker")
+				break
+			}
+		}
+	}
+
+	// write must wait for style_reference whenever the run includes one.
+	if step.StepType == "write" {
+		for _, s := range steps {
+			if s.StepType == "style_reference" {
+				required = append(required, "style_reference")
+				break
+			}
+		}
+	}
+
 	priorOutputs := make(map[string]string)
 	for _, s := range steps {
 		if s.Status == "completed" && s.Output != "" {
@@ -59,7 +95,7 @@ func (o *Orchestrator) RunStep(ctx context.Context, stepID int64, run *store.Pip
 		}
 	}
 
-	for _, dep := range deps[step.StepType] {
+	for _, dep := range required {
 		if _, ok := priorOutputs[dep]; !ok {
 			return fmt.Errorf("%s step not completed yet", dep)
 		}

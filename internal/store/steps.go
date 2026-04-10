@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type PipelineStep struct {
 	ID            int64
@@ -18,8 +21,39 @@ type PipelineStep struct {
 }
 
 // CreateDefaultPipelineSteps creates the standard pipeline steps for a run.
+// The step list is dynamic per-run:
+//   - claim_verifier only if the global setting claim_verifier_enabled == "true"
+//   - audience_picker only if the project has at least one persona
+//   - style_reference only if the project has a non-empty blog_url setting
 func (q *Queries) CreateDefaultPipelineSteps(runID int64) error {
-	for i, stepType := range []string{"research", "brand_enricher", "factcheck", "editor", "write"} {
+	run, err := q.GetPipelineRun(runID)
+	if err != nil {
+		return fmt.Errorf("lookup pipeline run %d: %w", runID, err)
+	}
+	projectID := run.ProjectID
+
+	stepTypes := []string{"research"}
+
+	personas, _ := q.ListAudiencePersonas(projectID)
+	if len(personas) > 0 {
+		stepTypes = append(stepTypes, "audience_picker")
+	}
+
+	stepTypes = append(stepTypes, "brand_enricher")
+
+	if v, _ := q.GetSetting("claim_verifier_enabled"); v == "true" {
+		stepTypes = append(stepTypes, "claim_verifier")
+	}
+
+	stepTypes = append(stepTypes, "editor")
+
+	if url, _ := q.GetProjectSetting(projectID, "blog_url"); url != "" {
+		stepTypes = append(stepTypes, "style_reference")
+	}
+
+	stepTypes = append(stepTypes, "write")
+
+	for i, stepType := range stepTypes {
 		if _, err := q.CreatePipelineStep(runID, stepType, i); err != nil {
 			return err
 		}

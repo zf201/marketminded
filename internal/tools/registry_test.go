@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/zanfridau/marketminded/internal/tools"
@@ -46,6 +47,24 @@ func TestRegistry_ForStep_Writer(t *testing.T) {
 	if writerTools[0].Function == nil || writerTools[0].Function.Name != "write_blog_post" {
 		t.Errorf("expected write_blog_post, got unexpected tool")
 	}
+}
+
+func TestRegistry_SubmitResearchHasClaims(t *testing.T) {
+	r := tools.NewRegistry()
+	for _, tool := range r.ForStep("research") {
+		if tool.Function == nil || tool.Function.Name != "submit_research" {
+			continue
+		}
+		params := string(tool.Function.Parameters)
+		if !strings.Contains(params, `"claims"`) {
+			t.Errorf("submit_research schema missing claims field:\n%s", params)
+		}
+		if !strings.Contains(params, `"source_ids"`) {
+			t.Errorf("submit_research schema missing claims[].source_ids:\n%s", params)
+		}
+		return
+	}
+	t.Fatal("submit_research tool not found")
 }
 
 func TestRegistry_Execute_UnknownTool(t *testing.T) {

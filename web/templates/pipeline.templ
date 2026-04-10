@@ -76,6 +76,8 @@ type ProductionBoardData struct {
 	Steps       []PipelineStepView
 	Pieces      []ContentPieceView
 	NextPieceID int64
+	HasPersonas bool
+	HasBlogURL  bool
 }
 
 type ContentPieceView struct {
@@ -160,8 +162,8 @@ templ stepTypeLabel(stepType string) {
 		Researcher
 	case "brand_enricher":
 		Brand Enricher
-	case "factcheck":
-		Fact-Checker
+	case "claim_verifier":
+		Claim Verifier
 	case "editor":
 		Editor
 	case "write":
@@ -197,6 +199,19 @@ templ ProductionBoardPage(data ProductionBoardData) {
 					}
 				</div>
 			</div>
+
+			if !data.HasPersonas || !data.HasBlogURL {
+				<div class="alert alert-info mb-4 text-sm">
+					<div class="flex flex-col gap-1">
+						if !data.HasPersonas {
+							<div>Audience Picker step is disabled. Add personas on the profile page to enable it.</div>
+						}
+						if !data.HasBlogURL {
+							<div>Style Reference step is disabled. Set a blog URL in project settings to enable it.</div>
+						}
+					</div>
+				</div>
+			}
 
 			if len(data.Steps) > 0 {
 				<!-- Step progress indicator -->

@@ -4,34 +4,7 @@ import (
 	"testing"
 
 	"github.com/zanfridau/marketminded/internal/pipeline"
-	"github.com/zanfridau/marketminded/internal/store"
 )
-
-func TestCollectSources(t *testing.T) {
-	steps := []store.PipelineStep{
-		{Output: `{"sources":[{"url":"https://a.com","title":"A","summary":"s1"}]}`},
-		{Output: `{"sources":[{"url":"https://a.com","title":"A","summary":"s1"},{"url":"https://b.com","title":"B","summary":"s2"}]}`},
-		{Output: ""},
-	}
-
-	sources := pipeline.CollectSources(steps)
-	if len(sources) != 2 {
-		t.Fatalf("expected 2 unique sources, got %d", len(sources))
-	}
-	if sources[0].URL != "https://a.com" {
-		t.Errorf("expected first source a.com, got %s", sources[0].URL)
-	}
-	if sources[1].URL != "https://b.com" {
-		t.Errorf("expected second source b.com, got %s", sources[1].URL)
-	}
-}
-
-func TestFormatSourcesText_Empty(t *testing.T) {
-	result := pipeline.FormatSourcesText(nil)
-	if result != "" {
-		t.Errorf("expected empty string, got: %q", result)
-	}
-}
 
 func TestStepDependencies(t *testing.T) {
 	deps := pipeline.StepDependencies()
@@ -42,8 +15,32 @@ func TestStepDependencies(t *testing.T) {
 	if deps["brand_enricher"][0] != "research" {
 		t.Errorf("brand_enricher should depend on research")
 	}
+	if deps["claim_verifier"][0] != "brand_enricher" {
+		t.Errorf("claim_verifier should depend on brand_enricher")
+	}
+	if deps["editor"][0] != "brand_enricher" {
+		t.Errorf("editor should depend on brand_enricher (claim_verifier dep is dynamic)")
+	}
 	if deps["write"][0] != "editor" {
 		t.Errorf("write should depend on editor")
+	}
+}
+
+func TestStepDependencies_IncludesNewSteps(t *testing.T) {
+	deps := pipeline.StepDependencies()
+	audDeps, ok := deps["audience_picker"]
+	if !ok {
+		t.Fatal("audience_picker missing from StepDependencies")
+	}
+	if len(audDeps) != 1 || audDeps[0] != "research" {
+		t.Errorf("audience_picker deps: want [research], got %v", audDeps)
+	}
+	styleDeps, ok := deps["style_reference"]
+	if !ok {
+		t.Fatal("style_reference missing from StepDependencies")
+	}
+	if len(styleDeps) != 1 || styleDeps[0] != "editor" {
+		t.Errorf("style_reference deps: want [editor], got %v", styleDeps)
 	}
 }
 

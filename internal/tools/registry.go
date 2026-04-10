@@ -13,9 +13,13 @@ import (
 // server-side across the whole turn — these are the safety net, not the
 // number we want the model to actually hit. Keep prompt guidance well below.
 const (
-	ResearchSearchCap    = 30
-	FactcheckSearchCap   = 15
-	TopicExploreSearchCap = 25
+	ResearchSearchCap      = 30
+	ClaimVerifierSearchCap = 15
+	TopicExploreSearchCap  = 25
+
+	// StyleReferenceMaxFetches caps how many fetch_url calls the
+	// style_reference step can make in total (index + candidate posts).
+	StyleReferenceMaxFetches = 6
 )
 
 // Registry holds tool definitions and executors for each pipeline step.
@@ -33,31 +37,43 @@ func NewRegistry() *Registry {
 
 	// Server tool search limits: max_results per query, max_total_results across all queries.
 	researchSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":5,"max_total_results":%d}`, ResearchSearchCap)))
-	factcheckSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":3,"max_total_results":%d}`, FactcheckSearchCap)))
+	verifierSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":3,"max_total_results":%d}`, ClaimVerifierSearchCap)))
 	topicSearch := ai.ServerTool("openrouter:web_search", json.RawMessage(fmt.Sprintf(`{"max_results":5,"max_total_results":%d}`, TopicExploreSearchCap)))
 
 	r.stepTools["research"] = []ai.Tool{fetchTool, researchSearch, submitTool(
 		"submit_research",
-		"Submit your research findings. Call this when you have gathered sufficient sources and are ready to write the research brief.",
-		`{"type":"object","properties":{"sources":{"type":"array","description":"List of sources found during research","items":{"type":"object","properties":{"url":{"type":"string","description":"Source URL"},"title":{"type":"string","description":"Source title"},"summary":{"type":"string","description":"What this source contributes"},"date":{"type":"string","description":"Publication date if known"}},"required":["url","title","summary"]}},"brief":{"type":"string","description":"A comprehensive research brief synthesizing all findings. Include key facts, angles, statistics, and anything the writer needs to produce an authoritative piece."}},"required":["sources","brief"]}`,
+		"Submit your research findings as structured claims with source attribution. Call when you have gathered enough material.",
+		`{"type":"object","properties":{"sources":{"type":"array","description":"List of sources found during research. Each gets a stable id like s1, s2.","items":{"type":"object","properties":{"id":{"type":"string","description":"Stable id, format s1, s2, ..."},"url":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string","description":"What this source contributes"},"date":{"type":"string","description":"Publication date if known"}},"required":["id","url","title","summary"]}},"claims":{"type":"array","description":"Factual atoms extracted from the research. Each is a single declarative sentence stating one verifiable fact, with at least one source_id citation.","items":{"type":"object","properties":{"id":{"type":"string","description":"Stable id, format c1, c2, ..."},"text":{"type":"string","description":"Single declarative sentence stating one verifiable fact"},"type":{"type":"string","enum":["stat","quote","fact","date","price"]},"source_ids":{"type":"array","items":{"type":"string"},"description":"IDs of sources backing this claim. At least one required."}},"required":["id","text","type","source_ids"]}},"brief":{"type":"string","description":"Short narrative direction (3-6 sentences). Story, angles, what's surprising. Do NOT repeat facts here — those belong in claims."}},"required":["sources","claims","brief"]}`,
 	)}
 
 	r.stepTools["brand_enricher"] = []ai.Tool{fetchTool, submitTool(
 		"submit_brand_enrichment",
-		"Submit the enriched research brief. You MUST call this tool to deliver your results.",
-		`{"type":"object","properties":{"enriched_brief":{"type":"string","description":"The complete research brief rewritten with brand context woven in — product names, pricing, features, messaging. Include everything the writer needs."},"sources":{"type":"array","description":"ALL sources: original research sources plus brand URLs you fetched","items":{"type":"object","properties":{"url":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"}},"required":["url","title"]}}},"required":["enriched_brief","sources"]}`,
+		"Submit the merged claims and sources after fetching brand URLs. Append-only: existing claims and sources are immutable.",
+		`{"type":"object","properties":{"sources":{"type":"array","description":"FULL merged sources list: original research sources unchanged + new brand sources appended with new ids continuing the sequence","items":{"type":"object","properties":{"id":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"},"date":{"type":"string"}},"required":["id","url","title"]}},"claims":{"type":"array","description":"FULL merged claims list: original research claims unchanged + new brand claims appended with new ids continuing the sequence","items":{"type":"object","properties":{"id":{"type":"string"},"text":{"type":"string"},"type":{"type":"string","enum":["stat","quote","fact","date","price"]},"source_ids":{"type":"array","items":{"type":"string"}}},"required":["id","text","type","source_ids"]}},"enriched_brief":{"type":"string","description":"Updated narrative direction weaving the brand into the story. Short, narrative, NOT a place to repeat facts."}},"required":["sources","claims","enriched_brief"]}`,
 	)}
 
-	r.stepTools["factcheck"] = []ai.Tool{fetchTool, factcheckSearch, submitTool(
-		"submit_factcheck",
-		"Submit your fact-check results. Call this when you have verified the research and are ready to provide the enriched brief.",
-		`{"type":"object","properties":{"issues_found":{"type":"array","description":"List of issues found during fact-checking (may be empty if everything checks out)","items":{"type":"object","properties":{"claim":{"type":"string","description":"The claim that was checked"},"problem":{"type":"string","description":"What is wrong or uncertain"},"resolution":{"type":"string","description":"How to address this in the final content"}},"required":["claim","problem","resolution"]}},"enriched_brief":{"type":"string","description":"The research brief, corrected and enriched with any additional context from fact-checking. This is what the writer will use."},"sources":{"type":"array","description":"Verified sources to cite in the final piece","items":{"type":"object","properties":{"url":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"},"date":{"type":"string"}},"required":["url","title","summary"]}}},"required":["issues_found","enriched_brief","sources"]}`,
+	r.stepTools["claim_verifier"] = []ai.Tool{fetchTool, verifierSearch, submitTool(
+		"submit_claim_verification",
+		"Submit your verification results. Patches the claims array in place; preserves all claim ids; may append new sources.",
+		`{"type":"object","properties":{"verified_claims":{"type":"array","description":"Per-claim verdict for the 3-5 high-risk claims you verified. Audit trail for the UI.","items":{"type":"object","properties":{"id":{"type":"string","description":"Echo of the claim id you verified"},"verdict":{"type":"string","enum":["confirmed","corrected","unverifiable"]},"corrected_text":{"type":"string","description":"Required when verdict=corrected. The replacement claim text."},"note":{"type":"string","description":"Short justification with the source you checked"}},"required":["id","verdict"]}},"claims":{"type":"array","description":"FULL claims array with corrections applied in place. Preserve every claim id from the input. Do NOT add or remove claims.","items":{"type":"object","properties":{"id":{"type":"string"},"text":{"type":"string"},"type":{"type":"string","enum":["stat","quote","fact","date","price"]},"source_ids":{"type":"array","items":{"type":"string"}}},"required":["id","text","type","source_ids"]}},"sources":{"type":"array","description":"FULL sources list. May append new sources you used during verification. Preserve every existing source id and url.","items":{"type":"object","properties":{"id":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"},"date":{"type":"string"}},"required":["id","url","title"]}}},"required":["verified_claims","claims","sources"]}`,
 	)}
 
 	r.stepTools["editor"] = []ai.Tool{submitTool(
 		"submit_editorial_outline",
-		"Submit the structured editorial outline for the writer. Call this when you have determined the narrative structure.",
-		`{"type":"object","properties":{"angle":{"type":"string","description":"The core narrative angle in one sentence"},"sections":{"type":"array","description":"Ordered sections of the article","items":{"type":"object","properties":{"heading":{"type":"string","description":"Suggested section heading"},"framework_beat":{"type":"string","description":"Storytelling framework beat this maps to, if any"},"key_points":{"type":"array","items":{"type":"string"},"description":"Specific points to make, with data/stats where relevant"},"sources_to_use":{"type":"array","items":{"type":"string"},"description":"Source URLs that back the points in this section"},"editorial_notes":{"type":"string","description":"Tone and approach guidance for this section"}},"required":["heading","key_points"]}},"conclusion_strategy":{"type":"string","description":"How to close: what ties back, what CTA, what feeling to leave"}},"required":["angle","sections","conclusion_strategy"]}`,
+		"Submit the structured editorial outline. Each section references the specific claim ids it leans on.",
+		`{"type":"object","properties":{"angle":{"type":"string","description":"The core narrative angle in one sentence"},"sections":{"type":"array","description":"Ordered sections of the article","items":{"type":"object","properties":{"heading":{"type":"string"},"framework_beat":{"type":"string","description":"Storytelling framework beat this maps to, if any"},"key_points":{"type":"array","items":{"type":"string"},"description":"Specific points to make"},"claim_ids":{"type":"array","items":{"type":"string"},"description":"Claim ids (e.g. c3, c7) from the claims array that back this section. The writer reads these specific claims for this section."},"editorial_notes":{"type":"string","description":"Tone and approach guidance for this section"}},"required":["heading","key_points","claim_ids"]}},"conclusion_strategy":{"type":"string","description":"How to close: what ties back, what CTA, what feeling to leave"}},"required":["angle","sections","conclusion_strategy"]}`,
+	)}
+
+	r.stepTools["style_reference"] = []ai.Tool{fetchTool, submitTool(
+		"submit_style_reference",
+		"Submit 2-3 chosen blog posts as voice reference for the writer. Submit URLs only — the system fetches bodies server-side.",
+		`{"type":"object","properties":{"examples":{"type":"array","minItems":2,"maxItems":3,"description":"2-3 high-quality posts from the brand's blog. Submit URLs only — the system will fetch the full post bodies server-side after you submit.","items":{"type":"object","properties":{"url":{"type":"string"},"title":{"type":"string"},"why_chosen":{"type":"string","description":"One sentence on what makes this post a strong style exemplar."}},"required":["url","title","why_chosen"]}},"reasoning":{"type":"string","description":"Brief note on how the candidates were narrowed down."}},"required":["examples","reasoning"]}`,
+	)}
+
+	r.stepTools["audience_picker"] = []ai.Tool{submitTool(
+		"submit_audience_selection",
+		"Submit the audience selection. Call on your first response.",
+		`{"type":"object","properties":{"mode":{"type":"string","enum":["persona","educational","commentary"],"description":"Pick persona when a real persona fits; off-modes only when nothing fits."},"persona_id":{"type":["integer","null"],"description":"Required when mode=persona, must match an existing persona id. Null otherwise."},"reasoning":{"type":"string","description":"1-3 sentences: why this target, and which competing options were rejected and why."},"guidance_for_writer":{"type":"string","description":"2-4 sentences of concrete guidance downstream steps must honor. When the topic involves a product recommendation, include at least one explicit 'do not recommend X to Y' constraint."}},"required":["mode","reasoning","guidance_for_writer"]}`,
 	)}
 
 	r.stepTools["topic_explore"] = []ai.Tool{fetchTool, topicSearch, submitTool(

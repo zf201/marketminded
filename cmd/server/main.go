@@ -64,9 +64,11 @@ func main() {
 	orchestrator := pipeline.NewOrchestrator(
 		queries,
 		&steps.ResearchStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
+		&steps.AudiencePickerStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Audience: queries, Model: contentModel},
 		&steps.BrandEnricherStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Profile: queries, Model: contentModel},
-		&steps.FactcheckStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
+		&steps.ClaimVerifierStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Model: contentModel},
 		&steps.EditorStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, Pipeline: queries, VoiceTone: queries, Model: contentModel},
+		&steps.StyleReferenceStep{AI: aiClient, Tools: toolRegistry, Prompt: promptBuilder, ProjectSettings: queries, Model: contentModel},
 		&steps.WriterStep{AI: aiClient, Prompt: promptBuilder, Content: queries, Pipeline: queries, Model: copywritingModel},
 	)
 

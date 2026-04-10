@@ -122,6 +122,10 @@ func (c *Client) Stream(ctx context.Context, model string, messages []Message, f
 
 	var full strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
+	// Default 64KB line buffer is too small for some providers (notably
+	// Anthropic with web search) where individual SSE events can carry
+	// large search-result payloads on a single line. 8MB cap is generous.
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {

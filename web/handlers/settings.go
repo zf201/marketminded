@@ -27,12 +27,13 @@ func (h *SettingsHandler) show(w http.ResponseWriter, r *http.Request, saved boo
 	settings, _ := h.queries.AllSettings()
 
 	templates.SettingsPage(templates.SettingsData{
-		ModelContent:     settings["model_content"],
-		ModelCopywriting: settings["model_copywriting"],
-		ModelIdeation:    settings["model_ideation"],
-		ModelProofread:   settings["model_proofread"],
-		Temperature:        settings["temperature"],
-		Saved:              saved,
+		ModelContent:         settings["model_content"],
+		ModelCopywriting:     settings["model_copywriting"],
+		ModelIdeation:        settings["model_ideation"],
+		ModelProofread:       settings["model_proofread"],
+		Temperature:          settings["temperature"],
+		ClaimVerifierEnabled: settings["claim_verifier_enabled"] == "true",
+		Saved:                saved,
 	}).Render(r.Context(), w)
 }
 
@@ -43,5 +44,12 @@ func (h *SettingsHandler) save(w http.ResponseWriter, r *http.Request) {
 	h.queries.SetSetting("model_ideation", r.FormValue("model_ideation"))
 	h.queries.SetSetting("model_proofread", r.FormValue("model_proofread"))
 	h.queries.SetSetting("temperature", r.FormValue("temperature"))
+
+	enabled := "false"
+	if r.FormValue("claim_verifier_enabled") == "true" {
+		enabled = "true"
+	}
+	h.queries.SetSetting("claim_verifier_enabled", enabled)
+
 	h.show(w, r, true)
 }

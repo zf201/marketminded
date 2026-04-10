@@ -188,6 +188,76 @@ function renderStepOutput(el, typeName, data) {
             concDiv.textContent = data.conclusion_strategy;
             el.appendChild(makeSubcard('Conclusion', concDiv));
         }
+    } else if (typeName === 'Audience Picker') {
+        var modeRow = document.createElement('div');
+        modeRow.className = 'mb-2';
+        var modeBadge = document.createElement('span');
+        modeBadge.className = 'badge badge-sm badge-primary mr-2';
+        modeBadge.textContent = data.mode || 'unknown';
+        modeRow.appendChild(modeBadge);
+        if (data.persona_label) {
+            var label = document.createElement('span');
+            label.className = 'font-semibold text-sm';
+            label.textContent = data.persona_label;
+            modeRow.appendChild(label);
+        }
+        el.appendChild(modeRow);
+
+        if (data.reasoning) {
+            var reasoning = document.createElement('div');
+            reasoning.className = 'text-sm opacity-80 mb-2';
+            reasoning.textContent = data.reasoning;
+            el.appendChild(makeSubcard('Reasoning', reasoning));
+        }
+        if (data.guidance_for_writer) {
+            var guidance = document.createElement('div');
+            guidance.className = 'text-sm p-2 bg-zinc-800 border-l-4 border-primary rounded';
+            guidance.textContent = data.guidance_for_writer;
+            el.appendChild(makeSubcard('Writer guidance', guidance));
+        }
+    } else if (typeName === 'Style Reference') {
+        if (data.reasoning) {
+            var sRea = document.createElement('div');
+            sRea.className = 'text-sm opacity-80 mb-2';
+            sRea.textContent = data.reasoning;
+            el.appendChild(makeSubcard('Reasoning', sRea));
+        }
+        if (data.examples && data.examples.length > 0) {
+            data.examples.forEach(function(ex, i) {
+                var wrap = document.createElement('div');
+                wrap.className = 'mb-2';
+                var details = document.createElement('details');
+                details.className = 'border border-zinc-800 rounded p-2 bg-zinc-900';
+                var summary = document.createElement('summary');
+                summary.className = 'cursor-pointer text-sm font-semibold';
+                summary.textContent = 'Example ' + (i + 1) + ': ' + (ex.title || ex.url);
+                details.appendChild(summary);
+
+                if (ex.url) {
+                    var a = document.createElement('a');
+                    a.href = ex.url;
+                    a.target = '_blank';
+                    a.className = 'link link-primary text-xs block mt-1';
+                    a.textContent = ex.url;
+                    details.appendChild(a);
+                }
+                if (ex.why_chosen) {
+                    var why = document.createElement('div');
+                    why.className = 'italic text-xs opacity-70 mt-1';
+                    why.textContent = 'Why: ' + ex.why_chosen;
+                    details.appendChild(why);
+                }
+                if (ex.body) {
+                    var body = document.createElement('div');
+                    body.className = 'text-xs mt-2 whitespace-pre-wrap font-mono';
+                    body.textContent = ex.body;
+                    details.appendChild(body);
+                }
+
+                wrap.appendChild(details);
+                el.appendChild(wrap);
+            });
+        }
     } else {
         el.textContent = JSON.stringify(data, null, 2);
         el.style.whiteSpace = 'pre-wrap';

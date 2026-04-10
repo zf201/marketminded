@@ -3,12 +3,13 @@ package templates
 import "github.com/zanfridau/marketminded/web/templates/components"
 
 type SettingsData struct {
-	ModelContent       string
-	ModelCopywriting   string
-	ModelIdeation      string
-	ModelProofread     string
-	Temperature        string
-	Saved              bool
+	ModelContent         string
+	ModelCopywriting     string
+	ModelIdeation        string
+	ModelProofread       string
+	Temperature          string
+	ClaimVerifierEnabled bool
+	Saved                bool
 }
 
 templ SettingsPage(data SettingsData) {
@@ -41,6 +42,16 @@ templ SettingsPage(data SettingsData) {
 				<p class="text-zinc-600 text-xs mt-2">
 					Popular models: x-ai/grok-4.1-fast, anthropic/claude-sonnet-4-20250514, openai/gpt-4o, google/gemini-2.0-flash-001
 				</p>
+			}
+			@components.Card("Pipeline Steps") {
+				<p class="text-zinc-500 text-xs mb-4">Toggle optional pipeline steps for the cornerstone flow.</p>
+				<label class="flex items-start gap-3 cursor-pointer">
+					<input type="checkbox" name="claim_verifier_enabled" value="true" checked?={ data.ClaimVerifierEnabled } class="checkbox mt-1"/>
+					<span>
+						<span class="block text-sm font-medium text-zinc-200">Enable claim verifier step</span>
+						<span class="block text-xs text-zinc-500 mt-0.5">Adds a verification pass after brand enrichment that spot-checks the highest-risk claims (stats, dates, prices) against the web. Costs an extra LLM call per run.</span>
+					</span>
+				</label>
 			}
 			<div class="mt-6">
 				@components.SubmitButton("Save Settings")

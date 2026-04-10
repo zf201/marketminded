@@ -161,6 +161,9 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 		}
 	}
 
+	personas, _ := h.queries.ListAudiencePersonas(projectID)
+	blogURL, _ := h.queries.GetProjectSetting(projectID, "blog_url")
+
 	templates.ProductionBoardPage(templates.ProductionBoardData{
 		ProjectID:   projectID,
 		ProjectName: project.Name,
@@ -173,6 +176,8 @@ func (h *PipelineHandler) show(w http.ResponseWriter, r *http.Request, projectID
 		Steps:       stepViews,
 		Pieces:      contentViews,
 		NextPieceID: nextPieceID,
+		HasPersonas: len(personas) > 0,
+		HasBlogURL:  blogURL != "",
 	}).Render(r.Context(), w)
 }
 

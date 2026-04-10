@@ -10,9 +10,11 @@ var StepCards = (function() {
 
     var STEP_LABELS = {
         'research': 'Researcher',
+        'audience_picker': 'Audience Picker',
         'brand_enricher': 'Brand Enricher',
-        'factcheck': 'Fact-Checker',
+        'claim_verifier': 'Claim Verifier',
         'editor': 'Editor',
+        'style_reference': 'Style Reference',
         'write': 'Writer',
         'topic_explore': 'Explorer',
         'topic_review': 'Reviewer'

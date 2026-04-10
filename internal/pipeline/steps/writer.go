@@ -45,7 +45,31 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 	if ctOk {
 		promptFile = ct.PromptFile
 	}
-	systemPrompt := s.Prompt.ForWriter(promptFile, input.Profile, editorOutput, rejectionReason)
+	claimsPayload, claimsSource := pipeline.FindLatestClaims(input.PriorOutputs)
+	if claimsSource == "" || len(claimsPayload.Claims) == 0 {
+		return pipeline.StepResult{}, fmt.Errorf("writer: no claims found in prior outputs (expected research, brand_enricher, or claim_verifier)")
+	}
+	claimsBlock := pipeline.FormatClaimsBlock(claimsPayload)
+
+	var audienceBlock string
+	if raw, ok := input.PriorOutputs["audience_picker"]; ok && raw != "" {
+		sel, perr := pipeline.ParseAudienceSelection(raw)
+		if perr != nil {
+			return pipeline.StepResult{}, fmt.Errorf("writer: parse audience selection: %w", perr)
+		}
+		audienceBlock = pipeline.FormatAudienceBlock(sel)
+	}
+
+	var styleReferenceBlock string
+	if raw, ok := input.PriorOutputs["style_reference"]; ok && raw != "" {
+		ref, perr := pipeline.ParseStyleReference(raw)
+		if perr != nil {
+			return pipeline.StepResult{}, fmt.Errorf("writer: parse style reference: %w", perr)
+		}
+		styleReferenceBlock = pipeline.FormatStyleReferenceBlock(ref)
+	}
+
+	systemPrompt := s.Prompt.ForWriter(promptFile, input.Profile, editorOutput, claimsBlock, rejectionReason, audienceBlock, styleReferenceBlock)
 
 	aiMsgs := []ai.Message{
 		{Role: "system", Content: systemPrompt},
@@ -107,7 +131,7 @@ func (s *WriterStep) Run(ctx context.Context, input pipeline.StepInput, stream p
 		return stream.SendThinking(chunk)
 	}
 
-	prefix := fmt.Sprintf("pipeline run=%d step=%d type=write", input.RunID, input.StepID)
+	prefix := fmt.Sprintf("pipeline run=%d step=%d type=write (claims from %s)", input.RunID, input.StepID, claimsSource)
 	start := time.Now()
 	applog.Info("%s: model=%s starting", prefix, s.Model())
 

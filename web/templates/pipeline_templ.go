@@ -232,6 +232,8 @@ type ProductionBoardData struct {
 	Steps       []PipelineStepView
 	Pieces      []ContentPieceView
 	NextPieceID int64
+	HasPersonas bool
+	HasBlogURL  bool
 }
 
 type ContentPieceView struct {
@@ -336,8 +338,8 @@ func stepTypeLabel(stepType string) templ.Component {
 			if err != nil {
 				return err
 			}
-		case "factcheck":
-			var_14 := `Fact-Checker`
+		case "claim_verifier":
+			var_14 := `Claim Verifier`
 			_, err = templBuffer.WriteString(var_14)
 			if err != nil {
 				return err
@@ -490,13 +492,53 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 			if err != nil {
 				return err
 			}
+			if !data.HasPersonas || !data.HasBlogURL {
+				_, err = templBuffer.WriteString("<div class=\"alert alert-info mb-4 text-sm\"><div class=\"flex flex-col gap-1\">")
+				if err != nil {
+					return err
+				}
+				if !data.HasPersonas {
+					_, err = templBuffer.WriteString("<div>")
+					if err != nil {
+						return err
+					}
+					var_23 := `Audience Picker step is disabled. Add personas on the profile page to enable it.`
+					_, err = templBuffer.WriteString(var_23)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</div>")
+					if err != nil {
+						return err
+					}
+				}
+				if !data.HasBlogURL {
+					_, err = templBuffer.WriteString("<div>")
+					if err != nil {
+						return err
+					}
+					var_24 := `Style Reference step is disabled. Set a blog URL in project settings to enable it.`
+					_, err = templBuffer.WriteString(var_24)
+					if err != nil {
+						return err
+					}
+					_, err = templBuffer.WriteString("</div>")
+					if err != nil {
+						return err
+					}
+				}
+				_, err = templBuffer.WriteString("</div></div>")
+				if err != nil {
+					return err
+				}
+			}
 			if len(data.Steps) > 0 {
 				_, err = templBuffer.WriteString("<!--")
 				if err != nil {
 					return err
 				}
-				var_23 := ` Step progress indicator `
-				_, err = templBuffer.WriteString(var_23)
+				var_25 := ` Step progress indicator `
+				_, err = templBuffer.WriteString(var_25)
 				if err != nil {
 					return err
 				}
@@ -505,8 +547,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					return err
 				}
 				for i, step := range data.Steps {
-					var var_24 = []any{stepProgressClass(step.Status)}
-					err = templ.RenderCSSItems(ctx, templBuffer, var_24...)
+					var var_26 = []any{stepProgressClass(step.Status)}
+					err = templ.RenderCSSItems(ctx, templBuffer, var_26...)
 					if err != nil {
 						return err
 					}
@@ -514,7 +556,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_24).String()))
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_26).String()))
 					if err != nil {
 						return err
 					}
@@ -538,13 +580,13 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_25 = []any{
+					var var_27 = []any{
 						"step-progress-circle w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border",
 						templ.KV("bg-green-500/10 border-green-500/30", step.Status == "completed"),
 						templ.KV("bg-red-500/10 border-red-500/30", step.Status == "failed"),
 						templ.KV("bg-zinc-800 border-zinc-700", step.Status != "completed" && step.Status != "failed"),
 					}
-					err = templ.RenderCSSItems(ctx, templBuffer, var_25...)
+					err = templ.RenderCSSItems(ctx, templBuffer, var_27...)
 					if err != nil {
 						return err
 					}
@@ -552,7 +594,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_25).String()))
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_27).String()))
 					if err != nil {
 						return err
 					}
@@ -560,8 +602,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_26 string = stepIcon(step.Status)
-					_, err = templBuffer.WriteString(templ.EscapeString(var_26))
+					var var_28 string = stepIcon(step.Status)
+					_, err = templBuffer.WriteString(templ.EscapeString(var_28))
 					if err != nil {
 						return err
 					}
@@ -578,12 +620,12 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						return err
 					}
 					if i < len(data.Steps)-1 {
-						var var_27 = []any{
+						var var_29 = []any{
 							"step-progress-line flex-1 h-px mx-1",
 							templ.KV("bg-green-500/30", step.Status == "completed"),
 							templ.KV("bg-zinc-800", step.Status != "completed"),
 						}
-						err = templ.RenderCSSItems(ctx, templBuffer, var_27...)
+						err = templ.RenderCSSItems(ctx, templBuffer, var_29...)
 						if err != nil {
 							return err
 						}
@@ -591,7 +633,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_27).String()))
+						_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_29).String()))
 						if err != nil {
 							return err
 						}
@@ -614,7 +656,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					return err
 				}
 				if data.Brief != "" {
-					var_28 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+					var_30 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 						templBuffer, templIsBuffer := w.(*bytes.Buffer)
 						if !templIsBuffer {
 							templBuffer = templ.GetBuffer()
@@ -624,8 +666,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var var_29 string = data.Brief
-						_, err = templBuffer.WriteString(templ.EscapeString(var_29))
+						var var_31 string = data.Brief
+						_, err = templBuffer.WriteString(templ.EscapeString(var_31))
 						if err != nil {
 							return err
 						}
@@ -638,7 +680,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						}
 						return err
 					})
-					err = components.CollapsibleCard("Topic", false).Render(templ.WithChildren(ctx, var_28), templBuffer)
+					err = components.CollapsibleCard("Topic", false).Render(templ.WithChildren(ctx, var_30), templBuffer)
 					if err != nil {
 						return err
 					}
@@ -723,8 +765,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_30 := `Retry`
-						_, err = templBuffer.WriteString(var_30)
+						var_32 := `Retry`
+						_, err = templBuffer.WriteString(var_32)
 						if err != nil {
 							return err
 						}
@@ -740,8 +782,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_31 := `Retry from Start`
-						_, err = templBuffer.WriteString(var_31)
+						var_33 := `Retry from Start`
+						_, err = templBuffer.WriteString(var_33)
 						if err != nil {
 							return err
 						}
@@ -762,8 +804,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_32 := `Run Pipeline`
-						_, err = templBuffer.WriteString(var_32)
+						var_34 := `Run Pipeline`
+						_, err = templBuffer.WriteString(var_34)
 						if err != nil {
 							return err
 						}
@@ -776,8 +818,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var_33 := `Cancel`
-					_, err = templBuffer.WriteString(var_33)
+					var_35 := `Cancel`
+					_, err = templBuffer.WriteString(var_35)
 					if err != nil {
 						return err
 					}
@@ -793,7 +835,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 			}
 			for _, piece := range data.Pieces {
 				if piece.IsCornerstone {
-					var var_34 = []any{"board-card card",
+					var var_36 = []any{"board-card card",
 						pieceBorderClass(piece.Status),
 						templ.KV("board-card-cornerstone", piece.IsCornerstone),
 						templ.KV("board-card-pending", piece.Status == "pending"),
@@ -802,7 +844,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						templ.KV("board-card-approved", piece.Status == "approved"),
 						templ.KV("board-card-rejected", piece.Status == "rejected"),
 					}
-					err = templ.RenderCSSItems(ctx, templBuffer, var_34...)
+					err = templ.RenderCSSItems(ctx, templBuffer, var_36...)
 					if err != nil {
 						return err
 					}
@@ -810,7 +852,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_34).String()))
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_36).String()))
 					if err != nil {
 						return err
 					}
@@ -826,18 +868,18 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_35 string = piece.Platform
-					_, err = templBuffer.WriteString(templ.EscapeString(var_35))
-					if err != nil {
-						return err
-					}
-					var_36 := `/`
-					_, err = templBuffer.WriteString(var_36)
-					if err != nil {
-						return err
-					}
-					var var_37 string = piece.Format
+					var var_37 string = piece.Platform
 					_, err = templBuffer.WriteString(templ.EscapeString(var_37))
+					if err != nil {
+						return err
+					}
+					var_38 := `/`
+					_, err = templBuffer.WriteString(var_38)
+					if err != nil {
+						return err
+					}
+					var var_39 string = piece.Format
+					_, err = templBuffer.WriteString(templ.EscapeString(var_39))
 					if err != nil {
 						return err
 					}
@@ -845,8 +887,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var_38 := `cornerstone`
-					_, err = templBuffer.WriteString(var_38)
+					var_40 := `cornerstone`
+					_, err = templBuffer.WriteString(var_40)
 					if err != nil {
 						return err
 					}
@@ -859,8 +901,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var var_39 string = piece.Title
-						_, err = templBuffer.WriteString(templ.EscapeString(var_39))
+						var var_41 string = piece.Title
+						_, err = templBuffer.WriteString(templ.EscapeString(var_41))
 						if err != nil {
 							return err
 						}
@@ -881,8 +923,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_40 = []any{"board-card-body whitespace-pre-wrap text-sm mt-2", templ.KV("collapsed", piece.Status == "approved")}
-					err = templ.RenderCSSItems(ctx, templBuffer, var_40...)
+					var var_42 = []any{"board-card-body whitespace-pre-wrap text-sm mt-2", templ.KV("collapsed", piece.Status == "approved")}
+					err = templ.RenderCSSItems(ctx, templBuffer, var_42...)
 					if err != nil {
 						return err
 					}
@@ -890,7 +932,7 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 					if err != nil {
 						return err
 					}
-					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_40).String()))
+					_, err = templBuffer.WriteString(templ.EscapeString(templ.CSSClasses(var_42).String()))
 					if err != nil {
 						return err
 					}
@@ -923,8 +965,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						return err
 					}
 					if piece.Body != "" {
-						var var_41 string = piece.Body
-						_, err = templBuffer.WriteString(templ.EscapeString(var_41))
+						var var_43 string = piece.Body
+						_, err = templBuffer.WriteString(templ.EscapeString(var_43))
 						if err != nil {
 							return err
 						}
@@ -933,8 +975,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_42 := `Waiting to be generated...`
-						_, err = templBuffer.WriteString(var_42)
+						var_44 := `Waiting to be generated...`
+						_, err = templBuffer.WriteString(var_44)
 						if err != nil {
 							return err
 						}
@@ -952,13 +994,13 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_43 := `Rejected: `
-						_, err = templBuffer.WriteString(var_43)
+						var_45 := `Rejected: `
+						_, err = templBuffer.WriteString(var_45)
 						if err != nil {
 							return err
 						}
-						var var_44 string = piece.RejectionReason
-						_, err = templBuffer.WriteString(templ.EscapeString(var_44))
+						var var_46 string = piece.RejectionReason
+						_, err = templBuffer.WriteString(templ.EscapeString(var_46))
 						if err != nil {
 							return err
 						}
@@ -992,8 +1034,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_45 := `Abort`
-						_, err = templBuffer.WriteString(var_45)
+						var_47 := `Abort`
+						_, err = templBuffer.WriteString(var_47)
 						if err != nil {
 							return err
 						}
@@ -1015,8 +1057,8 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_46 := `Approve`
-						_, err = templBuffer.WriteString(var_46)
+						var_48 := `Approve`
+						_, err = templBuffer.WriteString(var_48)
 						if err != nil {
 							return err
 						}
@@ -1032,52 +1074,12 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						if err != nil {
 							return err
 						}
-						var_47 := `Reject`
-						_, err = templBuffer.WriteString(var_47)
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary btn-sm piece-improve-btn\" data-piece-id=\"")
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("\">")
-						if err != nil {
-							return err
-						}
-						var_48 := `Improve`
-						_, err = templBuffer.WriteString(var_48)
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary btn-sm proofread-btn\" data-piece-id=\"")
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
-						if err != nil {
-							return err
-						}
-						_, err = templBuffer.WriteString("\">")
-						if err != nil {
-							return err
-						}
-						var_49 := `Proofread`
+						var_49 := `Reject`
 						_, err = templBuffer.WriteString(var_49)
 						if err != nil {
 							return err
 						}
-						_, err = templBuffer.WriteString("</button>")
-						if err != nil {
-							return err
-						}
-					}
-					if piece.Status == "approved" {
-						_, err = templBuffer.WriteString("<button class=\"btn btn-secondary btn-sm piece-improve-btn\" data-piece-id=\"")
+						_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary btn-sm piece-improve-btn\" data-piece-id=\"")
 						if err != nil {
 							return err
 						}
@@ -1108,6 +1110,46 @@ func ProductionBoardPage(data ProductionBoardData) templ.Component {
 						}
 						var_51 := `Proofread`
 						_, err = templBuffer.WriteString(var_51)
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("</button>")
+						if err != nil {
+							return err
+						}
+					}
+					if piece.Status == "approved" {
+						_, err = templBuffer.WriteString("<button class=\"btn btn-secondary btn-sm piece-improve-btn\" data-piece-id=\"")
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("\">")
+						if err != nil {
+							return err
+						}
+						var_52 := `Improve`
+						_, err = templBuffer.WriteString(var_52)
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("</button> <button class=\"btn btn-secondary btn-sm proofread-btn\" data-piece-id=\"")
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString(templ.EscapeString(fmt.Sprintf("%d", piece.ID)))
+						if err != nil {
+							return err
+						}
+						_, err = templBuffer.WriteString("\">")
+						if err != nil {
+							return err
+						}
+						var_53 := `Proofread`
+						_, err = templBuffer.WriteString(var_53)
 						if err != nil {
 							return err
 						}
@@ -1155,12 +1197,12 @@ func ContentEditPage(data ContentEditData) templ.Component {
 			defer templ.ReleaseBuffer(templBuffer)
 		}
 		ctx = templ.InitializeContext(ctx)
-		var_52 := templ.GetChildren(ctx)
-		if var_52 == nil {
-			var_52 = templ.NopComponent
+		var_54 := templ.GetChildren(ctx)
+		if var_54 == nil {
+			var_54 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var_53 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+		var_55 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 			templBuffer, templIsBuffer := w.(*bytes.Buffer)
 			if !templIsBuffer {
 				templBuffer = templ.GetBuffer()
@@ -1170,8 +1212,8 @@ func ContentEditPage(data ContentEditData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_54 := `Edit Content`
-			_, err = templBuffer.WriteString(var_54)
+			var_56 := `Edit Content`
+			_, err = templBuffer.WriteString(var_56)
 			if err != nil {
 				return err
 			}
@@ -1179,8 +1221,8 @@ func ContentEditPage(data ContentEditData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var var_55 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID))
-			_, err = templBuffer.WriteString(templ.EscapeString(string(var_55)))
+			var var_57 templ.SafeURL = templ.SafeURL(fmt.Sprintf("/projects/%d/pipeline", data.ProjectID))
+			_, err = templBuffer.WriteString(templ.EscapeString(string(var_57)))
 			if err != nil {
 				return err
 			}
@@ -1188,8 +1230,8 @@ func ContentEditPage(data ContentEditData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_56 := `Back`
-			_, err = templBuffer.WriteString(var_56)
+			var_58 := `Back`
+			_, err = templBuffer.WriteString(var_58)
 			if err != nil {
 				return err
 			}
@@ -1197,7 +1239,7 @@ func ContentEditPage(data ContentEditData) templ.Component {
 			if err != nil {
 				return err
 			}
-			var_57 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+			var_59 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 				templBuffer, templIsBuffer := w.(*bytes.Buffer)
 				if !templIsBuffer {
 					templBuffer = templ.GetBuffer()
@@ -1207,18 +1249,18 @@ func ContentEditPage(data ContentEditData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var var_58 string = data.Piece.Platform
-				_, err = templBuffer.WriteString(templ.EscapeString(var_58))
-				if err != nil {
-					return err
-				}
-				var_59 := `/`
-				_, err = templBuffer.WriteString(var_59)
-				if err != nil {
-					return err
-				}
-				var var_60 string = data.Piece.Format
+				var var_60 string = data.Piece.Platform
 				_, err = templBuffer.WriteString(templ.EscapeString(var_60))
+				if err != nil {
+					return err
+				}
+				var_61 := `/`
+				_, err = templBuffer.WriteString(var_61)
+				if err != nil {
+					return err
+				}
+				var var_62 string = data.Piece.Format
+				_, err = templBuffer.WriteString(templ.EscapeString(var_62))
 				if err != nil {
 					return err
 				}
@@ -1242,7 +1284,7 @@ func ContentEditPage(data ContentEditData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_61 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+				var_63 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 					templBuffer, templIsBuffer := w.(*bytes.Buffer)
 					if !templIsBuffer {
 						templBuffer = templ.GetBuffer()
@@ -1265,11 +1307,11 @@ func ContentEditPage(data ContentEditData) templ.Component {
 					}
 					return err
 				})
-				err = components.FormGroup("Title").Render(templ.WithChildren(ctx, var_61), templBuffer)
+				err = components.FormGroup("Title").Render(templ.WithChildren(ctx, var_63), templBuffer)
 				if err != nil {
 					return err
 				}
-				var_62 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
+				var_64 := templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 					templBuffer, templIsBuffer := w.(*bytes.Buffer)
 					if !templIsBuffer {
 						templBuffer = templ.GetBuffer()
@@ -1279,8 +1321,8 @@ func ContentEditPage(data ContentEditData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var var_63 string = data.Piece.Body
-					_, err = templBuffer.WriteString(templ.EscapeString(var_63))
+					var var_65 string = data.Piece.Body
+					_, err = templBuffer.WriteString(templ.EscapeString(var_65))
 					if err != nil {
 						return err
 					}
@@ -1293,7 +1335,7 @@ func ContentEditPage(data ContentEditData) templ.Component {
 					}
 					return err
 				})
-				err = components.FormGroup("Body").Render(templ.WithChildren(ctx, var_62), templBuffer)
+				err = components.FormGroup("Body").Render(templ.WithChildren(ctx, var_64), templBuffer)
 				if err != nil {
 					return err
 				}
@@ -1301,8 +1343,8 @@ func ContentEditPage(data ContentEditData) templ.Component {
 				if err != nil {
 					return err
 				}
-				var_64 := `Save`
-				_, err = templBuffer.WriteString(var_64)
+				var_66 := `Save`
+				_, err = templBuffer.WriteString(var_66)
 				if err != nil {
 					return err
 				}
@@ -1315,8 +1357,8 @@ func ContentEditPage(data ContentEditData) templ.Component {
 					if err != nil {
 						return err
 					}
-					var_65 := `Approve`
-					_, err = templBuffer.WriteString(var_65)
+					var_67 := `Approve`
+					_, err = templBuffer.WriteString(var_67)
 					if err != nil {
 						return err
 					}
@@ -1334,7 +1376,7 @@ func ContentEditPage(data ContentEditData) templ.Component {
 				}
 				return err
 			})
-			err = components.Card("").Render(templ.WithChildren(ctx, var_57), templBuffer)
+			err = components.Card("").Render(templ.WithChildren(ctx, var_59), templBuffer)
 			if err != nil {
 				return err
 			}
@@ -1346,7 +1388,7 @@ func ContentEditPage(data ContentEditData) templ.Component {
 		err = components.ProjectPageShell("Edit Content", []components.Breadcrumb{
 			{Label: "Projects", URL: "/projects"},
 			{Label: "Content"},
-		}, data.ProjectID, "", "pipeline").Render(templ.WithChildren(ctx, var_53), templBuffer)
+		}, data.ProjectID, "", "pipeline").Render(templ.WithChildren(ctx, var_55), templBuffer)
 		if err != nil {
 			return err
 		}
