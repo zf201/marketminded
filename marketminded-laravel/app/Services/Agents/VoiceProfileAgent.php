@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Models\VoiceProfile;
@@ -11,38 +12,49 @@ class VoiceProfileAgent
 {
     public function __construct(private OpenRouterClient $client) {}
 
-    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent): VoiceProfile
+    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent, ?AiTaskStep $step = null): VoiceProfile
     {
-        $systemPrompt = $this->buildSystemPrompt($team, $positioning, $fetchedContent);
+        $step?->markRunning($this->client->getModel());
 
-        $tools = [
-            $this->fetchUrlTool(),
-            $this->submitTool(),
-        ];
+        try {
+            $systemPrompt = $this->buildSystemPrompt($team, $positioning, $fetchedContent);
 
-        $result = $this->client->chat(
-            [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Analyze the writing style and produce a structured voice & tone profile. You MUST call submit_voice_profile with your results.'],
-            ],
-            $tools,
-        );
+            $tools = [
+                $this->fetchUrlTool(),
+                $this->submitTool(),
+            ];
 
-        if (! is_array($result)) {
-            throw new \RuntimeException('VoiceProfileAgent did not return structured data.');
+            $result = $this->client->chat(
+                [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => 'Analyze the writing style and produce a structured voice & tone profile. You MUST call submit_voice_profile with your results.'],
+                ],
+                $tools,
+            );
+
+            if (! is_array($result->data)) {
+                throw new \RuntimeException('VoiceProfileAgent did not return structured data.');
+            }
+
+            $profile = $team->voiceProfile()->updateOrCreate(
+                ['team_id' => $team->id],
+                [
+                    'voice_analysis' => $result->data['voice_analysis'] ?? null,
+                    'content_types' => $result->data['content_types'] ?? null,
+                    'should_avoid' => $result->data['should_avoid'] ?? null,
+                    'should_use' => $result->data['should_use'] ?? null,
+                    'style_inspiration' => $result->data['style_inspiration'] ?? null,
+                    'preferred_length' => $result->data['preferred_length'] ?? 1500,
+                ],
+            );
+
+            $step?->markCompleted($result->usage());
+
+            return $profile;
+        } catch (\Throwable $e) {
+            $step?->markFailed($e->getMessage());
+            throw $e;
         }
-
-        return $team->voiceProfile()->updateOrCreate(
-            ['team_id' => $team->id],
-            [
-                'voice_analysis' => $result['voice_analysis'] ?? null,
-                'content_types' => $result['content_types'] ?? null,
-                'should_avoid' => $result['should_avoid'] ?? null,
-                'should_use' => $result['should_use'] ?? null,
-                'style_inspiration' => $result['style_inspiration'] ?? null,
-                'preferred_length' => $result['preferred_length'] ?? 1500,
-            ],
-        );
     }
 
     private function buildSystemPrompt(Team $team, BrandPositioning $positioning, array $fetchedContent): string

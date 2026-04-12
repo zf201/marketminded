@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Services\OpenRouterClient;
@@ -10,38 +11,49 @@ class PositioningAgent
 {
     public function __construct(private OpenRouterClient $client) {}
 
-    public function generate(Team $team, array $fetchedContent): BrandPositioning
+    public function generate(Team $team, array $fetchedContent, ?AiTaskStep $step = null): BrandPositioning
     {
-        $systemPrompt = $this->buildSystemPrompt($team, $fetchedContent);
+        $step?->markRunning($this->client->getModel());
 
-        $tools = [
-            $this->fetchUrlTool(),
-            $this->submitTool(),
-        ];
+        try {
+            $systemPrompt = $this->buildSystemPrompt($team, $fetchedContent);
 
-        $result = $this->client->chat(
-            [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Analyze the brand and produce structured positioning. You MUST call submit_positioning with your results.'],
-            ],
-            $tools,
-        );
+            $tools = [
+                $this->fetchUrlTool(),
+                $this->submitTool(),
+            ];
 
-        if (! is_array($result)) {
-            throw new \RuntimeException('PositioningAgent did not return structured data.');
+            $result = $this->client->chat(
+                [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => 'Analyze the brand and produce structured positioning. You MUST call submit_positioning with your results.'],
+                ],
+                $tools,
+            );
+
+            if (! is_array($result->data)) {
+                throw new \RuntimeException('PositioningAgent did not return structured data.');
+            }
+
+            $positioning = $team->brandPositioning()->updateOrCreate(
+                ['team_id' => $team->id],
+                [
+                    'value_proposition' => $result->data['value_proposition'] ?? null,
+                    'target_market' => $result->data['target_market'] ?? null,
+                    'differentiators' => $result->data['differentiators'] ?? null,
+                    'core_problems' => $result->data['core_problems'] ?? null,
+                    'products_services' => $result->data['products_services'] ?? null,
+                    'primary_cta' => $result->data['primary_cta'] ?? null,
+                ],
+            );
+
+            $step?->markCompleted($result->usage());
+
+            return $positioning;
+        } catch (\Throwable $e) {
+            $step?->markFailed($e->getMessage());
+            throw $e;
         }
-
-        return $team->brandPositioning()->updateOrCreate(
-            ['team_id' => $team->id],
-            [
-                'value_proposition' => $result['value_proposition'] ?? null,
-                'target_market' => $result['target_market'] ?? null,
-                'differentiators' => $result['differentiators'] ?? null,
-                'core_problems' => $result['core_problems'] ?? null,
-                'products_services' => $result['products_services'] ?? null,
-                'primary_cta' => $result['primary_cta'] ?? null,
-            ],
-        );
     }
 
     private function buildSystemPrompt(Team $team, array $fetchedContent): string

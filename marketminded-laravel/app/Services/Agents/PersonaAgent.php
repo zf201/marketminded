@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Services\OpenRouterClient;
@@ -11,46 +12,55 @@ class PersonaAgent
 {
     public function __construct(private OpenRouterClient $client) {}
 
-    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent): Collection
+    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent, ?AiTaskStep $step = null): Collection
     {
-        $systemPrompt = $this->buildSystemPrompt($team, $positioning, $fetchedContent);
+        $step?->markRunning($this->client->getModel());
 
-        $tools = [
-            $this->fetchUrlTool(),
-            $this->submitTool(),
-        ];
+        try {
+            $systemPrompt = $this->buildSystemPrompt($team, $positioning, $fetchedContent);
 
-        $result = $this->client->chat(
-            messages: [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Define 3-5 detailed audience personas for this business based on the positioning and brand information provided. Call submit_personas with your results.'],
-            ],
-            tools: $tools,
-            useServerTools: false,
-        );
+            $tools = [
+                $this->fetchUrlTool(),
+                $this->submitTool(),
+            ];
 
-        if (! is_array($result) || ! isset($result['personas'])) {
-            throw new \RuntimeException('PersonaAgent did not return structured personas. Got: ' . (is_string($result) ? substr($result, 0, 200) : json_encode($result)));
+            $result = $this->client->chat(
+                messages: [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => 'Define 3-5 detailed audience personas for this business based on the positioning and brand information provided. Call submit_personas with your results.'],
+                ],
+                tools: $tools,
+                useServerTools: false,
+            );
+
+            if (! is_array($result->data) || ! isset($result->data['personas'])) {
+                throw new \RuntimeException('PersonaAgent did not return structured personas. Got: ' . (is_string($result->data) ? substr($result->data, 0, 200) : json_encode($result->data)));
+            }
+
+            $team->audiencePersonas()->delete();
+
+            $personas = collect();
+            foreach (($result->data['personas'] ?? []) as $index => $personaData) {
+                $persona = $team->audiencePersonas()->create([
+                    'label' => $personaData['label'] ?? "Persona {$index}",
+                    'description' => $personaData['description'] ?? null,
+                    'pain_points' => $personaData['pain_points'] ?? null,
+                    'push' => $personaData['push'] ?? null,
+                    'pull' => $personaData['pull'] ?? null,
+                    'anxiety' => $personaData['anxiety'] ?? null,
+                    'role' => $personaData['role'] ?? null,
+                    'sort_order' => $index,
+                ]);
+                $personas->push($persona);
+            }
+
+            $step?->markCompleted($result->usage());
+
+            return $personas;
+        } catch (\Throwable $e) {
+            $step?->markFailed($e->getMessage());
+            throw $e;
         }
-
-        $team->audiencePersonas()->delete();
-
-        $personas = collect();
-        foreach (($result['personas'] ?? []) as $index => $personaData) {
-            $persona = $team->audiencePersonas()->create([
-                'label' => $personaData['label'] ?? "Persona {$index}",
-                'description' => $personaData['description'] ?? null,
-                'pain_points' => $personaData['pain_points'] ?? null,
-                'push' => $personaData['push'] ?? null,
-                'pull' => $personaData['pull'] ?? null,
-                'anxiety' => $personaData['anxiety'] ?? null,
-                'role' => $personaData['role'] ?? null,
-                'sort_order' => $index,
-            ]);
-            $personas->push($persona);
-        }
-
-        return $personas;
     }
 
     private function buildSystemPrompt(Team $team, BrandPositioning $positioning, array $fetchedContent): string
