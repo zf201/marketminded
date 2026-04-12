@@ -184,3 +184,21 @@ test('mount populates form from existing team data', function () {
         ->assertSet('toneKeywords', 'Friendly')
         ->assertSet('contentLanguage', 'Spanish');
 });
+
+test('brand setup page can be rendered', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+    $user->update(['current_team_id' => $team->id]);
+
+    $this->actingAs($user)
+        ->get(route('brand.setup', ['current_team' => $team->slug]))
+        ->assertOk();
+});
+
+test('guests cannot access brand setup', function () {
+    $team = Team::factory()->create();
+
+    $this->get(route('brand.setup', ['current_team' => $team->slug]))
+        ->assertRedirect(route('login'));
+});
