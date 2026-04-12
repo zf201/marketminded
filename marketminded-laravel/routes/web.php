@@ -13,6 +13,7 @@ Route::prefix('{current_team}')
     ->group(function () {
         Route::view('dashboard', 'dashboard')->name('dashboard');
         Route::livewire('brand', 'pages::teams.brand-setup')->name('brand.setup');
+        Route::livewire('intelligence', 'pages::teams.brand-intelligence')->name('brand.intelligence');
     });
 
 Route::middleware(['auth'])->group(function () {
