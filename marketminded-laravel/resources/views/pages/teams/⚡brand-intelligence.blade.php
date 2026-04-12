@@ -212,6 +212,15 @@ new class extends Component
         ];
     }
 
+    public function startGeneration(): void
+    {
+        Gate::authorize('update', $this->teamModel);
+
+        $this->teamModel->update(['intelligence_status' => 'pending', 'intelligence_error' => null]);
+
+        \App\Jobs\GenerateBrandIntelligenceJob::dispatch($this->teamModel);
+    }
+
     public function getPermissionsProperty(): TeamPermissions
     {
         return Auth::user()->toTeamPermissions($this->teamModel);
