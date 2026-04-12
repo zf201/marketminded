@@ -34,20 +34,21 @@ test('teams can be created', function () {
 test('team slug uses next available suffix', function () {
     $user = User::factory()->create();
 
-    Team::factory()->create(['name' => 'Acme', 'slug' => 'acme']);
-    Team::factory()->create(['name' => 'Acme One', 'slug' => 'acme-1']);
-    Team::factory()->create(['name' => 'Acme Ten', 'slug' => 'acme-10']);
+    // Use a unique base name unlikely to collide with Faker-generated names
+    Team::factory()->create(['name' => 'Testcorp', 'slug' => 'testcorp']);
+    Team::factory()->create(['name' => 'Testcorp One', 'slug' => 'testcorp-1']);
+    Team::factory()->create(['name' => 'Testcorp Ten', 'slug' => 'testcorp-10']);
 
     $this->actingAs($user);
 
     Livewire::test('pages::teams.index')
-        ->set('name', 'Acme')
+        ->set('name', 'Testcorp')
         ->call('createTeam')
         ->assertHasNoErrors();
 
     $this->assertDatabaseHas('teams', [
-        'name' => 'Acme',
-        'slug' => 'acme-11',
+        'name' => 'Testcorp',
+        'slug' => 'testcorp-11',
     ]);
 });
 

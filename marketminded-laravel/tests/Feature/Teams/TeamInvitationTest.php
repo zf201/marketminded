@@ -72,14 +72,14 @@ test('team invitations can be cancelled by owner', function () {
 
 test('team invitations can be accepted', function () {
     $owner = User::factory()->create();
-    $invitedUser = User::factory()->create(['email' => 'invited@example.com']);
+    $invitedUser = User::factory()->create();
     $team = Team::factory()->create();
 
     $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
 
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $team->id,
-        'email' => 'invited@example.com',
+        'email' => $invitedUser->email,
         'role' => TeamRole::Member,
         'invited_by' => $owner->id,
     ]);
@@ -98,14 +98,14 @@ test('team invitations can be accepted', function () {
 
 test('team invitations cannot be accepted by user that wasnt invited', function () {
     $owner = User::factory()->create();
-    $uninvitedUser = User::factory()->create(['email' => 'uninvited@example.com']);
+    $uninvitedUser = User::factory()->create();
     $team = Team::factory()->create();
 
     $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
 
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $team->id,
-        'email' => 'invited@example.com',
+        'email' => 'someone-else@example.com',
         'invited_by' => $owner->id,
     ]);
 
@@ -122,14 +122,14 @@ test('team invitations cannot be accepted by user that wasnt invited', function 
 
 test('expired invitations cannot be accepted', function () {
     $owner = User::factory()->create();
-    $invitedUser = User::factory()->create(['email' => 'invited@example.com']);
+    $invitedUser = User::factory()->create();
     $team = Team::factory()->create();
 
     $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
 
     $invitation = TeamInvitation::factory()->expired()->create([
         'team_id' => $team->id,
-        'email' => 'invited@example.com',
+        'email' => $invitedUser->email,
         'invited_by' => $owner->id,
     ]);
 
