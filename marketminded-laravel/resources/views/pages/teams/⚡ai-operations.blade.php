@@ -106,7 +106,7 @@ new class extends Component
                 'error' => $task->error,
                 'created_at' => $task->created_at->diffForHumans(),
                 'duration' => $task->completed_at && $task->started_at
-                    ? $task->completed_at->diffInSeconds($task->started_at) . 's'
+                    ? $task->started_at->diffInSeconds($task->completed_at) . 's'
                     : null,
                 'steps' => $task->steps->map(fn ($s) => [
                     'name' => $s->name,
@@ -118,7 +118,7 @@ new class extends Component
                     'cost' => (float) $s->cost,
                     'iterations' => $s->iterations,
                     'duration' => $s->completed_at && $s->started_at
-                        ? $s->completed_at->diffInSeconds($s->started_at) . 's'
+                        ? $s->started_at->diffInSeconds($s->completed_at) . 's'
                         : null,
                 ])->toArray(),
             ])
@@ -143,16 +143,16 @@ new class extends Component
         <flux:subheading>{{ __('Monitor AI tasks, track costs, and review agent activity.') }}</flux:subheading>
 
         {{-- Summary cards --}}
-        <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <flux:card class="text-center">
+        <div class="mt-8 flex gap-4">
+            <flux:card class="flex-1 text-center">
                 <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Total Cost (30d)') }}</flux:text>
                 <div class="mt-1 text-2xl font-semibold">${{ number_format($summary['total_cost'], 4) }}</div>
             </flux:card>
-            <flux:card class="text-center">
+            <flux:card class="flex-1 text-center">
                 <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Tasks Run') }}</flux:text>
                 <div class="mt-1 text-2xl font-semibold">{{ $summary['tasks_run'] }}</div>
             </flux:card>
-            <flux:card class="text-center">
+            <flux:card class="flex-1 text-center">
                 <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Total Tokens') }}</flux:text>
                 <div class="mt-1 text-2xl font-semibold">{{ number_format($summary['total_tokens']) }}</div>
             </flux:card>

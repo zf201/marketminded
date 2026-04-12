@@ -65,7 +65,7 @@ new class extends Component
                 'error' => $task->error,
                 'created_at' => $task->created_at->diffForHumans(),
                 'duration' => $task->completed_at && $task->started_at
-                    ? $task->completed_at->diffInSeconds($task->started_at) . 's'
+                    ? $task->started_at->diffInSeconds($task->completed_at) . 's'
                     : null,
             ])
             ->toArray();
@@ -73,7 +73,7 @@ new class extends Component
 }; ?>
 
 
-<div @if($hasActive) wire:poll.5s @endif>
+<div wire:poll.{{ $hasActive ? '5s' : '30s' }}>
     <flux:dropdown position="bottom" align="end">
         <flux:button variant="ghost" size="sm" class="relative">
             <flux:icon name="sparkles" class="{{ $hasActive ? 'text-indigo-400 animate-pulse' : 'text-zinc-500' }}" variant="mini" />
