@@ -64,18 +64,11 @@ new class extends Component
 
     public ?array $voiceProfile = null;
 
-    public ?string $intelligenceStatus = null;
-
-    public ?string $intelligenceError = null;
-
-    public bool $isGenerating = false;
-
     public function mount(Team $current_team): void
     {
         $this->teamModel = $current_team;
         $this->checkPrerequisites();
         $this->loadData();
-        $this->loadGenerationStatus();
     }
 
     public function savePositioning(): void
@@ -223,9 +216,24 @@ new class extends Component
     {
         Gate::authorize('update', $this->teamModel);
 
-        $this->teamModel->update(['intelligence_status' => 'pending', 'intelligence_error' => null]);
+        $aiTask = \App\Models\AiTask::create([
+            'team_id' => $this->teamModel->id,
+            'type' => 'brand_intelligence',
+            'label' => 'Generate Brand Intelligence',
+            'status' => 'pending',
+            'total_steps' => 4,
+        ]);
 
-        \App\Jobs\GenerateBrandIntelligenceJob::dispatch($this->teamModel);
+        $aiTask->steps()->createMany([
+            ['name' => 'fetching', 'label' => 'Fetching URLs'],
+            ['name' => 'positioning', 'label' => 'Analyzing positioning'],
+            ['name' => 'personas', 'label' => 'Building personas'],
+            ['name' => 'voice_profile', 'label' => 'Defining voice profile'],
+        ]);
+
+        \App\Jobs\GenerateBrandIntelligenceJob::dispatch($this->teamModel, $aiTask);
+
+        Flux::toast(variant: 'success', text: __('AI task started. Check the ✦ indicator for progress.'));
     }
 
     public function getPermissionsProperty(): TeamPermissions
@@ -236,14 +244,7 @@ new class extends Component
     public function render()
     {
         $this->checkPrerequisites();
-        $this->loadGenerationStatus();
-
-        if ($this->intelligenceStatus === 'completed') {
-            $this->teamModel->update(['intelligence_status' => null]);
-            $this->intelligenceStatus = null;
-            $this->isGenerating = false;
-            $this->loadData();
-        }
+        $this->refreshDisplayData();
 
         return $this->view()->title(__('Brand Intelligence'));
     }
@@ -267,6 +268,8 @@ new class extends Component
 
     private function loadData(): void
     {
+        $this->teamModel->unsetRelations();
+
         $positioning = $this->teamModel->brandPositioning;
         $this->hasPositioning = $positioning !== null;
 
@@ -318,13 +321,43 @@ new class extends Component
         }
     }
 
-    private function loadGenerationStatus(): void
+    private function refreshDisplayData(): void
     {
-        $team = $this->teamModel->fresh();
-        $this->intelligenceStatus = $team->intelligence_status;
-        $this->intelligenceError = $team->intelligence_error;
-        $this->isGenerating = in_array($this->intelligenceStatus, ['pending', 'fetching', 'positioning', 'personas', 'voice_profile']);
+        $this->teamModel->unsetRelations();
+
+        $positioning = $this->teamModel->brandPositioning;
+        $this->hasPositioning = $positioning !== null;
+        if ($positioning) {
+            $this->positioning = $positioning->only([
+                'value_proposition', 'target_market', 'differentiators',
+                'core_problems', 'products_services', 'primary_cta',
+            ]);
+        }
+
+        $personas = $this->teamModel->audiencePersonas()->get();
+        $this->hasPersonas = $personas->isNotEmpty();
+        $this->personas = $personas->map(fn ($p) => [
+            'id' => $p->id,
+            'label' => $p->label,
+            'description' => $p->description,
+            'pain_points' => $p->pain_points,
+            'push' => $p->push,
+            'pull' => $p->pull,
+            'anxiety' => $p->anxiety,
+            'role' => $p->role,
+            'sort_order' => $p->sort_order,
+        ])->toArray();
+
+        $voice = $this->teamModel->voiceProfile;
+        $this->hasVoiceProfile = $voice !== null;
+        if ($voice) {
+            $this->voiceProfile = $voice->only([
+                'voice_analysis', 'content_types', 'should_avoid',
+                'should_use', 'style_inspiration', 'preferred_length',
+            ]);
+        }
     }
+
 }; ?>
 
 <section class="w-full">
@@ -346,66 +379,13 @@ new class extends Component
             </div>
         @endif
 
-        {{-- Generation progress --}}
-        @if ($isGenerating)
-            <div wire:poll.5s class="mt-8">
-                <flux:card class="space-y-4 py-2">
-                    <flux:heading size="lg">{{ __('Generating Brand Intelligence...') }}</flux:heading>
-
-                    <div class="space-y-3">
-                        @php
-                            $steps = [
-                                'fetching' => 'Fetching URLs',
-                                'positioning' => 'Analyzing positioning',
-                                'personas' => 'Building personas',
-                                'voice_profile' => 'Defining voice profile',
-                            ];
-                            $stepKeys = array_keys($steps);
-                            $currentIndex = array_search($intelligenceStatus, $stepKeys);
-                        @endphp
-
-                        @foreach ($steps as $key => $label)
-                            @php
-                                $stepIndex = array_search($key, $stepKeys);
-                                $isDone = $currentIndex !== false && $stepIndex < $currentIndex;
-                                $isCurrent = $key === $intelligenceStatus;
-                            @endphp
-                            <div class="flex items-center gap-3">
-                                @if ($isDone)
-                                    <flux:icon name="check-circle" class="text-green-500" variant="solid" />
-                                @elseif ($isCurrent)
-                                    <flux:icon name="arrow-path" class="animate-spin text-indigo-400" />
-                                @else
-                                    <flux:icon name="ellipsis-horizontal-circle" class="text-zinc-500" />
-                                @endif
-                                <flux:text class="{{ $isCurrent ? 'text-white font-medium' : ($isDone ? 'text-zinc-400' : 'text-zinc-500') }}">{{ $label }}</flux:text>
-                            </div>
-                        @endforeach
-                    </div>
-                </flux:card>
-            </div>
-        @endif
-
-        {{-- Error state --}}
-        @if ($intelligenceStatus === 'failed')
-            <flux:callout variant="danger" icon="exclamation-circle" class="mt-6">
-                <flux:callout.heading>{{ __('Generation failed') }}</flux:callout.heading>
-                <flux:callout.text>{{ $intelligenceError }}</flux:callout.text>
-            </flux:callout>
-            @if ($this->permissions->canUpdateTeam)
-                <div class="mt-4">
-                    <flux:button variant="primary" wire:click="startGeneration">{{ __('Retry') }}</flux:button>
-                </div>
-            @endif
-        @endif
-
-        {{-- Generate button (when prerequisites met, no data, not generating) --}}
-        @if (! $missingPrerequisites && ! $hasPositioning && ! $hasPersonas && ! $hasVoiceProfile && ! $isGenerating && $intelligenceStatus !== 'failed')
+        {{-- Generate button (when prerequisites met, no data yet) --}}
+        @if (! $missingPrerequisites && ! $hasPositioning && ! $hasPersonas && ! $hasVoiceProfile)
             <flux:card class="mt-8 text-center">
                 <div class="space-y-4 py-4">
                     <flux:text>{{ __('Ready to analyze your brand. This will crawl your URLs and generate positioning, audience personas, and voice profile.') }}</flux:text>
                     @if ($this->permissions->canUpdateTeam)
-                        <flux:button variant="primary" wire:click="startGeneration">
+                        <flux:button variant="primary" icon="sparkles" wire:click="startGeneration">
                             {{ __('Generate Brand Intelligence') }}
                         </flux:button>
                     @endif
@@ -455,7 +435,7 @@ new class extends Component
 
                         @if ($this->permissions->canUpdateTeam)
                             <div class="flex justify-end gap-2">
-                                <flux:button variant="subtle" size="sm" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
+                                <flux:button variant="subtle" size="sm" icon="sparkles" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
                                 <flux:button variant="subtle" size="sm" wire:click="startEditingPositioning">{{ __('Edit') }}</flux:button>
                             </div>
                         @endif
@@ -541,7 +521,7 @@ new class extends Component
 
                     @if ($this->permissions->canUpdateTeam)
                         <div class="flex justify-end gap-2">
-                            <flux:button variant="subtle" size="sm" wire:click="startGeneration">{{ __('Regenerate all') }}</flux:button>
+                            <flux:button variant="subtle" size="sm" icon="sparkles" wire:click="startGeneration">{{ __('Regenerate all') }}</flux:button>
                             <flux:modal.trigger name="edit-persona-modal">
                                 <flux:button variant="subtle" size="sm" icon="plus" wire:click="resetPersonaForm">{{ __('Add persona') }}</flux:button>
                             </flux:modal.trigger>
@@ -599,7 +579,7 @@ new class extends Component
 
                         @if ($this->permissions->canUpdateTeam)
                             <div class="flex justify-end gap-2">
-                                <flux:button variant="subtle" size="sm" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
+                                <flux:button variant="subtle" size="sm" icon="sparkles" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
                                 <flux:button variant="subtle" size="sm" wire:click="startEditingVoiceProfile">{{ __('Edit') }}</flux:button>
                             </div>
                         @endif
