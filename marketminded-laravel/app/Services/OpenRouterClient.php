@@ -62,6 +62,17 @@ class OpenRouterClient
                     return $arguments;
                 }
 
+                // Server-side tools are handled by OpenRouter — skip execution
+                if (str_starts_with($functionName, 'openrouter:')) {
+                    $messages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $toolCall['id'],
+                        'content' => 'Handled by server.',
+                    ];
+
+                    continue;
+                }
+
                 if ($functionName === 'fetch_url') {
                     $toolResult = $this->urlFetcher->fetch($arguments['url'] ?? '');
                 } else {

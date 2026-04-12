@@ -23,9 +23,10 @@ class PersonaAgent
         $result = $this->client->chat(
             [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Research and define 3-5 detailed audience personas for this business. You MUST call submit_personas with your results.'],
+                ['role' => 'user', 'content' => 'Research and define 3-5 detailed audience personas for this business. When done researching, you MUST call submit_personas with your results. Do NOT respond with text — only use the submit_personas tool.'],
             ],
             $tools,
+            toolChoice: 'required',
         );
 
         if (! is_array($result) || ! isset($result['personas'])) {
