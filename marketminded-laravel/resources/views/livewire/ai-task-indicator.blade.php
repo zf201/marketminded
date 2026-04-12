@@ -72,16 +72,13 @@ new class extends Component
     }
 }; ?>
 
-<div>
-    @if ($hasActive)
-        <div wire:poll.5s>
-    @endif
 
+<div @if($hasActive) wire:poll.5s @endif>
     <flux:dropdown position="bottom" align="end">
         <flux:button variant="ghost" size="sm" class="relative">
-            <flux:icon name="sparkles" class="{{ $hasActive ? 'text-indigo-400 animate-pulse' : 'text-zinc-500' }}" />
+            <flux:icon name="sparkles" class="{{ $hasActive ? 'text-indigo-400 animate-pulse' : 'text-zinc-500' }}" variant="mini" />
             @if ($runningCount > 0)
-                <span class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-white">{{ $runningCount }}</span>
+                <flux:badge color="indigo" size="sm" class="absolute -right-1 -top-1">{{ $runningCount }}</flux:badge>
             @endif
         </flux:button>
 
@@ -97,12 +94,12 @@ new class extends Component
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             @if ($task['status'] === 'running' || $task['status'] === 'pending')
-                                <flux:icon name="arrow-path" class="animate-spin text-indigo-400" variant="micro" />
+                                <flux:icon.loading class="size-4 text-indigo-400" />
                             @elseif ($task['status'] === 'completed')
                                 <flux:icon name="check-circle" class="text-green-500" variant="micro" />
                             @elseif ($task['status'] === 'failed')
                                 <flux:icon name="x-circle" class="text-red-400" variant="micro" />
-                            @elseif ($task['status'] === 'cancelled')
+                            @else
                                 <flux:icon name="minus-circle" class="text-zinc-500" variant="micro" />
                             @endif
                             <flux:text class="text-sm font-medium">{{ $task['label'] }}</flux:text>
@@ -147,8 +144,4 @@ new class extends Component
             @endif
         </flux:menu>
     </flux:dropdown>
-
-    @if ($hasActive)
-        </div>
-    @endif
 </div>
