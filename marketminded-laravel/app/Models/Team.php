@@ -139,6 +139,16 @@ class Team extends Model
     }
 
     /**
+     * Get all conversations for this team.
+     *
+     * @return HasMany<Conversation, $this>
+     */
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class)->orderByDesc('updated_at');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
