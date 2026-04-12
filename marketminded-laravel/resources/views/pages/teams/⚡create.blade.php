@@ -77,7 +77,17 @@ new class extends Component
                             <div class="flex items-center gap-3">
                                 <flux:icon name="chat-bubble-left" class="size-5 shrink-0 text-zinc-400" />
                                 <div class="min-w-0">
-                                    <flux:heading class="truncate">{{ $conversation->title }}</flux:heading>
+                                    <div class="flex items-center gap-2">
+                                        <flux:heading class="truncate">{{ $conversation->title }}</flux:heading>
+                                        @if ($conversation->type)
+                                            <flux:badge variant="pill" size="sm" class="shrink-0">{{ match($conversation->type) {
+                                                'brand' => __('Brand'),
+                                                'topics' => __('Topics'),
+                                                'write' => __('Write'),
+                                                default => $conversation->type,
+                                            } }}</flux:badge>
+                                        @endif
+                                    </div>
                                     <flux:text class="text-xs text-zinc-500">
                                         {{ $conversation->messages_count }} {{ __('messages') }} &middot; {{ $conversation->updated_at->diffForHumans() }}
                                     </flux:text>
