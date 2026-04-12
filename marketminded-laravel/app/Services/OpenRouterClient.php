@@ -60,6 +60,11 @@ class OpenRouterClient
             $totalCost += (float) ($usage['cost'] ?? 0);
             $choice = $response['choices'][0]['message'];
 
+            // Normalize array content blocks to string
+            if (isset($choice['content']) && is_array($choice['content'])) {
+                $choice['content'] = $this->normalizeContent($choice['content']);
+            }
+
             $messages[] = $choice;
 
             if (empty($choice['tool_calls'])) {
@@ -251,6 +256,12 @@ class OpenRouterClient
                 $webSearchRequests += $usage['server_tool_use']['web_search_requests'] ?? 0;
 
                 $choice = $json['choices'][0]['message'] ?? [];
+
+                // Normalize array content blocks to string before adding to history
+                if (isset($choice['content']) && is_array($choice['content'])) {
+                    $choice['content'] = $this->normalizeContent($choice['content']);
+                }
+
                 $allMessages[] = $choice;
 
                 if (! empty($choice['tool_calls'])) {
