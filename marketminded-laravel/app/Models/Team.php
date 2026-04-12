@@ -13,12 +13,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'is_personal', 'openrouter_api_key', 'fast_model', 'powerful_model'])]
+#[Fillable(['name', 'slug', 'is_personal', 'openrouter_api_key', 'fast_model', 'powerful_model', 'homepage_url', 'blog_url', 'brand_description', 'product_urls', 'competitor_urls', 'style_reference_urls', 'target_audience', 'tone_keywords', 'content_language'])]
 #[Hidden(['openrouter_api_key'])]
 class Team extends Model
 {
     /** @use HasFactory<TeamFactory> */
     use GeneratesUniqueTeamSlugs, HasFactory, SoftDeletes;
+
+    /**
+     * The model's default values for attributes.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'fast_model' => 'deepseek/deepseek-v3.2:nitro',
+        'powerful_model' => 'deepseek/deepseek-v3.2:nitro',
+        'product_urls' => '[]',
+        'competitor_urls' => '[]',
+        'style_reference_urls' => '[]',
+        'content_language' => 'English',
+    ];
 
     /**
      * Bootstrap the model and its traits.
@@ -93,6 +107,9 @@ class Team extends Model
         return [
             'is_personal' => 'boolean',
             'openrouter_api_key' => 'encrypted',
+            'product_urls' => 'array',
+            'competitor_urls' => 'array',
+            'style_reference_urls' => 'array',
         ];
     }
 
