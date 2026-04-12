@@ -1,9 +1,6 @@
 <?php
 
-use App\Models\AudiencePersona;
-use App\Models\BrandPositioning;
 use App\Models\Team;
-use App\Models\VoiceProfile;
 use App\Support\TeamPermissions;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
@@ -14,10 +11,6 @@ new class extends Component
 {
     public Team $teamModel;
 
-    public bool $missingPrerequisites = false;
-
-    public array $missingItems = [];
-
     public bool $hasPositioning = false;
 
     public bool $hasPersonas = false;
@@ -27,6 +20,20 @@ new class extends Component
     public bool $editingPositioning = false;
 
     public bool $editingVoiceProfile = false;
+
+    public string $homepageUrl = '';
+
+    public string $blogUrl = '';
+
+    public string $brandDescription = '';
+
+    public string $targetAudience = '';
+
+    public string $toneKeywords = '';
+
+    public string $contentLanguage = 'English';
+
+    public bool $editingSetup = false;
 
     public array $positioningForm = [
         'value_proposition' => '',
@@ -67,7 +74,12 @@ new class extends Component
     public function mount(Team $current_team): void
     {
         $this->teamModel = $current_team;
-        $this->checkPrerequisites();
+        $this->homepageUrl = $current_team->homepage_url ?? '';
+        $this->blogUrl = $current_team->blog_url ?? '';
+        $this->brandDescription = $current_team->brand_description ?? '';
+        $this->targetAudience = $current_team->target_audience ?? '';
+        $this->toneKeywords = $current_team->tone_keywords ?? '';
+        $this->contentLanguage = $current_team->content_language ?? 'English';
         $this->loadData();
     }
 
@@ -212,28 +224,40 @@ new class extends Component
         ];
     }
 
-    public function startGeneration(): void
+    public function saveSetup(): void
     {
         Gate::authorize('update', $this->teamModel);
 
-        $aiTask = \App\Models\AiTask::create([
-            'team_id' => $this->teamModel->id,
-            'type' => 'brand_intelligence',
-            'label' => 'Generate Brand Intelligence',
-            'status' => 'pending',
-            'total_steps' => 4,
+        $validated = $this->validate([
+            'homepageUrl' => ['required', 'url', 'max:255'],
+            'blogUrl' => ['nullable', 'url', 'max:255'],
+            'brandDescription' => ['nullable', 'string', 'max:5000'],
+            'targetAudience' => ['nullable', 'string', 'max:5000'],
+            'toneKeywords' => ['nullable', 'string', 'max:255'],
+            'contentLanguage' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $aiTask->steps()->createMany([
-            ['name' => 'fetching', 'label' => 'Fetching URLs'],
-            ['name' => 'positioning', 'label' => 'Analyzing positioning'],
-            ['name' => 'personas', 'label' => 'Building personas'],
-            ['name' => 'voice_profile', 'label' => 'Defining voice profile'],
+        $this->teamModel->update([
+            'homepage_url' => $validated['homepageUrl'],
+            'blog_url' => $validated['blogUrl'] ?: null,
+            'brand_description' => $validated['brandDescription'] ?: null,
+            'target_audience' => $validated['targetAudience'] ?: null,
+            'tone_keywords' => $validated['toneKeywords'] ?: null,
+            'content_language' => $validated['contentLanguage'] ?: 'English',
         ]);
 
-        \App\Jobs\GenerateBrandIntelligenceJob::dispatch($this->teamModel, $aiTask);
+        $this->editingSetup = false;
+        Flux::toast(variant: 'success', text: __('Company info saved.'));
+    }
 
-        Flux::toast(variant: 'success', text: __('AI task started. Check the ✦ indicator for progress.'));
+    public function startEditingSetup(): void
+    {
+        $this->editingSetup = true;
+    }
+
+    public function cancelEditingSetup(): void
+    {
+        $this->editingSetup = false;
     }
 
     public function getPermissionsProperty(): TeamPermissions
@@ -243,27 +267,9 @@ new class extends Component
 
     public function render()
     {
-        $this->checkPrerequisites();
         $this->refreshDisplayData();
 
         return $this->view()->title(__('Brand Intelligence'));
-    }
-
-    private function checkPrerequisites(): void
-    {
-        $this->missingItems = [];
-
-        $team = $this->teamModel->fresh();
-
-        if (! $team->homepage_url) {
-            $this->missingItems[] = ['label' => 'Homepage URL required', 'action' => 'Add your homepage URL in Brand Setup', 'route' => 'brand.setup'];
-        }
-
-        if (! $team->openrouter_api_key) {
-            $this->missingItems[] = ['label' => 'OpenRouter API key required', 'action' => 'Add your API key in Team Settings', 'route' => 'teams.edit'];
-        }
-
-        $this->missingPrerequisites = count($this->missingItems) > 0;
     }
 
     private function loadData(): void
@@ -362,98 +368,118 @@ new class extends Component
 
 <div>
     <flux:heading size="xl">{{ __('Brand Intelligence') }}</flux:heading>
-    <flux:subheading>{{ __('AI-generated insights about your brand, audience, and voice. Review and edit as needed.') }}</flux:subheading>
+    <flux:subheading>{{ __('Your brand profile — company info, positioning, audience, and voice. Edit directly or build via AI chat.') }}</flux:subheading>
 
-    {{-- Prerequisite warnings --}}
-    @if ($missingPrerequisites)
-        <div class="mt-6 space-y-3">
-            @foreach ($missingItems as $item)
-                <flux:callout variant="warning" icon="exclamation-triangle">
-                    <flux:callout.heading>{{ $item['label'] }}</flux:callout.heading>
-                    <flux:callout.text>
-                        <a href="{{ route($item['route'], $item['route'] === 'teams.edit' ? ['team' => $teamModel] : []) }}" class="underline" wire:navigate>{{ $item['action'] }}</a>
-                    </flux:callout.text>
-                </flux:callout>
-            @endforeach
+    {{-- Section 1: Company --}}
+    <flux:separator variant="subtle" class="my-8" />
+
+    <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
+        <div class="w-80">
+            <flux:heading size="lg">{{ __('Company') }}</flux:heading>
+            <flux:subheading>{{ __('Your company\'s online presence and identity.') }}</flux:subheading>
         </div>
-    @endif
 
-    {{-- Generate button (when prerequisites met, no data yet) --}}
-    @if (! $missingPrerequisites && ! $hasPositioning && ! $hasPersonas && ! $hasVoiceProfile)
-        <flux:card class="mt-8 text-center">
-            <div class="space-y-4 py-4">
-                <flux:text>{{ __('Ready to analyze your brand. This will crawl your URLs and generate positioning, audience personas, and voice profile.') }}</flux:text>
-                @if ($this->permissions->canUpdateTeam)
-                    <flux:button variant="primary" icon="sparkles" wire:click="startGeneration">
-                        {{ __('Generate Brand Intelligence') }}
-                    </flux:button>
-                @endif
-            </div>
-        </flux:card>
-    @endif
+        <div class="flex-1 space-y-6">
+            @if ($editingSetup)
+                <flux:input wire:model="homepageUrl" label="Homepage URL" type="url" placeholder="https://yourcompany.com" required />
+                <flux:input wire:model="blogUrl" label="Blog URL" type="url" placeholder="https://yourcompany.com/blog" />
+                <flux:textarea wire:model="brandDescription" label="Brand Description" rows="3" placeholder="What your company does..." />
+                <flux:textarea wire:model="targetAudience" label="Target Audience" rows="2" placeholder="Who you serve..." />
+                <flux:input wire:model="toneKeywords" label="Tone Keywords" placeholder="Professional, approachable, concise" />
+                <flux:input wire:model="contentLanguage" label="Content Language" placeholder="English" />
 
-    {{-- Section 1: Positioning --}}
-    @if ($hasPositioning || $editingPositioning)
-        <flux:separator variant="subtle" class="my-8" />
-
-        <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
-            <div class="w-80">
-                <flux:heading size="lg">{{ __('Positioning') }}</flux:heading>
-                <flux:subheading>{{ __('Your brand\'s market position and value proposition.') }}</flux:subheading>
-            </div>
-
-            <div class="flex-1 space-y-6">
-                @if ($editingPositioning)
-                    <flux:textarea wire:model="positioningForm.value_proposition" label="Value Proposition" rows="2" />
-                    <flux:textarea wire:model="positioningForm.target_market" label="Target Market" rows="2" />
-                    <flux:textarea wire:model="positioningForm.differentiators" label="Key Differentiators" rows="2" />
-                    <flux:textarea wire:model="positioningForm.core_problems" label="Core Problems Solved" rows="2" />
-                    <flux:textarea wire:model="positioningForm.products_services" label="Products & Services" rows="2" />
-                    <flux:textarea wire:model="positioningForm.primary_cta" label="Primary CTA" rows="1" />
-
-                    <div class="flex justify-end gap-2">
-                        <flux:button variant="ghost" wire:click="cancelEditingPositioning">{{ __('Cancel') }}</flux:button>
-                        <flux:button variant="primary" wire:click="savePositioning">{{ __('Save') }}</flux:button>
+                <div class="flex justify-end gap-2">
+                    <flux:button variant="ghost" wire:click="cancelEditingSetup">{{ __('Cancel') }}</flux:button>
+                    <flux:button variant="primary" wire:click="saveSetup">{{ __('Save') }}</flux:button>
+                </div>
+            @else
+                @foreach ([
+                    'homepage_url' => ['Homepage URL', $teamModel->homepage_url],
+                    'blog_url' => ['Blog URL', $teamModel->blog_url],
+                    'brand_description' => ['Brand Description', $teamModel->brand_description],
+                    'target_audience' => ['Target Audience', $teamModel->target_audience],
+                    'tone_keywords' => ['Tone Keywords', $teamModel->tone_keywords],
+                    'content_language' => ['Content Language', $teamModel->content_language],
+                ] as $field => [$label, $value])
+                    <div>
+                        <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ $label }}</flux:text>
+                        <flux:text class="mt-1">{{ $value ?: '—' }}</flux:text>
                     </div>
-                @else
-                    @foreach ([
-                        'value_proposition' => 'Value Proposition',
-                        'target_market' => 'Target Market',
-                        'differentiators' => 'Key Differentiators',
-                        'core_problems' => 'Core Problems Solved',
-                        'products_services' => 'Products & Services',
-                        'primary_cta' => 'Primary CTA',
-                    ] as $field => $label)
-                        @if (! empty($positioning[$field]))
-                            <div>
-                                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ $label }}</flux:text>
-                                <flux:text class="mt-1">{{ $positioning[$field] }}</flux:text>
-                            </div>
-                        @endif
-                    @endforeach
+                @endforeach
 
-                    @if ($this->permissions->canUpdateTeam)
-                        <div class="flex justify-end gap-2">
-                            <flux:button variant="subtle" size="sm" icon="sparkles" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
-                            <flux:button variant="subtle" size="sm" wire:click="startEditingPositioning">{{ __('Edit') }}</flux:button>
+                @if ($this->permissions->canUpdateTeam)
+                    <div class="flex justify-end">
+                        <flux:button variant="subtle" size="sm" wire:click="startEditingSetup">{{ __('Edit') }}</flux:button>
+                    </div>
+                @endif
+            @endif
+        </div>
+    </div>
+
+    {{-- Section 2: Positioning --}}
+    <flux:separator variant="subtle" class="my-8" />
+
+    <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
+        <div class="w-80">
+            <flux:heading size="lg">{{ __('Positioning') }}</flux:heading>
+            <flux:subheading>{{ __('Your brand\'s market position and value proposition.') }}</flux:subheading>
+        </div>
+
+        <div class="flex-1 space-y-6">
+            @if ($editingPositioning)
+                <flux:textarea wire:model="positioningForm.value_proposition" label="Value Proposition" rows="2" />
+                <flux:textarea wire:model="positioningForm.target_market" label="Target Market" rows="2" />
+                <flux:textarea wire:model="positioningForm.differentiators" label="Key Differentiators" rows="2" />
+                <flux:textarea wire:model="positioningForm.core_problems" label="Core Problems Solved" rows="2" />
+                <flux:textarea wire:model="positioningForm.products_services" label="Products & Services" rows="2" />
+                <flux:textarea wire:model="positioningForm.primary_cta" label="Primary CTA" rows="1" />
+
+                <div class="flex justify-end gap-2">
+                    <flux:button variant="ghost" wire:click="cancelEditingPositioning">{{ __('Cancel') }}</flux:button>
+                    <flux:button variant="primary" wire:click="savePositioning">{{ __('Save') }}</flux:button>
+                </div>
+            @elseif ($hasPositioning)
+                @foreach ([
+                    'value_proposition' => 'Value Proposition',
+                    'target_market' => 'Target Market',
+                    'differentiators' => 'Key Differentiators',
+                    'core_problems' => 'Core Problems Solved',
+                    'products_services' => 'Products & Services',
+                    'primary_cta' => 'Primary CTA',
+                ] as $field => $label)
+                    @if (! empty($positioning[$field]))
+                        <div>
+                            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ $label }}</flux:text>
+                            <flux:text class="mt-1">{{ $positioning[$field] }}</flux:text>
                         </div>
                     @endif
+                @endforeach
+
+                @if ($this->permissions->canUpdateTeam)
+                    <div class="flex justify-end">
+                        <flux:button variant="subtle" size="sm" wire:click="startEditingPositioning">{{ __('Edit') }}</flux:button>
+                    </div>
                 @endif
-            </div>
+            @else
+                <flux:text class="text-sm text-zinc-500">{{ __('No positioning data yet.') }}</flux:text>
+                @if ($this->permissions->canUpdateTeam)
+                    <flux:button variant="subtle" size="sm" wire:click="startEditingPositioning">{{ __('Add manually') }}</flux:button>
+                @endif
+            @endif
         </div>
-    @endif
+    </div>
 
-    {{-- Section 2: Audience Personas --}}
-    @if ($hasPersonas || $hasPositioning)
-        <flux:separator variant="subtle" class="my-8" />
+    {{-- Section 3: Audience Personas --}}
+    <flux:separator variant="subtle" class="my-8" />
 
-        <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
-            <div class="w-80">
-                <flux:heading size="lg">{{ __('Audience Personas') }}</flux:heading>
-                <flux:subheading>{{ __('Your target audience segments. Each content piece targets one persona.') }}</flux:subheading>
-            </div>
+    <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
+        <div class="w-80">
+            <flux:heading size="lg">{{ __('Audience Personas') }}</flux:heading>
+            <flux:subheading>{{ __('Your target audience segments. Each content piece targets one persona.') }}</flux:subheading>
+        </div>
 
-            <div class="flex-1 space-y-4">
+        <div class="flex-1 space-y-4">
+            @if ($hasPersonas)
                 @foreach ($personas as $persona)
                     <flux:card class="space-y-3">
                         <div class="flex items-start justify-between">
@@ -519,72 +545,93 @@ new class extends Component
                 @endforeach
 
                 @if ($this->permissions->canUpdateTeam)
-                    <div class="flex justify-end gap-2">
-                        <flux:button variant="subtle" size="sm" icon="sparkles" wire:click="startGeneration">{{ __('Regenerate all') }}</flux:button>
+                    <div class="flex justify-end">
                         <flux:modal.trigger name="edit-persona-modal">
                             <flux:button variant="subtle" size="sm" icon="plus" wire:click="resetPersonaForm">{{ __('Add persona') }}</flux:button>
                         </flux:modal.trigger>
                     </div>
                 @endif
-            </div>
+            @else
+                <flux:text class="text-sm text-zinc-500">{{ __('No personas yet.') }}</flux:text>
+                @if ($this->permissions->canUpdateTeam)
+                    <flux:modal.trigger name="edit-persona-modal">
+                        <flux:button variant="subtle" size="sm" wire:click="resetPersonaForm">{{ __('Add persona') }}</flux:button>
+                    </flux:modal.trigger>
+                @endif
+            @endif
         </div>
-    @endif
+    </div>
 
-    {{-- Section 3: Voice & Tone --}}
-    @if ($hasVoiceProfile || $editingVoiceProfile)
+    {{-- Section 4: Voice & Tone --}}
+    <flux:separator variant="subtle" class="my-8" />
+
+    <div class="flex flex-col lg:flex-row gap-4 lg:gap-6 pb-10">
+        <div class="w-80">
+            <flux:heading size="lg">{{ __('Voice & Tone') }}</flux:heading>
+            <flux:subheading>{{ __('How your brand sounds in writing. Guides the AI content generation.') }}</flux:subheading>
+        </div>
+
+        <div class="flex-1 space-y-6">
+            @if ($editingVoiceProfile)
+                <flux:textarea wire:model="voiceForm.voice_analysis" label="Voice Analysis" rows="3" />
+                <flux:textarea wire:model="voiceForm.content_types" label="Content Types" rows="2" />
+                <flux:textarea wire:model="voiceForm.should_avoid" label="Should Avoid" rows="2" />
+                <flux:textarea wire:model="voiceForm.should_use" label="Should Use" rows="2" />
+                <flux:textarea wire:model="voiceForm.style_inspiration" label="Style Inspiration" rows="2" />
+                <flux:input wire:model="voiceForm.preferred_length" label="Preferred Length (words)" type="number" min="100" max="10000" />
+
+                <div class="flex justify-end gap-2">
+                    <flux:button variant="ghost" wire:click="cancelEditingVoiceProfile">{{ __('Cancel') }}</flux:button>
+                    <flux:button variant="primary" wire:click="saveVoiceProfile">{{ __('Save') }}</flux:button>
+                </div>
+            @elseif ($hasVoiceProfile)
+                @foreach ([
+                    'voice_analysis' => 'Voice Analysis',
+                    'content_types' => 'Content Types',
+                    'should_avoid' => 'Should Avoid',
+                    'should_use' => 'Should Use',
+                    'style_inspiration' => 'Style Inspiration',
+                ] as $field => $label)
+                    @if (! empty($voiceProfile[$field]))
+                        <div>
+                            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ $label }}</flux:text>
+                            <flux:text class="mt-1">{{ $voiceProfile[$field] }}</flux:text>
+                        </div>
+                    @endif
+                @endforeach
+
+                @if (! empty($voiceProfile['preferred_length']))
+                    <div>
+                        <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Target Length') }}</flux:text>
+                        <flux:text class="mt-1">{{ number_format($voiceProfile['preferred_length']) }} {{ __('words') }}</flux:text>
+                    </div>
+                @endif
+
+                @if ($this->permissions->canUpdateTeam)
+                    <div class="flex justify-end">
+                        <flux:button variant="subtle" size="sm" wire:click="startEditingVoiceProfile">{{ __('Edit') }}</flux:button>
+                    </div>
+                @endif
+            @else
+                <flux:text class="text-sm text-zinc-500">{{ __('No voice profile yet.') }}</flux:text>
+                @if ($this->permissions->canUpdateTeam)
+                    <flux:button variant="subtle" size="sm" wire:click="startEditingVoiceProfile">{{ __('Add manually') }}</flux:button>
+                @endif
+            @endif
+        </div>
+    </div>
+
+    @if (! $hasPositioning && ! $hasPersonas && ! $hasVoiceProfile)
         <flux:separator variant="subtle" class="my-8" />
 
-        <div class="flex flex-col lg:flex-row gap-4 lg:gap-6 pb-10">
-            <div class="w-80">
-                <flux:heading size="lg">{{ __('Voice & Tone') }}</flux:heading>
-                <flux:subheading>{{ __('How your brand sounds in writing. Guides the AI content generation.') }}</flux:subheading>
+        <flux:card class="text-center">
+            <div class="space-y-3 py-4">
+                <flux:text>{{ __('Use the AI chat to analyze your brand and populate your positioning, personas, and voice profile.') }}</flux:text>
+                <flux:button variant="primary" icon="chat-bubble-left-right" :href="route('create')" wire:navigate>
+                    {{ __('Start building brand knowledge') }}
+                </flux:button>
             </div>
-
-            <div class="flex-1 space-y-6">
-                @if ($editingVoiceProfile)
-                    <flux:textarea wire:model="voiceForm.voice_analysis" label="Voice Analysis" rows="3" />
-                    <flux:textarea wire:model="voiceForm.content_types" label="Content Types" rows="2" />
-                    <flux:textarea wire:model="voiceForm.should_avoid" label="Should Avoid" rows="2" />
-                    <flux:textarea wire:model="voiceForm.should_use" label="Should Use" rows="2" />
-                    <flux:textarea wire:model="voiceForm.style_inspiration" label="Style Inspiration" rows="2" />
-                    <flux:input wire:model="voiceForm.preferred_length" label="Preferred Length (words)" type="number" min="100" max="10000" />
-
-                    <div class="flex justify-end gap-2">
-                        <flux:button variant="ghost" wire:click="cancelEditingVoiceProfile">{{ __('Cancel') }}</flux:button>
-                        <flux:button variant="primary" wire:click="saveVoiceProfile">{{ __('Save') }}</flux:button>
-                    </div>
-                @else
-                    @foreach ([
-                        'voice_analysis' => 'Voice Analysis',
-                        'content_types' => 'Content Types',
-                        'should_avoid' => 'Should Avoid',
-                        'should_use' => 'Should Use',
-                        'style_inspiration' => 'Style Inspiration',
-                    ] as $field => $label)
-                        @if (! empty($voiceProfile[$field]))
-                            <div>
-                                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ $label }}</flux:text>
-                                <flux:text class="mt-1">{{ $voiceProfile[$field] }}</flux:text>
-                            </div>
-                        @endif
-                    @endforeach
-
-                    @if (! empty($voiceProfile['preferred_length']))
-                        <div>
-                            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Target Length') }}</flux:text>
-                            <flux:text class="mt-1">{{ number_format($voiceProfile['preferred_length']) }} {{ __('words') }}</flux:text>
-                        </div>
-                    @endif
-
-                    @if ($this->permissions->canUpdateTeam)
-                        <div class="flex justify-end gap-2">
-                            <flux:button variant="subtle" size="sm" icon="sparkles" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
-                            <flux:button variant="subtle" size="sm" wire:click="startEditingVoiceProfile">{{ __('Edit') }}</flux:button>
-                        </div>
-                    @endif
-                @endif
-            </div>
-        </div>
+        </flux:card>
     @endif
 
     {{-- Persona edit/add modal --}}

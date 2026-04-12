@@ -28,41 +28,30 @@ test('guests cannot access brand intelligence', function () {
         ->assertRedirect(route('login'));
 });
 
-// --- Prerequisite validation ---
+// --- Company setup (merged from Brand Setup) ---
 
-test('shows warning when homepage url is missing', function () {
+test('shows company info section with empty fields', function () {
     $user = User::factory()->create();
-    $team = Team::factory()->create(['homepage_url' => null, 'openrouter_api_key' => 'sk-test']);
+    $team = Team::factory()->create(['homepage_url' => null]);
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
 
     $this->actingAs($user);
 
     Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
-        ->assertSee('Homepage URL')
-        ->assertSet('missingPrerequisites', true);
+        ->assertSee('Company')
+        ->assertSee('Homepage URL');
 });
 
-test('shows warning when api key is missing', function () {
+test('shows company info with existing data', function () {
     $user = User::factory()->create();
-    $team = Team::factory()->create(['homepage_url' => 'https://example.com', 'openrouter_api_key' => null]);
+    $team = Team::factory()->create(['homepage_url' => 'https://example.com', 'brand_description' => 'Test brand']);
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
 
     $this->actingAs($user);
 
     Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
-        ->assertSee('OpenRouter API key')
-        ->assertSet('missingPrerequisites', true);
-});
-
-test('no warning when prerequisites are met', function () {
-    $user = User::factory()->create();
-    $team = Team::factory()->create(['homepage_url' => 'https://example.com', 'openrouter_api_key' => 'sk-test']);
-    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
-
-    $this->actingAs($user);
-
-    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
-        ->assertSet('missingPrerequisites', false);
+        ->assertSet('homepageUrl', 'https://example.com')
+        ->assertSet('brandDescription', 'Test brand');
 });
 
 // --- Positioning CRUD ---

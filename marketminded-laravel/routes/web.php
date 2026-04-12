@@ -12,7 +12,6 @@ Route::prefix('{current_team}')
     ->middleware(['auth', 'verified', EnsureTeamMembership::class])
     ->group(function () {
         Route::view('dashboard', 'dashboard')->name('dashboard');
-        Route::livewire('brand', 'pages::teams.brand-setup')->name('brand.setup');
         Route::livewire('intelligence', 'pages::teams.brand-intelligence')->name('brand.intelligence');
         Route::livewire('ai-operations', 'pages::teams.ai-operations')->name('ai.operations');
         Route::livewire('create', 'pages::teams.create')->name('create');
