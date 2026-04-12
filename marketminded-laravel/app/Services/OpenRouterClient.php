@@ -33,6 +33,7 @@ class OpenRouterClient
         $iteration = 0;
         $totalInputTokens = 0;
         $totalOutputTokens = 0;
+        $totalCost = 0.0;
 
         while ($iteration < $this->maxIterations) {
             $iteration++;
@@ -56,6 +57,7 @@ class OpenRouterClient
             $usage = $response['usage'] ?? [];
             $totalInputTokens += $usage['prompt_tokens'] ?? 0;
             $totalOutputTokens += $usage['completion_tokens'] ?? 0;
+            $totalCost += (float) ($usage['cost'] ?? 0);
             $choice = $response['choices'][0]['message'];
 
             $messages[] = $choice;
@@ -65,6 +67,7 @@ class OpenRouterClient
                     data: $choice['content'] ?? '',
                     inputTokens: $totalInputTokens,
                     outputTokens: $totalOutputTokens,
+                    cost: $totalCost,
                     iterations: $iteration,
                 );
             }
@@ -78,6 +81,7 @@ class OpenRouterClient
                         data: $arguments,
                         inputTokens: $totalInputTokens,
                         outputTokens: $totalOutputTokens,
+                        cost: $totalCost,
                         iterations: $iteration,
                     );
                 }
