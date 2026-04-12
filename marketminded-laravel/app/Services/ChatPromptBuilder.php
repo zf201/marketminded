@@ -131,7 +131,13 @@ class ChatPromptBuilder
 
     private static function topicsPrompt(string $profile, bool $hasProfile): string
     {
-        $nudge = $hasProfile ? '' : "\n\nIMPORTANT: The brand profile is mostly empty. Before brainstorming topics, suggest the user starts with \"Build brand knowledge\" to establish their positioning and audience first. You can still brainstorm if they insist, but the results will be more generic without brand context.";
+        $nudge = $hasProfile
+            ? ''
+            : <<<'NUDGE'
+
+
+        The brand profile is mostly empty. Before brainstorming topics, suggest the user starts with Build brand knowledge to establish their positioning and audience first. You can still brainstorm if they insist, but the results will be more generic without brand context.
+        NUDGE;
 
         return <<<PROMPT
         You are a content strategist brainstorming content topics with a business owner. Be creative, specific, and conversational.
@@ -149,7 +155,13 @@ class ChatPromptBuilder
 
     private static function writePrompt(string $profile, bool $hasProfile): string
     {
-        $nudge = $hasProfile ? '' : "\n\nIMPORTANT: The brand profile is mostly empty. Without positioning, audience, and voice data, the content will be generic. Suggest the user starts with \"Build brand knowledge\" first for better results. You can still write if they insist.";
+        $nudge = $hasProfile
+            ? ''
+            : <<<'NUDGE'
+
+
+        The brand profile is mostly empty. Without positioning, audience, and voice data, the content will be generic. Suggest the user starts with Build brand knowledge first for better results. You can still write if they insist.
+        NUDGE;
 
         return <<<PROMPT
         You are a skilled copywriter helping create content. Write in the brand's voice, targeting their audience personas.
