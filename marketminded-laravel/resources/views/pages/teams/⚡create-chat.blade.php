@@ -82,6 +82,7 @@ new class extends Component
     public function ask(): void
     {
         $type = $this->conversation->type;
+        $this->teamModel->refresh();
         $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel);
         $tools = ChatPromptBuilder::tools($type);
 
@@ -158,9 +159,18 @@ new class extends Component
 
     private function loadMessages(): void
     {
-        $this->messages = $this->conversation->messages
+        $messages = $this->conversation->messages;
+
+        $this->messages = $messages
             ->map(fn (Message $m) => ['role' => $m->role, 'content' => $m->content])
             ->toArray();
+
+        // Restore stats from last assistant message
+        $lastAssistant = $messages->where('role', 'assistant')->last();
+        if ($lastAssistant) {
+            $this->lastTokens = $lastAssistant->input_tokens + $lastAssistant->output_tokens;
+            $this->lastCost = (float) $lastAssistant->cost;
+        }
     }
 
     private function renderToolStatus(): string
@@ -209,7 +219,7 @@ new class extends Component
             @if ($isStreaming)
                 <div class="mb-6">
                     <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
-                    <div class="mb-2 space-y-1" wire:stream="tool-activity"></div>
+                    <div wire:stream="tool-activity"></div>
                     <div class="text-sm whitespace-pre-wrap" wire:stream="streamed-response">
                         <span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span>
                     </div>

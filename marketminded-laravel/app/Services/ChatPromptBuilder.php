@@ -32,7 +32,7 @@ class ChatPromptBuilder
 
     private static function buildProfileJson(Team $team): string
     {
-        $team->loadMissing(['brandPositioning', 'voiceProfile']);
+        $team->load(['brandPositioning', 'voiceProfile']);
 
         $profile = [
             'setup' => [
