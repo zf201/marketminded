@@ -129,6 +129,16 @@ class Team extends Model
     }
 
     /**
+     * Get all AI tasks for this team.
+     *
+     * @return HasMany<AiTask, $this>
+     */
+    public function aiTasks(): HasMany
+    {
+        return $this->hasMany(AiTask::class)->orderByDesc('created_at');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
