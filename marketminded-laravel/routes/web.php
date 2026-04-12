@@ -14,6 +14,7 @@ Route::prefix('{current_team}')
         Route::view('dashboard', 'dashboard')->name('dashboard');
         Route::livewire('brand', 'pages::teams.brand-setup')->name('brand.setup');
         Route::livewire('intelligence', 'pages::teams.brand-intelligence')->name('brand.intelligence');
+        Route::livewire('ai-operations', 'pages::teams.ai-operations')->name('ai.operations');
     });
 
 Route::middleware(['auth'])->group(function () {

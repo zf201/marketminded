@@ -23,6 +23,9 @@
                     <flux:sidebar.item icon="sparkles" :href="route('brand.intelligence')" :current="request()->routeIs('brand.intelligence')" wire:navigate>
                         {{ __('Brand Intelligence') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="chart-bar" :href="route('ai.operations')" :current="request()->routeIs('ai.operations')" wire:navigate>
+                        {{ __('AI Operations') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 
