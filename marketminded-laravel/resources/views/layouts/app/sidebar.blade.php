@@ -23,8 +23,8 @@
             <flux:spacer />
 
             <flux:sidebar.nav>
-                @if (auth()->user()->currentTeam())
-                    <flux:sidebar.item icon="cog-6-tooth" :href="route('teams.edit', auth()->user()->currentTeam())" :current="request()->routeIs('teams.edit')" wire:navigate>
+                @if (auth()->user()->currentTeam)
+                    <flux:sidebar.item icon="cog-6-tooth" :href="route('teams.edit', auth()->user()->currentTeam)" :current="request()->routeIs('teams.edit')" wire:navigate>
                         {{ __('Team Settings') }}
                     </flux:sidebar.item>
                 @endif
