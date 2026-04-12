@@ -20,13 +20,13 @@ dev: build
 	@./server
 
 start: build
-	@pkill -f './server' 2>/dev/null || true
+	@pkill -x server 2>/dev/null || true
 	@sleep 1
 	@echo "Starting MarketMinded on :8080..."
 	@./server &
 
 restart: build
-	@pkill -f './server' 2>/dev/null || true
+	@pkill -x server 2>/dev/null || true
 	@sleep 1
 	@echo "Restarting MarketMinded on :8080..."
 	@./server &
