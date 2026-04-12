@@ -64,7 +64,7 @@ class OpenRouterClient
 
             if (empty($choice['tool_calls'])) {
                 return new ChatResult(
-                    data: $choice['content'] ?? '',
+                    data: $this->normalizeContent($choice['content'] ?? ''),
                     inputTokens: $totalInputTokens,
                     outputTokens: $totalOutputTokens,
                     cost: $totalCost,
@@ -290,7 +290,7 @@ class OpenRouterClient
                     continue;
                 }
 
-                $content = $choice['content'] ?? '';
+                $content = $this->normalizeContent($choice['content'] ?? '');
                 if ($content !== '') {
                     $fullContent .= $content;
                     yield $content;
@@ -329,7 +329,7 @@ class OpenRouterClient
 
                     $delta = $json['choices'][0]['delta'] ?? [];
 
-                    $content = $delta['content'] ?? '';
+                    $content = $this->normalizeContent($delta['content'] ?? '');
                     if ($content !== '') {
                         $fullContent .= $content;
                         $streamContent .= $content;
@@ -421,6 +421,25 @@ class OpenRouterClient
             cost: $totalCost,
             webSearchRequests: $webSearchRequests,
         );
+    }
+
+    /**
+     * Normalize content from API response — handles both string and array-of-blocks formats.
+     */
+    private function normalizeContent(mixed $content): string
+    {
+        if (is_string($content)) {
+            return $content;
+        }
+
+        if (is_array($content)) {
+            return collect($content)
+                ->filter(fn ($block) => is_array($block) && ($block['type'] ?? '') === 'text')
+                ->pluck('text')
+                ->implode('');
+        }
+
+        return '';
     }
 
     private function sendWithRetry(array $body): array
