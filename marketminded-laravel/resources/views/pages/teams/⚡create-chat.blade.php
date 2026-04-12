@@ -102,6 +102,20 @@ new class extends Component
         $this->isStreaming = false;
     }
 
+    public function quickAction(string $action): void
+    {
+        $this->prompt = match ($action) {
+            'brand' => "Help me build brand knowledge for my company. Analyze our positioning, audience, and voice so we can improve our copywriting performance. Ask me questions about my brand to get started.",
+            'topics' => "Let's brainstorm content topics. I want fresh, relevant ideas that would resonate with my target audience. Ask me about my niche and goals so we can generate great topic ideas.",
+            'write' => "I'd like to write a piece of content. Help me draft something compelling — a blog post, social media copy, or email. Ask me what I'd like to create.",
+            default => '',
+        };
+
+        if ($this->prompt !== '') {
+            $this->submitPrompt();
+        }
+    }
+
     public function render()
     {
         return $this->view()->title($this->conversation->title);
@@ -133,6 +147,34 @@ new class extends Component
                     <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
                     <div class="text-sm whitespace-pre-wrap" wire:stream="streamed-response">
                         <span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span>
+                    </div>
+                </div>
+            @endif
+
+            {{-- Quick actions (empty conversation) --}}
+            @if (empty($messages) && !$isStreaming)
+                <div class="flex flex-col items-center justify-center py-16">
+                    <flux:heading size="xl" class="mb-2">{{ __('What would you like to create?') }}</flux:heading>
+                    <flux:subheading class="mb-8">{{ __('Pick a starting point or type your own message.') }}</flux:subheading>
+
+                    <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-3">
+                        <button wire:click="quickAction('brand')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="building-storefront" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Build brand knowledge') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Improve copywriting performance with deep brand understanding') }}</flux:text>
+                        </button>
+
+                        <button wire:click="quickAction('topics')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="light-bulb" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Brainstorm topics') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Generate fresh content ideas for your audience') }}</flux:text>
+                        </button>
+
+                        <button wire:click="quickAction('write')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="pencil-square" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Write content') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Draft blog posts, social copy, emails, and more') }}</flux:text>
+                        </button>
                     </div>
                 </div>
             @endif
