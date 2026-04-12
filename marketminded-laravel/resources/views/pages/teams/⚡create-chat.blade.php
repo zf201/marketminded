@@ -77,15 +77,9 @@ new class extends Component
         $this->js('$wire.ask()');
     }
 
-    public function stopStreaming(): void
-    {
-        \Cache::put("chat-stop-{$this->conversation->id}", true, 300);
-    }
-
     public function ask(): void
     {
         set_time_limit(300);
-        \Cache::forget("chat-stop-{$this->conversation->id}");
 
         $type = $this->conversation->type;
         $this->teamModel->refresh();
@@ -122,12 +116,6 @@ new class extends Component
 
         try {
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
-                // Check stop flag
-                if (\Cache::get("chat-stop-{$this->conversation->id}")) {
-                    $fullContent .= "\n\n[Stopped by user]";
-                    break;
-                }
-
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'started') {
                         // Show current tool as in-progress
@@ -150,7 +138,7 @@ new class extends Component
             $this->streamUI($completedTools, null, $fullContent);
         }
 
-        \Cache::forget("chat-stop-{$this->conversation->id}");
+        $fullContent = $this->cleanContent($fullContent);
 
         Message::create([
             'conversation_id' => $this->conversation->id,
@@ -365,8 +353,8 @@ new class extends Component
         <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
             @if ($isStreaming)
                 <div class="flex justify-center">
-                    <flux:button variant="subtle" size="sm" icon="stop" wire:click="stopStreaming">
-                        {{ __('Stop') }}
+                    <flux:button variant="danger" size="sm" icon="stop-circle" x-on:click="window.location.reload()">
+                        {{ __('Stop generating') }}
                     </flux:button>
                 </div>
             @else
