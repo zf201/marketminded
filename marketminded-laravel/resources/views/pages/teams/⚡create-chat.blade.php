@@ -130,7 +130,7 @@ new class extends Component
                     $streamResult = $item;
                 } else {
                     $fullContent .= $item;
-                    $this->streamUI($completedTools, null, $fullContent);
+                    $this->streamUI($completedTools, null, $this->cleanContent($fullContent));
                 }
             }
         } catch (\Throwable $e) {
