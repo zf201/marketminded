@@ -22,9 +22,9 @@ class OpenRouterClient
         private int $maxIterations = 20,
     ) {}
 
-    public function chat(array $messages, array $tools = [], ?string $toolChoice = null, float $temperature = 0.3): mixed
+    public function chat(array $messages, array $tools = [], ?string $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true): mixed
     {
-        $allTools = array_merge(self::SERVER_TOOLS, $tools);
+        $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;
 
         while ($iteration < $this->maxIterations) {
