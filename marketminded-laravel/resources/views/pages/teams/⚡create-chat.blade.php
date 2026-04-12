@@ -122,12 +122,13 @@ new class extends Component
                         'result' => $item->result,
                     ];
                     $statusHtml = $this->renderToolStatus();
-                    $this->stream(to: 'tool-activity', content: $statusHtml, replace: true);
+                    $this->stream(to: 'streamed-response', content: $statusHtml, replace: true);
                 } elseif ($item instanceof StreamResult) {
                     $streamResult = $item;
                 } else {
                     $fullContent .= $item;
-                    $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
+                    $html = $this->renderToolStatus() . '<div class="whitespace-pre-wrap">' . e($fullContent) . '</div>';
+                    $this->stream(to: 'streamed-response', content: $html, replace: true);
                 }
             }
         } catch (\Throwable $e) {
@@ -154,11 +155,12 @@ new class extends Component
 
     public function getConversationStatsProperty(): array
     {
-        $messages = $this->conversation->messages()->where('role', 'assistant');
+        $assistantMessages = $this->conversation->messages()->where('role', 'assistant');
+        $lastAssistant = $this->conversation->messages()->where('role', 'assistant')->latest('id')->first();
 
         return [
-            'tokens' => (int) $messages->sum(\DB::raw('input_tokens + output_tokens')),
-            'cost' => (float) $messages->sum('cost'),
+            'context' => (int) ($lastAssistant?->input_tokens ?? 0),
+            'cost' => (float) $assistantMessages->sum('cost'),
         ];
     }
 
@@ -220,13 +222,10 @@ new class extends Component
                 } }}</flux:badge>
             @endif
         </div>
-        @if ($this->conversationStats['tokens'] > 0)
-            <flux:tooltip content="{{ __('Longer chats use more tokens per message. Start a new conversation for a new task to keep costs low.') }}" position="bottom">
+        @if ($this->conversationStats['context'] > 0)
+            <flux:tooltip content="{{ __('Current context size. Longer chats send more tokens per message — start a new conversation for a new task to keep costs low.') }}" position="bottom">
                 <div class="flex items-center gap-1.5 cursor-help">
-                    <flux:text class="text-xs text-zinc-500">{{ number_format($this->conversationStats['tokens']) }} {{ __('tokens') }}</flux:text>
-                    @if ($this->conversationStats['cost'] > 0)
-                        <flux:text class="text-xs text-zinc-500">&middot; ${{ number_format($this->conversationStats['cost'], 4) }}</flux:text>
-                    @endif
+                    <flux:text class="text-xs text-zinc-500">{{ number_format($this->conversationStats['context']) }} {{ __('context tokens') }}</flux:text>
                     <flux:icon name="information-circle" variant="mini" class="size-3.5 text-zinc-400" />
                 </div>
             </flux:tooltip>
@@ -240,10 +239,7 @@ new class extends Component
             @if ($isStreaming)
                 <div class="mb-6">
                     <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
-                    <div wire:stream="tool-activity"></div>
-                    <div class="text-sm whitespace-pre-wrap" wire:stream="streamed-response">
-                        <span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span>
-                    </div>
+                    <div class="text-sm" wire:stream="streamed-response"><span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span></div>
                 </div>
             @endif
 
