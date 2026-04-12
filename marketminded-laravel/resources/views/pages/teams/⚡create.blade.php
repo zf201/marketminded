@@ -1,11 +1,7 @@
 <?php
 
 use App\Models\Conversation;
-use App\Models\Message;
 use App\Models\Team;
-use App\Services\OpenRouterClient;
-use App\Services\StreamResult;
-use App\Services\UrlFetcher;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -13,201 +9,105 @@ new class extends Component
 {
     public Team $teamModel;
 
-    public ?int $conversationId = null;
-
-    public string $prompt = '';
-
-    public bool $isStreaming = false;
-
-    public array $messages = [];
-
     public function mount(Team $current_team): void
     {
         $this->teamModel = $current_team;
-
-        $conversation = Conversation::where('team_id', $current_team->id)
-            ->where('user_id', Auth::id())
-            ->latest()
-            ->first();
-
-        if ($conversation) {
-            $this->conversationId = $conversation->id;
-            $this->loadMessages();
-        }
-    }
-
-    public function submitPrompt(): void
-    {
-        $content = trim($this->prompt);
-
-        if ($content === '' || $this->isStreaming) {
-            return;
-        }
-
-        if (! $this->teamModel->openrouter_api_key) {
-            \Flux\Flux::toast(variant: 'danger', text: __('OpenRouter API key required. Add it in Team Settings.'));
-            return;
-        }
-
-        if (! $this->conversationId) {
-            $conversation = Conversation::create([
-                'team_id' => $this->teamModel->id,
-                'user_id' => Auth::id(),
-                'title' => mb_substr($content, 0, 80),
-            ]);
-            $this->conversationId = $conversation->id;
-        }
-
-        Message::create([
-            'conversation_id' => $this->conversationId,
-            'role' => 'user',
-            'content' => $content,
-        ]);
-
-        $this->messages[] = ['role' => 'user', 'content' => $content];
-        $this->prompt = '';
-        $this->isStreaming = true;
-
-        $this->js('$wire.ask()');
-    }
-
-    public function ask(): void
-    {
-        $apiMessages = collect($this->messages)
-            ->map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']])
-            ->toArray();
-
-        $client = new OpenRouterClient(
-            apiKey: $this->teamModel->openrouter_api_key,
-            model: $this->teamModel->fast_model,
-            urlFetcher: new UrlFetcher,
-        );
-
-        $fullContent = '';
-        $streamResult = null;
-
-        try {
-            foreach ($client->streamChat('You are a helpful AI assistant.', $apiMessages) as $chunk) {
-                if ($chunk instanceof StreamResult) {
-                    $streamResult = $chunk;
-                } else {
-                    $fullContent .= $chunk;
-                    $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
-                }
-            }
-        } catch (\Throwable $e) {
-            $fullContent = 'Sorry, something went wrong. Please try again.';
-            $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
-        }
-
-        Message::create([
-            'conversation_id' => $this->conversationId,
-            'role' => 'assistant',
-            'content' => $fullContent,
-            'model' => $this->teamModel->fast_model,
-            'input_tokens' => $streamResult?->inputTokens ?? 0,
-            'output_tokens' => $streamResult?->outputTokens ?? 0,
-            'cost' => $streamResult?->cost ?? 0,
-        ]);
-
-        $this->messages[] = ['role' => 'assistant', 'content' => $fullContent];
-        $this->isStreaming = false;
     }
 
     public function newConversation(): void
     {
-        $this->conversationId = null;
-        $this->messages = [];
-        $this->prompt = '';
-        $this->isStreaming = false;
+        $conversation = Conversation::create([
+            'team_id' => $this->teamModel->id,
+            'user_id' => Auth::id(),
+            'title' => __('New conversation'),
+        ]);
+
+        $this->redirect(route('create.chat', ['current_team' => $this->teamModel, 'conversation' => $conversation]), navigate: true);
+    }
+
+    public function deleteConversation(int $conversationId): void
+    {
+        $conversation = Conversation::where('team_id', $this->teamModel->id)
+            ->where('user_id', Auth::id())
+            ->findOrFail($conversationId);
+
+        $conversation->delete();
+    }
+
+    public function getConversationsProperty()
+    {
+        return Conversation::where('team_id', $this->teamModel->id)
+            ->where('user_id', Auth::id())
+            ->withCount('messages')
+            ->latest()
+            ->get();
     }
 
     public function render()
     {
         return $this->view()->title(__('Create'));
     }
-
-    private function loadMessages(): void
-    {
-        $conversation = Conversation::find($this->conversationId);
-
-        if (! $conversation) {
-            return;
-        }
-
-        $this->messages = $conversation->messages
-            ->map(fn (Message $m) => ['role' => $m->role, 'content' => $m->content])
-            ->toArray();
-    }
 }; ?>
 
-<div class="flex h-[calc(100vh-4rem)] flex-col">
-    {{-- Header --}}
+<div>
     <div class="flex items-center justify-between px-6 py-3">
         <flux:heading size="xl">{{ __('Create') }}</flux:heading>
-        <flux:button variant="subtle" size="sm" icon="plus" wire:click="newConversation">
+        <flux:button variant="primary" size="sm" icon="plus" wire:click="newConversation">
             {{ __('New conversation') }}
         </flux:button>
     </div>
 
-    {{-- Messages --}}
-    <div class="flex-1 overflow-y-auto">
-        <div class="mx-auto flex max-w-3xl flex-col-reverse px-6 py-4">
-            {{-- Streaming response --}}
-            @if ($isStreaming)
-                <div class="mb-6">
-                    <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
-                    <div class="text-sm text-zinc-300 whitespace-pre-wrap" wire:stream="streamed-response">
-                        <span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span>
-                    </div>
+    <div class="mx-auto max-w-3xl px-6 py-4">
+        @if ($this->conversations->isEmpty())
+            <div class="py-20 text-center">
+                <flux:icon name="chat-bubble-left-right" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
+                <flux:heading size="lg" class="mt-4">{{ __('No conversations yet') }}</flux:heading>
+                <flux:subheading class="mt-1">{{ __('Start a new conversation with your AI assistant.') }}</flux:subheading>
+                <div class="mt-6">
+                    <flux:button variant="primary" icon="plus" wire:click="newConversation">
+                        {{ __('New conversation') }}
+                    </flux:button>
                 </div>
-            @endif
+            </div>
+        @else
+            <div class="space-y-2">
+                @foreach ($this->conversations as $conversation)
+                    <flux:card class="flex items-center justify-between p-4 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                        <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $conversation]) }}" wire:navigate class="flex-1 min-w-0">
+                            <div class="flex items-center gap-3">
+                                <flux:icon name="chat-bubble-left" class="size-5 shrink-0 text-zinc-400" />
+                                <div class="min-w-0">
+                                    <flux:heading class="truncate">{{ $conversation->title }}</flux:heading>
+                                    <flux:text class="text-xs text-zinc-500">
+                                        {{ $conversation->messages_count }} {{ __('messages') }} &middot; {{ $conversation->updated_at->diffForHumans() }}
+                                    </flux:text>
+                                </div>
+                            </div>
+                        </a>
+                        <flux:modal.trigger :name="'delete-conversation-'.$conversation->id">
+                            <flux:button variant="ghost" size="xs" icon="trash" />
+                        </flux:modal.trigger>
+                    </flux:card>
 
-            {{-- Message history (reversed for flex-col-reverse) --}}
-            @foreach (array_reverse($messages) as $message)
-                @if ($message['role'] === 'user')
-                    <div class="mb-6 flex justify-end">
-                        <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 dark:bg-zinc-700">
-                            <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
+                    <flux:modal :name="'delete-conversation-'.$conversation->id" class="min-w-[22rem]">
+                        <div class="space-y-6">
+                            <div>
+                                <flux:heading size="lg">{{ __('Delete conversation?') }}</flux:heading>
+                                <flux:text class="mt-2">{{ __('This conversation and all its messages will be permanently deleted.') }}</flux:text>
+                            </div>
+                            <div class="flex gap-2">
+                                <flux:spacer />
+                                <flux:modal.close>
+                                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                                </flux:modal.close>
+                                <flux:button variant="danger" wire:click="deleteConversation({{ $conversation->id }})">
+                                    {{ __('Delete') }}
+                                </flux:button>
+                            </div>
                         </div>
-                    </div>
-                @else
-                    <div class="mb-6">
-                        <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
-                        <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
-                    </div>
-                @endif
-            @endforeach
-
-            {{-- Empty state --}}
-            @if (empty($messages) && !$isStreaming)
-                <div class="flex items-center justify-center py-20">
-                    <div class="text-center">
-                        <flux:icon name="chat-bubble-left-right" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
-                        <flux:heading size="lg" class="mt-4">{{ __('What would you like to create?') }}</flux:heading>
-                        <flux:subheading class="mt-1">{{ __('Start a conversation with your AI assistant.') }}</flux:subheading>
-                    </div>
-                </div>
-            @endif
-        </div>
-    </div>
-
-    {{-- Input --}}
-    <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
-        <form wire:submit="submitPrompt">
-            <flux:composer
-                wire:model="prompt"
-                submit="enter"
-                label="Message"
-                label:sr-only
-                placeholder="{{ __('What would you like to create?') }}"
-                rows="1"
-                max-rows="6"
-            >
-                <x-slot name="actionsTrailing">
-                    <flux:button type="submit" size="sm" variant="primary" icon="paper-airplane" />
-                </x-slot>
-            </flux:composer>
-        </form>
+                    </flux:modal>
+                @endforeach
+            </div>
+        @endif
     </div>
 </div>
