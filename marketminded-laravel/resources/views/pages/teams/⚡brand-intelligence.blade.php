@@ -64,9 +64,9 @@ new class extends Component
 
     public ?array $voiceProfile = null;
 
-    public function mount(Team $team): void
+    public function mount(Team $current_team): void
     {
-        $this->teamModel = $team;
+        $this->teamModel = $current_team;
         $this->checkPrerequisites();
         $this->loadData();
     }
@@ -219,6 +219,8 @@ new class extends Component
 
     public function render()
     {
+        $this->checkPrerequisites();
+
         return $this->view()->title(__('Brand Intelligence'));
     }
 
@@ -226,12 +228,14 @@ new class extends Component
     {
         $this->missingItems = [];
 
-        if (! $this->teamModel->homepage_url) {
-            $this->missingItems[] = ['label' => 'Homepage URL', 'route' => 'brand.setup'];
+        $team = $this->teamModel->fresh();
+
+        if (! $team->homepage_url) {
+            $this->missingItems[] = ['label' => 'Homepage URL required', 'action' => 'Add your homepage URL in Brand Setup', 'route' => 'brand.setup'];
         }
 
-        if (! $this->teamModel->openrouter_api_key) {
-            $this->missingItems[] = ['label' => 'OpenRouter API key', 'route' => 'teams.edit'];
+        if (! $team->openrouter_api_key) {
+            $this->missingItems[] = ['label' => 'OpenRouter API key required', 'action' => 'Add your API key in Team Settings', 'route' => 'teams.edit'];
         }
 
         $this->missingPrerequisites = count($this->missingItems) > 0;
@@ -296,16 +300,18 @@ new class extends Component
         <flux:heading size="xl">{{ __('Brand Intelligence') }}</flux:heading>
         <flux:subheading>{{ __('AI-generated insights about your brand, audience, and voice. Review and edit as needed.') }}</flux:subheading>
 
-        {{-- Prerequisite warning --}}
+        {{-- Prerequisite warnings --}}
         @if ($missingPrerequisites)
-            <flux:callout variant="warning" icon="exclamation-triangle" class="mt-6">
-                <flux:callout.heading>{{ __('Setup required') }}</flux:callout.heading>
-                <flux:callout.text>
-                    @foreach ($missingItems as $item)
-                        {{ __('Add your') }} <a href="{{ route($item['route'], $item['route'] === 'teams.edit' ? ['team' => $teamModel] : []) }}" class="underline" wire:navigate>{{ $item['label'] }}</a>{{ $loop->last ? '.' : ', ' }}
-                    @endforeach
-                </flux:callout.text>
-            </flux:callout>
+            <div class="mt-6 space-y-3">
+                @foreach ($missingItems as $item)
+                    <flux:callout variant="warning" icon="exclamation-triangle">
+                        <flux:callout.heading>{{ $item['label'] }}</flux:callout.heading>
+                        <flux:callout.text>
+                            <a href="{{ route($item['route'], $item['route'] === 'teams.edit' ? ['team' => $teamModel] : []) }}" class="underline" wire:navigate>{{ $item['action'] }}</a>
+                        </flux:callout.text>
+                    </flux:callout>
+                @endforeach
+            </div>
         @endif
 
         {{-- Bootstrap CTA (when prerequisites met but no data) --}}

@@ -12,7 +12,7 @@ test('owner can save brand setup', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('homepageUrl', 'https://example.com')
         ->set('blogUrl', 'https://example.com/blog')
         ->set('brandDescription', 'We make widgets for developers.')
@@ -46,7 +46,7 @@ test('admin can save brand setup', function () {
 
     $this->actingAs($admin);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('homepageUrl', 'https://example.com')
         ->call('saveBrandSetup')
         ->assertHasNoErrors();
@@ -63,7 +63,7 @@ test('member cannot save brand setup', function () {
 
     $this->actingAs($member);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('homepageUrl', 'https://example.com')
         ->call('saveBrandSetup')
         ->assertForbidden();
@@ -76,7 +76,7 @@ test('homepage url is required', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('homepageUrl', '')
         ->call('saveBrandSetup')
         ->assertHasErrors(['homepageUrl']);
@@ -89,7 +89,7 @@ test('urls must be valid', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('homepageUrl', 'not-a-url')
         ->set('blogUrl', 'also-not-a-url')
         ->set('productUrls', ['bad-url'])
@@ -124,7 +124,7 @@ test('optional fields can be cleared', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('blogUrl', '')
         ->set('brandDescription', '')
         ->set('targetAudience', '')
@@ -149,7 +149,7 @@ test('url arrays are capped at 20 items', function () {
 
     $urls = array_fill(0, 21, 'https://example.com');
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->set('homepageUrl', 'https://example.com')
         ->set('productUrls', $urls)
         ->call('saveBrandSetup')
@@ -173,7 +173,7 @@ test('mount populates form from existing team data', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-setup', ['team' => $team])
+    Livewire::test('pages::teams.brand-setup', ['current_team' => $team])
         ->assertSet('homepageUrl', 'https://example.com')
         ->assertSet('blogUrl', 'https://example.com/blog')
         ->assertSet('brandDescription', 'A great company')

@@ -37,7 +37,7 @@ test('shows warning when homepage url is missing', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->assertSee('Homepage URL')
         ->assertSet('missingPrerequisites', true);
 });
@@ -49,7 +49,7 @@ test('shows warning when api key is missing', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->assertSee('OpenRouter API key')
         ->assertSet('missingPrerequisites', true);
 });
@@ -61,7 +61,7 @@ test('no warning when prerequisites are met', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->assertSet('missingPrerequisites', false);
 });
 
@@ -74,7 +74,7 @@ test('owner can save positioning', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('positioningForm.value_proposition', 'We make widgets')
         ->set('positioningForm.target_market', 'Developers')
         ->set('positioningForm.differentiators', 'Best in class')
@@ -98,7 +98,7 @@ test('owner can update existing positioning', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('positioningForm.value_proposition', 'New value')
         ->call('savePositioning')
         ->assertHasNoErrors();
@@ -115,7 +115,7 @@ test('member cannot save positioning', function () {
 
     $this->actingAs($member);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('positioningForm.value_proposition', 'Hacked')
         ->call('savePositioning')
         ->assertForbidden();
@@ -130,7 +130,7 @@ test('owner can create persona', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('personaForm.label', 'The Developer')
         ->set('personaForm.description', 'Writes code all day')
         ->set('personaForm.pain_points', 'Too many meetings')
@@ -155,7 +155,7 @@ test('owner can update persona', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->call('editPersona', $persona->id)
         ->set('personaForm.label', 'New Name')
         ->call('savePersona')
@@ -172,7 +172,7 @@ test('owner can delete persona', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->call('deletePersona', $persona->id)
         ->assertHasNoErrors();
 
@@ -188,7 +188,7 @@ test('member cannot create persona', function () {
 
     $this->actingAs($member);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('personaForm.label', 'Hacked')
         ->call('savePersona')
         ->assertForbidden();
@@ -201,7 +201,7 @@ test('persona label is required', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('personaForm.label', '')
         ->call('savePersona')
         ->assertHasErrors(['personaForm.label']);
@@ -216,7 +216,7 @@ test('owner can save voice profile', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('voiceForm.voice_analysis', 'Professional but friendly')
         ->set('voiceForm.content_types', 'Educational, how-to')
         ->set('voiceForm.should_avoid', 'Jargon')
@@ -241,7 +241,7 @@ test('member cannot save voice profile', function () {
 
     $this->actingAs($member);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('voiceForm.voice_analysis', 'Hacked')
         ->call('saveVoiceProfile')
         ->assertForbidden();
@@ -254,7 +254,7 @@ test('preferred length must be between 100 and 10000', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->set('voiceForm.preferred_length', 50)
         ->call('saveVoiceProfile')
         ->assertHasErrors(['voiceForm.preferred_length']);
@@ -270,7 +270,7 @@ test('mount populates positioning from existing data', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->assertSet('positioningForm.value_proposition', 'We rock');
 });
 
@@ -282,7 +282,7 @@ test('mount populates voice profile from existing data', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->assertSet('voiceForm.voice_analysis', 'Friendly tone')
         ->assertSet('voiceForm.preferred_length', 2000);
 });
@@ -296,6 +296,6 @@ test('mount loads existing personas', function () {
 
     $this->actingAs($user);
 
-    Livewire::test('pages::teams.brand-intelligence', ['team' => $team])
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
         ->assertSet('hasPersonas', true);
 });
