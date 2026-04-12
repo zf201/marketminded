@@ -32,6 +32,8 @@ new class extends Component
             ->findOrFail($conversationId);
 
         $conversation->delete();
+
+        \Flux\Flux::modal('delete-conversation-'.$conversationId)->close();
     }
 
     public function getConversationsProperty()
