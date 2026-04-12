@@ -80,6 +80,7 @@ new class extends Component
     public function ask(): void
     {
         set_time_limit(300);
+        ignore_user_abort(false); // PHP will terminate when browser disconnects
 
         $type = $this->conversation->type;
         $this->teamModel->refresh();
