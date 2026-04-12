@@ -194,20 +194,34 @@ new class extends Component
     }
 
     /**
-     * Strip any content block artifacts from stored messages.
+     * Strip content block artifacts that DeepSeek sometimes generates as literal text.
+     * Handles both Python-style [{'type': 'text', 'text': "..."}] and JSON-style.
      */
     private function cleanContent(string $content): string
     {
-        // Remove nested [{'type': 'text', 'text': '...'}] artifacts
-        while (preg_match("/\[\{'type': 'text', 'text': ['\"](.+?)['\"]\}\]/s", $content, $matches)) {
-            $content = str_replace($matches[0], $matches[1], $content);
+        // Strip Python-style content blocks: [{'type': 'text', 'text': "..."}]
+        // These can be nested, so loop until no more matches
+        $maxPasses = 5;
+        for ($i = 0; $i < $maxPasses; $i++) {
+            $cleaned = preg_replace(
+                "/\[\{['\"]type['\"]: ['\"]text['\"], ['\"]text['\"]: ['\"](.+?)['\"]\}\]/s",
+                '$1',
+                $content
+            );
+            if ($cleaned === $content) {
+                break;
+            }
+            $content = $cleaned;
         }
 
-        // Also handle JSON format [{"type":"text","text":"..."}]
+        // Strip JSON-style content blocks if the entire content is a JSON array
         $decoded = json_decode($content, true);
         if (is_array($decoded) && isset($decoded[0]['type']) && $decoded[0]['type'] === 'text') {
             $content = collect($decoded)->pluck('text')->implode('');
         }
+
+        // Unescape any escaped quotes/newlines left from stripping
+        $content = str_replace(["\\'", '\\"', '\\n'], ["'", '"', "\n"], $content);
 
         return $content;
     }

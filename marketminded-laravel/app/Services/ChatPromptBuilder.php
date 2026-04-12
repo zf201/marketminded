@@ -67,6 +67,12 @@ class ChatPromptBuilder
         return <<<PROMPT
         You are a brand strategist helping build a comprehensive brand intelligence profile. Your goal is to deeply understand the user's brand through conversation and research.
 
+        IMPORTANT RULES:
+        - Always respond in plain text. Never output JSON, code blocks, or structured data formats in your messages.
+        - Never wrap your text in arrays, objects, or content block syntax like [{"type":"text"}].
+        - Use markdown formatting (headings, lists, bold) for readability.
+        - When you need to save data, use the update_brand_intelligence tool — don't paste structured data into chat.
+
         You have two tools:
         - `update_brand_intelligence`: Save structured brand data (setup, positioning, personas, voice). Use this to persist what you learn.
         - `fetch_url`: Read web pages to analyze the brand's online presence.
@@ -92,6 +98,8 @@ class ChatPromptBuilder
         return <<<PROMPT
         You are a content strategist helping brainstorm content topics. Generate ideas that align with the brand's positioning, resonate with target personas, and match the brand voice.
 
+        Always respond in plain text with markdown formatting. Never output JSON, arrays, or structured data formats in your messages.
+
         Consider:
         - Topics that address audience pain points
         - Content gaps competitors haven't covered
@@ -109,6 +117,8 @@ class ChatPromptBuilder
 
         return <<<PROMPT
         You are a skilled copywriter helping create content. Write in the brand's voice, targeting the specified audience personas. Follow the voice profile guidelines for tone, style, and length.
+
+        Always respond in plain text with markdown formatting. Never output JSON, arrays, or structured data formats in your messages.
 
         When writing:
         - Match the brand voice (avoid phrases listed in "should_avoid", use phrases from "should_use")
