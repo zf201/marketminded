@@ -22,10 +22,17 @@ class OpenRouterClient
         private int $maxIterations = 20,
     ) {}
 
-    public function chat(array $messages, array $tools = [], ?string $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true): mixed
+    public function getModel(): string
+    {
+        return $this->model;
+    }
+
+    public function chat(array $messages, array $tools = [], ?string $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true): ChatResult
     {
         $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;
+        $totalInputTokens = 0;
+        $totalOutputTokens = 0;
 
         while ($iteration < $this->maxIterations) {
             $iteration++;
@@ -46,12 +53,20 @@ class OpenRouterClient
             }
 
             $response = $this->sendWithRetry($body);
+            $usage = $response['usage'] ?? [];
+            $totalInputTokens += $usage['prompt_tokens'] ?? 0;
+            $totalOutputTokens += $usage['completion_tokens'] ?? 0;
             $choice = $response['choices'][0]['message'];
 
             $messages[] = $choice;
 
             if (empty($choice['tool_calls'])) {
-                return $choice['content'] ?? '';
+                return new ChatResult(
+                    data: $choice['content'] ?? '',
+                    inputTokens: $totalInputTokens,
+                    outputTokens: $totalOutputTokens,
+                    iterations: $iteration,
+                );
             }
 
             foreach ($choice['tool_calls'] as $toolCall) {
@@ -59,7 +74,12 @@ class OpenRouterClient
                 $arguments = json_decode($toolCall['function']['arguments'], true) ?? [];
 
                 if (str_starts_with($functionName, 'submit_')) {
-                    return $arguments;
+                    return new ChatResult(
+                        data: $arguments,
+                        inputTokens: $totalInputTokens,
+                        outputTokens: $totalOutputTokens,
+                        iterations: $iteration,
+                    );
                 }
 
                 // Server-side tools are handled by OpenRouter — skip execution

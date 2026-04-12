@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\ChatResult;
 use App\Services\OpenRouterClient;
 use App\Services\UrlFetcher;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,7 @@ test('sends chat completion request', function () {
             'choices' => [
                 ['message' => ['role' => 'assistant', 'content' => 'Hello world']],
             ],
+            'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
         ]),
     ]);
 
@@ -18,7 +20,10 @@ test('sends chat completion request', function () {
         ['role' => 'user', 'content' => 'Hi'],
     ]);
 
-    expect($result)->toBe('Hello world');
+    expect($result)->toBeInstanceOf(ChatResult::class);
+    expect($result->data)->toBe('Hello world');
+    expect($result->inputTokens)->toBe(10);
+    expect($result->outputTokens)->toBe(5);
 
     Http::assertSent(function ($request) {
         return $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
@@ -47,6 +52,7 @@ test('handles tool call and executes submit tool', function () {
                     ],
                     'finish_reason' => 'tool_calls',
                 ]],
+                'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 20],
             ]),
     ]);
 
@@ -56,7 +62,9 @@ test('handles tool call and executes submit tool', function () {
         [['type' => 'function', 'function' => ['name' => 'submit_positioning', 'parameters' => []]]],
     );
 
-    expect($result)->toBe(['value_proposition' => 'We rock']);
+    expect($result)->toBeInstanceOf(ChatResult::class);
+    expect($result->data)->toBe(['value_proposition' => 'We rock']);
+    expect($result->inputTokens)->toBe(100);
 });
 
 test('executes fetch_url tool and continues loop', function () {
@@ -78,6 +86,7 @@ test('executes fetch_url tool and continues loop', function () {
                     ],
                     'finish_reason' => 'tool_calls',
                 ]],
+                'usage' => ['prompt_tokens' => 50, 'completion_tokens' => 20],
             ])
             ->push([
                 'choices' => [[
@@ -95,6 +104,7 @@ test('executes fetch_url tool and continues loop', function () {
                     ],
                     'finish_reason' => 'tool_calls',
                 ]],
+                'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 30],
             ]),
         'example.com' => Http::response('<html><head><title>Ex</title></head><body><p>Content</p></body></html>'),
     ]);
@@ -108,7 +118,11 @@ test('executes fetch_url tool and continues loop', function () {
         ],
     );
 
-    expect($result)->toBe(['value_proposition' => 'From URL']);
+    expect($result)->toBeInstanceOf(ChatResult::class);
+    expect($result->data)->toBe(['value_proposition' => 'From URL']);
+    expect($result->inputTokens)->toBe(150);
+    expect($result->outputTokens)->toBe(50);
+    expect($result->iterations)->toBe(2);
 });
 
 test('retries on 5xx errors with backoff', function () {
@@ -120,13 +134,14 @@ test('retries on 5xx errors with backoff', function () {
                 'choices' => [
                     ['message' => ['role' => 'assistant', 'content' => 'Recovered']],
                 ],
+                'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
             ]),
     ]);
 
     $client = new OpenRouterClient('sk-test', 'test-model', new UrlFetcher);
     $result = $client->chat([['role' => 'user', 'content' => 'Hi']]);
 
-    expect($result)->toBe('Recovered');
+    expect($result->data)->toBe('Recovered');
     Http::assertSentCount(3);
 });
 
@@ -138,13 +153,14 @@ test('retries on 429 rate limit', function () {
                 'choices' => [
                     ['message' => ['role' => 'assistant', 'content' => 'OK']],
                 ],
+                'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
             ]),
     ]);
 
     $client = new OpenRouterClient('sk-test', 'test-model', new UrlFetcher);
     $result = $client->chat([['role' => 'user', 'content' => 'Hi']]);
 
-    expect($result)->toBe('OK');
+    expect($result->data)->toBe('OK');
 });
 
 test('does not retry on 4xx client errors', function () {
@@ -186,6 +202,7 @@ test('throws after max iterations in tool loop', function () {
             ],
             'finish_reason' => 'tool_calls',
         ]],
+        'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
     ];
 
     Http::fake([
@@ -205,6 +222,7 @@ test('includes server tools in request', function () {
     Http::fake([
         'openrouter.ai/*' => Http::response([
             'choices' => [['message' => ['role' => 'assistant', 'content' => 'OK']]],
+            'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
         ]),
     ]);
 
