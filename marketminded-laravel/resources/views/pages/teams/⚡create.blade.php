@@ -17,9 +17,7 @@ new class extends Component
 
     public string $prompt = '';
 
-    public string $question = '';
-
-    public string $answer = '';
+    public bool $isStreaming = false;
 
     public array $messages = [];
 
@@ -42,7 +40,7 @@ new class extends Component
     {
         $content = trim($this->prompt);
 
-        if ($content === '') {
+        if ($content === '' || $this->isStreaming) {
             return;
         }
 
@@ -51,7 +49,6 @@ new class extends Component
             return;
         }
 
-        // Create conversation if needed
         if (! $this->conversationId) {
             $conversation = Conversation::create([
                 'team_id' => $this->teamModel->id,
@@ -61,7 +58,6 @@ new class extends Component
             $this->conversationId = $conversation->id;
         }
 
-        // Save user message
         Message::create([
             'conversation_id' => $this->conversationId,
             'role' => 'user',
@@ -69,11 +65,9 @@ new class extends Component
         ]);
 
         $this->messages[] = ['role' => 'user', 'content' => $content];
-        $this->question = $content;
         $this->prompt = '';
-        $this->answer = '';
+        $this->isStreaming = true;
 
-        // Trigger streaming in a separate request so the UI updates first
         $this->js('$wire.ask()');
     }
 
@@ -98,15 +92,14 @@ new class extends Component
                     $streamResult = $chunk;
                 } else {
                     $fullContent .= $chunk;
-                    $this->stream(to: 'answer', content: $fullContent, replace: true);
+                    $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
                 }
             }
         } catch (\Throwable $e) {
             $fullContent = 'Sorry, something went wrong. Please try again.';
-            $this->stream(to: 'answer', content: $fullContent, replace: true);
+            $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
         }
 
-        // Save assistant message
         Message::create([
             'conversation_id' => $this->conversationId,
             'role' => 'assistant',
@@ -118,7 +111,7 @@ new class extends Component
         ]);
 
         $this->messages[] = ['role' => 'assistant', 'content' => $fullContent];
-        $this->answer = $fullContent;
+        $this->isStreaming = false;
     }
 
     public function newConversation(): void
@@ -126,8 +119,7 @@ new class extends Component
         $this->conversationId = null;
         $this->messages = [];
         $this->prompt = '';
-        $this->question = '';
-        $this->answer = '';
+        $this->isStreaming = false;
     }
 
     public function render()
@@ -158,42 +150,38 @@ new class extends Component
         </flux:button>
     </div>
 
-    {{-- Messages area — flex-col-reverse for auto-scroll --}}
+    {{-- Messages --}}
     <div class="flex-1 overflow-y-auto">
         <div class="mx-auto flex max-w-3xl flex-col-reverse px-6 py-4">
-            {{-- Streaming response (shown during ask()) --}}
-            <div wire:loading wire:target="ask" class="mb-4">
-                <div class="flex gap-3">
-                    <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xs font-medium text-white">AI</div>
-                    <div class="min-w-0 flex-1 pt-0.5">
-                        <p class="prose prose-sm dark:prose-invert whitespace-pre-wrap" wire:stream="answer">
-                            <span class="inline-flex items-center gap-1 text-zinc-400"><flux:icon.loading class="size-4" /> {{ __('Thinking...') }}</span>
-                        </p>
+            {{-- Streaming response --}}
+            @if ($isStreaming)
+                <div class="mb-6">
+                    <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
+                    <div class="text-sm text-zinc-300 whitespace-pre-wrap" wire:stream="streamed-response">
+                        <span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span>
                     </div>
                 </div>
-            </div>
+            @endif
 
             {{-- Message history (reversed for flex-col-reverse) --}}
             @foreach (array_reverse($messages) as $message)
                 @if ($message['role'] === 'user')
-                    <div class="mb-4 flex gap-3 justify-end">
+                    <div class="mb-6 flex justify-end">
                         <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 dark:bg-zinc-700">
                             <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
                         </div>
                     </div>
                 @else
-                    <div class="mb-4 flex gap-3">
-                        <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xs font-medium text-white">AI</div>
-                        <div class="min-w-0 flex-1 pt-0.5">
-                            <p class="prose prose-sm dark:prose-invert whitespace-pre-wrap">{{ $message['content'] }}</p>
-                        </div>
+                    <div class="mb-6">
+                        <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
+                        <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
                     </div>
                 @endif
             @endforeach
 
             {{-- Empty state --}}
-            @if (empty($messages))
-                <div class="flex h-full items-center justify-center py-20">
+            @if (empty($messages) && !$isStreaming)
+                <div class="flex items-center justify-center py-20">
                     <div class="text-center">
                         <flux:icon name="chat-bubble-left-right" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
                         <flux:heading size="lg" class="mt-4">{{ __('What would you like to create?') }}</flux:heading>
