@@ -114,6 +114,87 @@ class OpenRouterClient
         throw new \RuntimeException("Max tool iterations ({$this->maxIterations}) reached without submit tool call");
     }
 
+    /**
+     * Stream a chat completion. Yields string chunks, then a StreamResult as the final value.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @return \Generator<int, string|StreamResult>
+     */
+    public function streamChat(string $systemPrompt, array $messages, float $temperature = 0.7): \Generator
+    {
+        $allMessages = array_merge(
+            [['role' => 'system', 'content' => $systemPrompt]],
+            $messages,
+        );
+
+        $body = [
+            'model' => $this->model,
+            'messages' => $allMessages,
+            'temperature' => $temperature,
+            'stream' => true,
+        ];
+
+        $response = Http::timeout(120)
+            ->withHeader('Authorization', "Bearer {$this->apiKey}")
+            ->withOptions(['stream' => true])
+            ->post(self::API_URL, $body);
+
+        $fullContent = '';
+        $inputTokens = 0;
+        $outputTokens = 0;
+        $cost = 0.0;
+        $buffer = '';
+
+        $body = $response->getBody();
+
+        while (! $body->eof()) {
+            $buffer .= $body->read(1024);
+
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = substr($buffer, 0, $pos);
+                $buffer = substr($buffer, $pos + 1);
+
+                $line = trim($line);
+
+                if ($line === '' || $line === 'data: [DONE]') {
+                    continue;
+                }
+
+                if (! str_starts_with($line, 'data: ')) {
+                    continue;
+                }
+
+                $json = json_decode(substr($line, 6), true);
+
+                if (! $json) {
+                    continue;
+                }
+
+                $delta = $json['choices'][0]['delta'] ?? [];
+                $content = $delta['content'] ?? '';
+
+                if ($content !== '') {
+                    $fullContent .= $content;
+                    yield $content;
+                }
+
+                // Usage comes on the final chunk
+                if (isset($json['usage'])) {
+                    $inputTokens = $json['usage']['prompt_tokens'] ?? 0;
+                    $outputTokens = $json['usage']['completion_tokens'] ?? 0;
+                    $cost = (float) ($json['usage']['cost'] ?? 0);
+                }
+            }
+        }
+
+        yield new StreamResult(
+            content: $fullContent,
+            inputTokens: $inputTokens,
+            outputTokens: $outputTokens,
+            cost: $cost,
+        );
+    }
+
     private function sendWithRetry(array $body): array
     {
         $lastException = null;
