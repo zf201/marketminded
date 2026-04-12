@@ -3,8 +3,11 @@
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Team;
+use App\Services\BrandIntelligenceToolHandler;
+use App\Services\ChatPromptBuilder;
 use App\Services\OpenRouterClient;
 use App\Services\StreamResult;
+use App\Services\ToolEvent;
 use App\Services\UrlFetcher;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
@@ -21,6 +24,14 @@ new class extends Component
 
     public array $messages = [];
 
+    public array $toolActivity = [];
+
+    public int $webSearchRequests = 0;
+
+    public int $lastTokens = 0;
+
+    public float $lastCost = 0;
+
     public function mount(Team $current_team, Conversation $conversation): void
     {
         $this->teamModel = $current_team;
@@ -28,11 +39,17 @@ new class extends Component
         $this->loadMessages();
     }
 
+    public function selectType(string $type): void
+    {
+        $this->conversation->update(['type' => $type]);
+        $this->conversation->refresh();
+    }
+
     public function submitPrompt(): void
     {
         $content = trim($this->prompt);
 
-        if ($content === '' || $this->isStreaming) {
+        if ($content === '' || $this->isStreaming || ! $this->conversation->type) {
             return;
         }
 
@@ -47,7 +64,6 @@ new class extends Component
             'content' => $content,
         ]);
 
-        // Update title from first message if still default
         if ($this->conversation->title === __('New conversation')) {
             $this->conversation->update(['title' => mb_substr($content, 0, 80)]);
         }
@@ -55,12 +71,20 @@ new class extends Component
         $this->messages[] = ['role' => 'user', 'content' => $content];
         $this->prompt = '';
         $this->isStreaming = true;
+        $this->toolActivity = [];
+        $this->webSearchRequests = 0;
+        $this->lastTokens = 0;
+        $this->lastCost = 0;
 
         $this->js('$wire.ask()');
     }
 
     public function ask(): void
     {
+        $type = $this->conversation->type;
+        $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel);
+        $tools = ChatPromptBuilder::tools($type);
+
         $apiMessages = collect($this->messages)
             ->map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']])
             ->toArray();
@@ -71,15 +95,37 @@ new class extends Component
             urlFetcher: new UrlFetcher,
         );
 
+        $brandHandler = new BrandIntelligenceToolHandler;
+        $team = $this->teamModel;
+
+        $toolExecutor = function (string $name, array $args) use ($brandHandler, $team): string {
+            if ($name === 'update_brand_intelligence') {
+                return $brandHandler->execute($team, $args);
+            }
+            if ($name === 'fetch_url') {
+                return (new UrlFetcher)->fetch($args['url'] ?? '');
+            }
+            return "Unknown tool: {$name}";
+        };
+
         $fullContent = '';
         $streamResult = null;
 
         try {
-            foreach ($client->streamChat('You are a helpful AI assistant.', $apiMessages) as $chunk) {
-                if ($chunk instanceof StreamResult) {
-                    $streamResult = $chunk;
+            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
+                if ($item instanceof ToolEvent) {
+                    $this->toolActivity[] = [
+                        'name' => $item->name,
+                        'args' => $item->arguments,
+                        'status' => $item->status,
+                        'result' => $item->result,
+                    ];
+                    $statusHtml = $this->renderToolStatus();
+                    $this->stream(to: 'tool-activity', content: $statusHtml, replace: true);
+                } elseif ($item instanceof StreamResult) {
+                    $streamResult = $item;
                 } else {
-                    $fullContent .= $chunk;
+                    $fullContent .= $item;
                     $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
                 }
             }
@@ -99,21 +145,10 @@ new class extends Component
         ]);
 
         $this->messages[] = ['role' => 'assistant', 'content' => $fullContent];
+        $this->webSearchRequests = $streamResult?->webSearchRequests ?? 0;
+        $this->lastTokens = ($streamResult?->inputTokens ?? 0) + ($streamResult?->outputTokens ?? 0);
+        $this->lastCost = $streamResult?->cost ?? 0;
         $this->isStreaming = false;
-    }
-
-    public function quickAction(string $action): void
-    {
-        $this->prompt = match ($action) {
-            'brand' => "Help me build brand knowledge for my company. Analyze our positioning, audience, and voice so we can improve our copywriting performance. Ask me questions about my brand to get started.",
-            'topics' => "Let's brainstorm content topics. I want fresh, relevant ideas that would resonate with my target audience. Ask me about my niche and goals so we can generate great topic ideas.",
-            'write' => "I'd like to write a piece of content. Help me draft something compelling — a blog post, social media copy, or email. Ask me what I'd like to create.",
-            default => '',
-        };
-
-        if ($this->prompt !== '') {
-            $this->submitPrompt();
-        }
     }
 
     public function render()
@@ -127,6 +162,27 @@ new class extends Component
             ->map(fn (Message $m) => ['role' => $m->role, 'content' => $m->content])
             ->toArray();
     }
+
+    private function renderToolStatus(): string
+    {
+        $items = '';
+        foreach ($this->toolActivity as $activity) {
+            if ($activity['name'] === 'fetch_url') {
+                $url = $activity['args']['url'] ?? '';
+                $icon = $activity['status'] === 'completed' ? '✓' : '⟳';
+                $items .= "<div class=\"text-xs text-zinc-400\">{$icon} Reading {$url}</div>";
+            } elseif ($activity['name'] === 'update_brand_intelligence') {
+                if ($activity['status'] === 'completed') {
+                    $result = json_decode($activity['result'] ?? '{}', true);
+                    $sections = implode(', ', $result['sections'] ?? []);
+                    $items .= "<div class=\"text-xs text-zinc-400\">✓ Updated brand profile: {$sections}</div>";
+                } else {
+                    $items .= "<div class=\"text-xs text-zinc-400\">⟳ Updating brand profile...</div>";
+                }
+            }
+        }
+        return $items;
+    }
 }; ?>
 
 <div class="flex h-[calc(100vh-4rem)] flex-col">
@@ -135,6 +191,14 @@ new class extends Component
         <div class="flex items-center gap-3">
             <flux:button variant="subtle" size="sm" icon="arrow-left" :href="route('create')" wire:navigate />
             <flux:heading size="lg">{{ $conversation->title }}</flux:heading>
+            @if ($conversation->type)
+                <flux:badge variant="pill" size="sm">{{ match($conversation->type) {
+                    'brand' => __('Brand Knowledge'),
+                    'topics' => __('Brainstorm'),
+                    'write' => __('Write'),
+                    default => $conversation->type,
+                } }}</flux:badge>
+            @endif
         </div>
     </div>
 
@@ -145,42 +209,15 @@ new class extends Component
             @if ($isStreaming)
                 <div class="mb-6">
                     <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
+                    <div class="mb-2 space-y-1" wire:stream="tool-activity"></div>
                     <div class="text-sm whitespace-pre-wrap" wire:stream="streamed-response">
                         <span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span>
                     </div>
                 </div>
             @endif
 
-            {{-- Quick actions (empty conversation) --}}
-            @if (empty($messages) && !$isStreaming)
-                <div class="flex flex-col items-center justify-center py-16">
-                    <flux:heading size="xl" class="mb-2">{{ __('What would you like to create?') }}</flux:heading>
-                    <flux:subheading class="mb-8">{{ __('Pick a starting point or type your own message.') }}</flux:subheading>
-
-                    <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-3">
-                        <button wire:click="quickAction('brand')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                            <flux:icon name="building-storefront" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
-                            <flux:heading size="sm">{{ __('Build brand knowledge') }}</flux:heading>
-                            <flux:text class="mt-1 text-xs">{{ __('Improve copywriting performance with deep brand understanding') }}</flux:text>
-                        </button>
-
-                        <button wire:click="quickAction('topics')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                            <flux:icon name="light-bulb" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
-                            <flux:heading size="sm">{{ __('Brainstorm topics') }}</flux:heading>
-                            <flux:text class="mt-1 text-xs">{{ __('Generate fresh content ideas for your audience') }}</flux:text>
-                        </button>
-
-                        <button wire:click="quickAction('write')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                            <flux:icon name="pencil-square" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
-                            <flux:heading size="sm">{{ __('Write content') }}</flux:heading>
-                            <flux:text class="mt-1 text-xs">{{ __('Draft blog posts, social copy, emails, and more') }}</flux:text>
-                        </button>
-                    </div>
-                </div>
-            @endif
-
             {{-- Message history (reversed for flex-col-reverse) --}}
-            @foreach (array_reverse($messages) as $message)
+            @foreach (array_reverse($messages) as $index => $message)
                 @if ($message['role'] === 'user')
                     <div class="mb-6 flex justify-end">
                         <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 dark:bg-zinc-700">
@@ -191,28 +228,72 @@ new class extends Component
                     <div class="mb-6">
                         <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
                         <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
+                        @if ($index === 0 && !$isStreaming && ($webSearchRequests > 0 || $lastTokens > 0))
+                            <div class="mt-2 flex items-center gap-2">
+                                @if ($webSearchRequests > 0)
+                                    <flux:text class="text-xs text-zinc-500">{{ $webSearchRequests }} {{ __('web searches') }}</flux:text>
+                                    <flux:text class="text-xs text-zinc-500">&middot;</flux:text>
+                                @endif
+                                @if ($lastTokens > 0)
+                                    <flux:text class="text-xs text-zinc-500">{{ number_format($lastTokens) }} {{ __('tokens') }}</flux:text>
+                                @endif
+                                @if ($lastCost > 0)
+                                    <flux:text class="text-xs text-zinc-500">&middot; ${{ number_format($lastCost, 4) }}</flux:text>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                 @endif
             @endforeach
+
+            {{-- Type selection (no type yet, no messages) --}}
+            @if (!$conversation->type && empty($messages))
+                <div class="flex flex-col items-center justify-center py-16">
+                    <flux:heading size="xl" class="mb-2">{{ __('What would you like to create?') }}</flux:heading>
+                    <flux:subheading class="mb-8">{{ __('Choose a mode to get started.') }}</flux:subheading>
+
+                    <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-3">
+                        <button wire:click="selectType('brand')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="building-storefront" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Build brand knowledge') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Improve copywriting performance with deep brand understanding') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectType('topics')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="light-bulb" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Brainstorm topics') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Generate fresh content ideas for your audience') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectType('write')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="pencil-square" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Write content') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Draft blog posts, social copy, emails, and more') }}</flux:text>
+                        </button>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 
-    {{-- Input --}}
-    <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
-        <form wire:submit="submitPrompt">
-            <flux:composer
-                wire:model="prompt"
-                submit="enter"
-                label="Message"
-                label:sr-only
-                placeholder="{{ __('Type your message...') }}"
-                rows="1"
-                max-rows="6"
-            >
-                <x-slot name="actionsTrailing">
-                    <flux:button type="submit" size="sm" variant="primary" icon="paper-airplane" />
-                </x-slot>
-            </flux:composer>
-        </form>
-    </div>
+    {{-- Input (only shown after type is selected) --}}
+    @if ($conversation->type)
+        <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
+            <form wire:submit="submitPrompt">
+                <flux:composer
+                    wire:model="prompt"
+                    submit="enter"
+                    label="Message"
+                    label:sr-only
+                    placeholder="{{ __('Type your message...') }}"
+                    rows="1"
+                    max-rows="6"
+                >
+                    <x-slot name="actionsTrailing">
+                        <flux:button type="submit" size="sm" variant="primary" icon="paper-airplane" />
+                    </x-slot>
+                </flux:composer>
+            </form>
+        </div>
+    @endif
 </div>
