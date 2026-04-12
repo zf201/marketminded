@@ -15,9 +15,11 @@ new class extends Component
 
     public ?int $conversationId = null;
 
-    public string $input = '';
+    public string $prompt = '';
 
-    public bool $isStreaming = false;
+    public string $question = '';
+
+    public string $answer = '';
 
     public array $messages = [];
 
@@ -25,7 +27,6 @@ new class extends Component
     {
         $this->teamModel = $current_team;
 
-        // Load most recent conversation for this user+team
         $conversation = Conversation::where('team_id', $current_team->id)
             ->where('user_id', Auth::id())
             ->latest()
@@ -37,11 +38,11 @@ new class extends Component
         }
     }
 
-    public function sendMessage(): void
+    public function submitPrompt(): void
     {
-        $content = trim($this->input);
+        $content = trim($this->prompt);
 
-        if ($content === '' || $this->isStreaming) {
+        if ($content === '') {
             return;
         }
 
@@ -49,9 +50,6 @@ new class extends Component
             \Flux\Flux::toast(variant: 'danger', text: __('OpenRouter API key required. Add it in Team Settings.'));
             return;
         }
-
-        $this->input = '';
-        $this->isStreaming = true;
 
         // Create conversation if needed
         if (! $this->conversationId) {
@@ -71,13 +69,18 @@ new class extends Component
         ]);
 
         $this->messages[] = ['role' => 'user', 'content' => $content];
-        $this->messages[] = ['role' => 'assistant', 'content' => ''];
+        $this->question = $content;
+        $this->prompt = '';
+        $this->answer = '';
 
-        // Build message history for API
+        // Trigger streaming in a separate request so the UI updates first
+        $this->js('$wire.ask()');
+    }
+
+    public function ask(): void
+    {
         $apiMessages = collect($this->messages)
-            ->filter(fn ($m) => $m['content'] !== '')
             ->map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']])
-            ->values()
             ->toArray();
 
         $client = new OpenRouterClient(
@@ -95,12 +98,12 @@ new class extends Component
                     $streamResult = $chunk;
                 } else {
                     $fullContent .= $chunk;
-                    $this->stream('assistant-response', $chunk, true);
+                    $this->stream(to: 'answer', content: $fullContent, replace: true);
                 }
             }
         } catch (\Throwable $e) {
             $fullContent = 'Sorry, something went wrong. Please try again.';
-            $this->stream('assistant-response', $fullContent, true);
+            $this->stream(to: 'answer', content: $fullContent, replace: true);
         }
 
         // Save assistant message
@@ -114,16 +117,17 @@ new class extends Component
             'cost' => $streamResult?->cost ?? 0,
         ]);
 
-        // Update the last message in our local array
-        $this->messages[count($this->messages) - 1]['content'] = $fullContent;
-        $this->isStreaming = false;
+        $this->messages[] = ['role' => 'assistant', 'content' => $fullContent];
+        $this->answer = $fullContent;
     }
 
     public function newConversation(): void
     {
         $this->conversationId = null;
         $this->messages = [];
-        $this->input = '';
+        $this->prompt = '';
+        $this->question = '';
+        $this->answer = '';
     }
 
     public function render()
@@ -147,71 +151,75 @@ new class extends Component
 
 <div class="flex h-[calc(100vh-4rem)] flex-col">
     {{-- Header --}}
-    <div class="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-700">
+    <div class="flex items-center justify-between px-6 py-3">
         <flux:heading size="xl">{{ __('Create') }}</flux:heading>
         <flux:button variant="subtle" size="sm" icon="plus" wire:click="newConversation">
             {{ __('New conversation') }}
         </flux:button>
     </div>
 
-    {{-- Messages --}}
-    <div
-        class="flex-1 overflow-y-auto px-6 py-4 space-y-4"
-        id="messages-container"
-        x-data
-        x-effect="$nextTick(() => { const el = document.getElementById('messages-container'); el.scrollTop = el.scrollHeight; })"
-    >
-        @if (empty($messages))
-            <div class="flex h-full items-center justify-center">
-                <div class="text-center">
-                    <flux:icon name="chat-bubble-left-right" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
-                    <flux:heading size="lg" class="mt-4">{{ __('What would you like to create?') }}</flux:heading>
-                    <flux:subheading class="mt-1">{{ __('Start a conversation with your AI assistant.') }}</flux:subheading>
+    {{-- Messages area — flex-col-reverse for auto-scroll --}}
+    <div class="flex-1 overflow-y-auto">
+        <div class="mx-auto flex max-w-3xl flex-col-reverse px-6 py-4">
+            {{-- Streaming response (shown during ask()) --}}
+            <div wire:loading wire:target="ask" class="mb-4">
+                <div class="flex gap-3">
+                    <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xs font-medium text-white">AI</div>
+                    <div class="min-w-0 flex-1 pt-0.5">
+                        <p class="prose prose-sm dark:prose-invert whitespace-pre-wrap" wire:stream="answer">
+                            <span class="inline-flex items-center gap-1 text-zinc-400"><flux:icon.loading class="size-4" /> {{ __('Thinking...') }}</span>
+                        </p>
+                    </div>
                 </div>
             </div>
-        @else
-            @foreach ($messages as $index => $message)
+
+            {{-- Message history (reversed for flex-col-reverse) --}}
+            @foreach (array_reverse($messages) as $message)
                 @if ($message['role'] === 'user')
-                    <div class="flex justify-end">
-                        <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-3 dark:bg-zinc-700">
-                            <flux:text class="whitespace-pre-wrap">{{ $message['content'] }}</flux:text>
+                    <div class="mb-4 flex gap-3 justify-end">
+                        <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 dark:bg-zinc-700">
+                            <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
                         </div>
                     </div>
                 @else
-                    <div class="flex justify-start">
-                        <div class="max-w-2xl px-4 py-3">
-                            @if ($isStreaming && $index === count($messages) - 1)
-                                <flux:text class="whitespace-pre-wrap" wire:stream="assistant-response">{{ $message['content'] }}</flux:text>
-                            @else
-                                <flux:text class="whitespace-pre-wrap">{{ $message['content'] }}</flux:text>
-                            @endif
+                    <div class="mb-4 flex gap-3">
+                        <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xs font-medium text-white">AI</div>
+                        <div class="min-w-0 flex-1 pt-0.5">
+                            <p class="prose prose-sm dark:prose-invert whitespace-pre-wrap">{{ $message['content'] }}</p>
                         </div>
                     </div>
                 @endif
             @endforeach
-        @endif
+
+            {{-- Empty state --}}
+            @if (empty($messages))
+                <div class="flex h-full items-center justify-center py-20">
+                    <div class="text-center">
+                        <flux:icon name="chat-bubble-left-right" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
+                        <flux:heading size="lg" class="mt-4">{{ __('What would you like to create?') }}</flux:heading>
+                        <flux:subheading class="mt-1">{{ __('Start a conversation with your AI assistant.') }}</flux:subheading>
+                    </div>
+                </div>
+            @endif
+        </div>
     </div>
 
     {{-- Input --}}
-    <div class="border-t border-zinc-200 px-6 py-4 dark:border-zinc-700">
-        <form wire:submit="sendMessage" class="flex items-end gap-3">
-            <div class="flex-1">
-                <flux:textarea
-                    wire:model="input"
-                    placeholder="{{ __('Type your message...') }}"
-                    rows="1"
-                    :disabled="$isStreaming"
-                    x-data
-                    x-on:keydown.enter.prevent="if (!$event.shiftKey) { $wire.sendMessage(); }"
-                    x-on:input="$el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 200) + 'px'"
-                />
-            </div>
-            <flux:button
-                type="submit"
-                variant="primary"
-                icon="paper-airplane"
-                :disabled="$isStreaming"
-            />
+    <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
+        <form wire:submit="submitPrompt">
+            <flux:composer
+                wire:model="prompt"
+                submit="enter"
+                label="Message"
+                label:sr-only
+                placeholder="{{ __('What would you like to create?') }}"
+                rows="1"
+                max-rows="6"
+            >
+                <x-slot name="actionsTrailing">
+                    <flux:button type="submit" size="sm" variant="primary" icon="paper-airplane" />
+                </x-slot>
+            </flux:composer>
         </form>
     </div>
 </div>
