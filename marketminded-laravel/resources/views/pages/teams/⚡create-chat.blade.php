@@ -24,8 +24,6 @@ new class extends Component
 
     public array $messages = [];
 
-    public array $toolActivity = [];
-
     public int $webSearchRequests = 0;
 
     public int $lastTokens = 0;
@@ -79,8 +77,16 @@ new class extends Component
         $this->js('$wire.ask()');
     }
 
+    public function stopStreaming(): void
+    {
+        \Cache::put("chat-stop-{$this->conversation->id}", true, 300);
+    }
+
     public function ask(): void
     {
+        set_time_limit(300);
+        \Cache::forget("chat-stop-{$this->conversation->id}");
+
         $type = $this->conversation->type;
         $this->teamModel->refresh();
         $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel);
@@ -94,6 +100,7 @@ new class extends Component
             apiKey: $this->teamModel->openrouter_api_key,
             model: $this->teamModel->fast_model,
             urlFetcher: new UrlFetcher,
+            maxIterations: 8,
         );
 
         $brandHandler = new BrandIntelligenceToolHandler;
@@ -111,30 +118,39 @@ new class extends Component
 
         $fullContent = '';
         $streamResult = null;
+        $completedTools = [];
 
         try {
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
+                // Check stop flag
+                if (\Cache::get("chat-stop-{$this->conversation->id}")) {
+                    $fullContent .= "\n\n[Stopped by user]";
+                    break;
+                }
+
                 if ($item instanceof ToolEvent) {
-                    $this->toolActivity[] = [
-                        'name' => $item->name,
-                        'args' => $item->arguments,
-                        'status' => $item->status,
-                        'result' => $item->result,
-                    ];
-                    $statusHtml = $this->renderToolStatus();
-                    $this->stream(to: 'streamed-response', content: $statusHtml, replace: true);
+                    if ($item->status === 'started') {
+                        // Show current tool as in-progress
+                        $this->streamUI($completedTools, $item, $fullContent);
+                    } else {
+                        // Tool completed — add to completed list, clear active
+                        $completedTools[] = $item;
+                        $this->streamUI($completedTools, null, $fullContent);
+                    }
                 } elseif ($item instanceof StreamResult) {
                     $streamResult = $item;
                 } else {
                     $fullContent .= $item;
-                    $html = $this->renderToolStatus() . '<div class="whitespace-pre-wrap">' . e($fullContent) . '</div>';
-                    $this->stream(to: 'streamed-response', content: $html, replace: true);
+                    $this->streamUI($completedTools, null, $fullContent);
                 }
             }
         } catch (\Throwable $e) {
-            $fullContent = 'Sorry, something went wrong. Please try again.';
-            $this->stream(to: 'streamed-response', content: $fullContent, replace: true);
+            \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
+            $fullContent .= $fullContent ? "\n\n[Error: streaming interrupted]" : 'Sorry, something went wrong. Please try again.';
+            $this->streamUI($completedTools, null, $fullContent);
         }
+
+        \Cache::forget("chat-stop-{$this->conversation->id}");
 
         Message::create([
             'conversation_id' => $this->conversation->id,
@@ -185,25 +201,44 @@ new class extends Component
         }
     }
 
-    private function renderToolStatus(): string
+    /**
+     * Stream the full current UI state — completed tools + active tool + text content.
+     * Always replaces the entire streamed-response element so nothing flashes or disappears.
+     */
+    private function streamUI(array $completedTools, ?ToolEvent $activeTool, string $content): void
     {
-        $items = '';
-        foreach ($this->toolActivity as $activity) {
-            if ($activity['name'] === 'fetch_url') {
-                $url = $activity['args']['url'] ?? '';
-                $icon = $activity['status'] === 'completed' ? '✓' : '⟳';
-                $items .= "<div class=\"text-xs text-zinc-400\">{$icon} Reading {$url}</div>";
-            } elseif ($activity['name'] === 'update_brand_intelligence') {
-                if ($activity['status'] === 'completed') {
-                    $result = json_decode($activity['result'] ?? '{}', true);
-                    $sections = implode(', ', $result['sections'] ?? []);
-                    $items .= "<div class=\"text-xs text-zinc-400\">✓ Updated brand profile: {$sections}</div>";
-                } else {
-                    $items .= "<div class=\"text-xs text-zinc-400\">⟳ Updating brand profile...</div>";
-                }
+        $html = '';
+
+        // Completed tools
+        foreach ($completedTools as $tool) {
+            if ($tool->name === 'fetch_url') {
+                $url = e($tool->arguments['url'] ?? '');
+                $html .= "<div class=\"text-xs text-zinc-500 mb-1\">✓ Read {$url}</div>";
+            } elseif ($tool->name === 'update_brand_intelligence') {
+                $result = json_decode($tool->result ?? '{}', true);
+                $sections = e(implode(', ', $result['sections'] ?? []));
+                $html .= "<div class=\"text-xs text-zinc-500 mb-1\">✓ Updated brand profile: {$sections}</div>";
             }
         }
-        return $items;
+
+        // Active tool (in progress)
+        if ($activeTool) {
+            if ($activeTool->name === 'fetch_url') {
+                $url = e($activeTool->arguments['url'] ?? '');
+                $html .= "<div class=\"text-xs text-indigo-400 mb-1\">⟳ Reading {$url}...</div>";
+            } elseif ($activeTool->name === 'update_brand_intelligence') {
+                $html .= "<div class=\"text-xs text-indigo-400 mb-1\">⟳ Updating brand profile...</div>";
+            }
+        }
+
+        // Text content
+        if ($content !== '') {
+            $html .= '<div class="whitespace-pre-wrap mt-2">' . e($content) . '</div>';
+        } elseif (! $activeTool && empty($completedTools)) {
+            $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><span class="size-3.5 animate-spin">⟳</span> Thinking...</span>';
+        }
+
+        $this->stream(to: 'streamed-response', content: $html, replace: true);
     }
 }; ?>
 
@@ -306,21 +341,29 @@ new class extends Component
     {{-- Input (only shown after type is selected) --}}
     @if ($conversation->type)
         <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
-            <form wire:submit="submitPrompt">
-                <flux:composer
-                    wire:model="prompt"
-                    submit="enter"
-                    label="Message"
-                    label:sr-only
-                    placeholder="{{ __('Type your message...') }}"
-                    rows="1"
-                    max-rows="6"
-                >
-                    <x-slot name="actionsTrailing">
-                        <flux:button type="submit" size="sm" variant="primary" icon="paper-airplane" />
-                    </x-slot>
-                </flux:composer>
-            </form>
+            @if ($isStreaming)
+                <div class="flex justify-center">
+                    <flux:button variant="subtle" size="sm" icon="stop" wire:click="stopStreaming">
+                        {{ __('Stop') }}
+                    </flux:button>
+                </div>
+            @else
+                <form wire:submit="submitPrompt">
+                    <flux:composer
+                        wire:model="prompt"
+                        submit="enter"
+                        label="Message"
+                        label:sr-only
+                        placeholder="{{ __('Type your message...') }}"
+                        rows="1"
+                        max-rows="6"
+                    >
+                        <x-slot name="actionsTrailing">
+                            <flux:button type="submit" size="sm" variant="primary" icon="paper-airplane" />
+                        </x-slot>
+                    </flux:composer>
+                </form>
+            @endif
         </div>
     @endif
 </div>
