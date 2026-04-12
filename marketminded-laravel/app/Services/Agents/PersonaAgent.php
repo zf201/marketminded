@@ -23,10 +23,14 @@ class PersonaAgent
         $result = $this->client->chat(
             [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Research and define 3-5 detailed audience personas for this business.'],
+                ['role' => 'user', 'content' => 'Research and define 3-5 detailed audience personas for this business. You MUST call submit_personas with your results.'],
             ],
             $tools,
         );
+
+        if (! is_array($result) || ! isset($result['personas'])) {
+            throw new \RuntimeException('PersonaAgent did not return structured personas. Got: ' . (is_string($result) ? substr($result, 0, 200) : json_encode($result)));
+        }
 
         $team->audiencePersonas()->delete();
 

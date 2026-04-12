@@ -22,10 +22,14 @@ class PositioningAgent
         $result = $this->client->chat(
             [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Analyze the brand and produce structured positioning.'],
+                ['role' => 'user', 'content' => 'Analyze the brand and produce structured positioning. You MUST call submit_positioning with your results.'],
             ],
             $tools,
         );
+
+        if (! is_array($result)) {
+            throw new \RuntimeException('PositioningAgent did not return structured data.');
+        }
 
         return $team->brandPositioning()->updateOrCreate(
             ['team_id' => $team->id],

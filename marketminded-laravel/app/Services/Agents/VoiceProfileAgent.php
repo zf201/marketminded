@@ -23,10 +23,14 @@ class VoiceProfileAgent
         $result = $this->client->chat(
             [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Analyze the writing style and produce a structured voice & tone profile.'],
+                ['role' => 'user', 'content' => 'Analyze the writing style and produce a structured voice & tone profile. You MUST call submit_voice_profile with your results.'],
             ],
             $tools,
         );
+
+        if (! is_array($result)) {
+            throw new \RuntimeException('VoiceProfileAgent did not return structured data.');
+        }
 
         return $team->voiceProfile()->updateOrCreate(
             ['team_id' => $team->id],
