@@ -26,6 +26,9 @@
                     <flux:sidebar.item icon="chart-bar" :href="route('ai.operations')" :current="request()->routeIs('ai.operations')" wire:navigate>
                         {{ __('AI Operations') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="chat-bubble-left-right" :href="route('create')" :current="request()->routeIs('create')" wire:navigate>
+                        {{ __('Create') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 
