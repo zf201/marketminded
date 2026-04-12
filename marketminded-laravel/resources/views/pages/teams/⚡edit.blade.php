@@ -28,12 +28,22 @@ new class extends Component
 
     public bool $isCurrentTeam = false;
 
+    public string $openrouterApiKey = '';
+
+    public string $fastModel = '';
+
+    public string $powerfulModel = '';
+
     public function mount(Team $team): void
     {
         $this->teamModel = $team;
         $this->teamName = $team->name;
 
         $this->populateTeamData();
+
+        $this->openrouterApiKey = $team->openrouter_api_key ?? '';
+        $this->fastModel = $team->fast_model;
+        $this->powerfulModel = $team->powerful_model;
     }
 
     public function updateTeam(): void
@@ -77,6 +87,25 @@ new class extends Component
         $this->populateTeamData();
 
         Flux::toast(variant: 'success', text: __('Member role updated.'));
+    }
+
+    public function updateAiSettings(): void
+    {
+        Gate::authorize('update', $this->teamModel);
+
+        $validated = $this->validate([
+            'openrouterApiKey' => ['nullable', 'string', 'max:255'],
+            'fastModel' => ['required', 'string', 'max:255'],
+            'powerfulModel' => ['required', 'string', 'max:255'],
+        ]);
+
+        $this->teamModel->update([
+            'openrouter_api_key' => $validated['openrouterApiKey'] ?: null,
+            'fast_model' => $validated['fastModel'],
+            'powerful_model' => $validated['powerfulModel'],
+        ]);
+
+        Flux::toast(variant: 'success', text: __('AI settings updated.'));
     }
 
     private function populateTeamData(): void
@@ -283,6 +312,46 @@ new class extends Component
                             @endif
                         @endforeach
                     </div>
+                </div>
+            @endif
+
+            @if ($this->permissions->canUpdateTeam)
+                <div class="space-y-6">
+                    <div>
+                        <flux:heading>{{ __('AI settings') }}</flux:heading>
+                        <flux:subheading>{{ __('Configure your team\'s AI model preferences') }}</flux:subheading>
+                    </div>
+
+                    <form wire:submit="updateAiSettings" class="space-y-6">
+                        <flux:input
+                            wire:model="openrouterApiKey"
+                            :label="__('OpenRouter API Key')"
+                            :description="__('Your team\'s API key for AI features.')"
+                            type="password"
+                            viewable
+                            placeholder="sk-or-..."
+                        />
+
+                        <flux:input
+                            wire:model="fastModel"
+                            :label="__('Fast Model')"
+                            :description="__('Used for research, ideation, and verification. e.g. x-ai/grok-4.1-fast, anthropic/claude-sonnet-4.6, deepseek/deepseek-v3.2:nitro')"
+                            placeholder="deepseek/deepseek-v3.2:nitro"
+                            required
+                        />
+
+                        <flux:input
+                            wire:model="powerfulModel"
+                            :label="__('Powerful Model')"
+                            :description="__('Used for writing and editing. e.g. x-ai/grok-4.1-fast, anthropic/claude-sonnet-4.6, deepseek/deepseek-v3.2:nitro')"
+                            placeholder="deepseek/deepseek-v3.2:nitro"
+                            required
+                        />
+
+                        <flux:button variant="primary" type="submit">
+                            {{ __('Save AI settings') }}
+                        </flux:button>
+                    </form>
                 </div>
             @endif
 
