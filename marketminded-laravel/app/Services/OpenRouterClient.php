@@ -195,6 +195,234 @@ class OpenRouterClient
         );
     }
 
+    /**
+     * Stream a chat completion with tool support.
+     * Yields string chunks, ToolEvent objects, and a final StreamResult.
+     *
+     * @return \Generator<int, string|ToolEvent|StreamResult>
+     */
+    public function streamChatWithTools(
+        string $systemPrompt,
+        array $messages,
+        array $tools = [],
+        ?callable $toolExecutor = null,
+        float $temperature = 0.7,
+        bool $useServerTools = true,
+    ): \Generator {
+        $allMessages = array_merge(
+            [['role' => 'system', 'content' => $systemPrompt]],
+            $messages,
+        );
+        $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
+
+        $totalInputTokens = 0;
+        $totalOutputTokens = 0;
+        $totalCost = 0.0;
+        $webSearchRequests = 0;
+        $fullContent = '';
+
+        for ($iteration = 0; $iteration < $this->maxIterations; $iteration++) {
+            $body = [
+                'model' => $this->model,
+                'messages' => $allMessages,
+                'temperature' => $temperature,
+                'stream' => true,
+            ];
+
+            if (! empty($allTools)) {
+                $body['tools'] = $allTools;
+            }
+
+            $response = Http::timeout(120)
+                ->withHeader('Authorization', "Bearer {$this->apiKey}")
+                ->withOptions(['stream' => true])
+                ->post(self::API_URL, $body);
+
+            $contentType = $response->header('Content-Type') ?? '';
+            $isStream = str_contains($contentType, 'text/event-stream');
+
+            // Non-streaming response (tool call)
+            if (! $isStream) {
+                $json = $response->json();
+                $usage = $json['usage'] ?? [];
+                $totalInputTokens += $usage['prompt_tokens'] ?? 0;
+                $totalOutputTokens += $usage['completion_tokens'] ?? 0;
+                $totalCost += (float) ($usage['cost'] ?? 0);
+                $webSearchRequests += $usage['server_tool_use']['web_search_requests'] ?? 0;
+
+                $choice = $json['choices'][0]['message'] ?? [];
+                $allMessages[] = $choice;
+
+                if (! empty($choice['tool_calls'])) {
+                    foreach ($choice['tool_calls'] as $toolCall) {
+                        $fnName = $toolCall['function']['name'];
+                        $fnArgs = json_decode($toolCall['function']['arguments'], true) ?? [];
+
+                        if (str_starts_with($fnName, 'openrouter:')) {
+                            $allMessages[] = [
+                                'role' => 'tool',
+                                'tool_call_id' => $toolCall['id'],
+                                'content' => 'Handled by server.',
+                            ];
+
+                            continue;
+                        }
+
+                        yield new ToolEvent($fnName, $fnArgs, null, 'started');
+
+                        if ($toolExecutor) {
+                            $toolResult = $toolExecutor($fnName, $fnArgs);
+                        } elseif ($fnName === 'fetch_url') {
+                            $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
+                        } else {
+                            $toolResult = "Unknown tool: {$fnName}";
+                        }
+
+                        yield new ToolEvent($fnName, $fnArgs, $toolResult, 'completed');
+
+                        $allMessages[] = [
+                            'role' => 'tool',
+                            'tool_call_id' => $toolCall['id'],
+                            'content' => $toolResult,
+                        ];
+                    }
+
+                    continue;
+                }
+
+                $content = $choice['content'] ?? '';
+                if ($content !== '') {
+                    $fullContent .= $content;
+                    yield $content;
+                }
+
+                break;
+            }
+
+            // Streaming SSE response
+            $buffer = '';
+            $streamBody = $response->getBody();
+            $hasToolCalls = false;
+            $streamToolCalls = [];
+            $streamContent = '';
+
+            while (! $streamBody->eof()) {
+                $buffer .= $streamBody->read(1024);
+
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = substr($buffer, 0, $pos);
+                    $buffer = substr($buffer, $pos + 1);
+                    $line = trim($line);
+
+                    if ($line === '' || $line === 'data: [DONE]') {
+                        continue;
+                    }
+
+                    if (! str_starts_with($line, 'data: ')) {
+                        continue;
+                    }
+
+                    $json = json_decode(substr($line, 6), true);
+                    if (! $json) {
+                        continue;
+                    }
+
+                    $delta = $json['choices'][0]['delta'] ?? [];
+
+                    $content = $delta['content'] ?? '';
+                    if ($content !== '') {
+                        $fullContent .= $content;
+                        $streamContent .= $content;
+                        yield $content;
+                    }
+
+                    if (isset($delta['tool_calls'])) {
+                        $hasToolCalls = true;
+                        foreach ($delta['tool_calls'] as $tc) {
+                            $idx = $tc['index'] ?? 0;
+                            if (! isset($streamToolCalls[$idx])) {
+                                $streamToolCalls[$idx] = ['id' => '', 'name' => '', 'arguments' => ''];
+                            }
+                            if (isset($tc['id']) && $tc['id'] !== '') {
+                                $streamToolCalls[$idx]['id'] = $tc['id'];
+                            }
+                            if (isset($tc['function']['name']) && $tc['function']['name'] !== '') {
+                                $streamToolCalls[$idx]['name'] = $tc['function']['name'];
+                            }
+                            if (isset($tc['function']['arguments'])) {
+                                $streamToolCalls[$idx]['arguments'] .= $tc['function']['arguments'];
+                            }
+                        }
+                    }
+
+                    if (isset($json['usage'])) {
+                        $totalInputTokens += $json['usage']['prompt_tokens'] ?? 0;
+                        $totalOutputTokens += $json['usage']['completion_tokens'] ?? 0;
+                        $totalCost += (float) ($json['usage']['cost'] ?? 0);
+                        $webSearchRequests += $json['usage']['server_tool_use']['web_search_requests'] ?? 0;
+                    }
+                }
+            }
+
+            if ($hasToolCalls && ! empty($streamToolCalls)) {
+                $assistantMsg = ['role' => 'assistant', 'content' => $streamContent ?: null, 'tool_calls' => []];
+                foreach ($streamToolCalls as $tc) {
+                    $assistantMsg['tool_calls'][] = [
+                        'id' => $tc['id'],
+                        'type' => 'function',
+                        'function' => ['name' => $tc['name'], 'arguments' => $tc['arguments']],
+                    ];
+                }
+                $allMessages[] = $assistantMsg;
+
+                foreach ($streamToolCalls as $tc) {
+                    $fnName = $tc['name'];
+                    $fnArgs = json_decode($tc['arguments'], true) ?? [];
+
+                    if (str_starts_with($fnName, 'openrouter:')) {
+                        $allMessages[] = [
+                            'role' => 'tool',
+                            'tool_call_id' => $tc['id'],
+                            'content' => 'Handled by server.',
+                        ];
+
+                        continue;
+                    }
+
+                    yield new ToolEvent($fnName, $fnArgs, null, 'started');
+
+                    if ($toolExecutor) {
+                        $toolResult = $toolExecutor($fnName, $fnArgs);
+                    } elseif ($fnName === 'fetch_url') {
+                        $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
+                    } else {
+                        $toolResult = "Unknown tool: {$fnName}";
+                    }
+
+                    yield new ToolEvent($fnName, $fnArgs, $toolResult, 'completed');
+
+                    $allMessages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $tc['id'],
+                        'content' => $toolResult,
+                    ];
+                }
+
+                continue;
+            }
+
+            break;
+        }
+
+        yield new StreamResult(
+            content: $fullContent,
+            inputTokens: $totalInputTokens,
+            outputTokens: $totalOutputTokens,
+            cost: $totalCost,
+            webSearchRequests: $webSearchRequests,
+        );
+    }
+
     private function sendWithRetry(array $body): array
     {
         $lastException = null;
