@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable(['name', 'slug', 'is_personal', 'openrouter_api_key', 'fast_model', 'powerful_model', 'homepage_url', 'blog_url', 'brand_description', 'product_urls', 'competitor_urls', 'style_reference_urls', 'target_audience', 'tone_keywords', 'content_language'])]
@@ -95,6 +96,36 @@ class Team extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(TeamInvitation::class);
+    }
+
+    /**
+     * Get the team's brand positioning.
+     *
+     * @return HasOne<BrandPositioning, $this>
+     */
+    public function brandPositioning(): HasOne
+    {
+        return $this->hasOne(BrandPositioning::class);
+    }
+
+    /**
+     * Get all audience personas for this team.
+     *
+     * @return HasMany<AudiencePersona, $this>
+     */
+    public function audiencePersonas(): HasMany
+    {
+        return $this->hasMany(AudiencePersona::class)->orderBy('sort_order');
+    }
+
+    /**
+     * Get the team's voice profile.
+     *
+     * @return HasOne<VoiceProfile, $this>
+     */
+    public function voiceProfile(): HasOne
+    {
+        return $this->hasOne(VoiceProfile::class);
     }
 
     /**
