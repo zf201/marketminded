@@ -8,7 +8,7 @@ class ChatPromptBuilder
 {
     public static function build(string $type, Team $team): string
     {
-        $profile = self::buildProfileJson($team);
+        $profile = self::buildProfileText($team);
         $hasProfile = $team->homepage_url || $team->brandPositioning || $team->audiencePersonas()->exists();
 
         return match ($type) {
@@ -30,64 +30,102 @@ class ChatPromptBuilder
         };
     }
 
-    private static function buildProfileJson(Team $team): string
+    private static function buildProfileText(Team $team): string
     {
         $team->load(['brandPositioning', 'voiceProfile']);
 
-        $profile = [
-            'setup' => [
-                'homepage_url' => $team->homepage_url,
-                'blog_url' => $team->blog_url,
-                'brand_description' => $team->brand_description,
-                'product_urls' => $team->product_urls,
-                'competitor_urls' => $team->competitor_urls,
-                'style_reference_urls' => $team->style_reference_urls,
-                'target_audience' => $team->target_audience,
-                'tone_keywords' => $team->tone_keywords,
-                'content_language' => $team->content_language,
-            ],
-            'positioning' => $team->brandPositioning?->only([
-                'value_proposition', 'target_market', 'differentiators',
-                'core_problems', 'products_services', 'primary_cta',
-            ]),
-            'personas' => $team->audiencePersonas()->get()->map(fn ($p) => $p->only([
-                'label', 'role', 'description', 'pain_points', 'push', 'pull', 'anxiety',
-            ]))->toArray(),
-            'voice' => $team->voiceProfile?->only([
-                'voice_analysis', 'content_types', 'should_avoid',
-                'should_use', 'style_inspiration', 'preferred_length',
-            ]),
-        ];
+        $lines = [];
 
-        return json_encode($profile, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        // Company
+        $lines[] = '## Company';
+        $lines[] = 'Homepage: ' . ($team->homepage_url ?: 'not set');
+        if ($team->blog_url) $lines[] = 'Blog: ' . $team->blog_url;
+        if ($team->brand_description) $lines[] = 'Description: ' . $team->brand_description;
+        if ($team->target_audience) $lines[] = 'Target audience: ' . $team->target_audience;
+        if ($team->tone_keywords) $lines[] = 'Tone: ' . $team->tone_keywords;
+        if ($team->content_language) $lines[] = 'Language: ' . $team->content_language;
+        if (! empty($team->product_urls)) $lines[] = 'Product pages: ' . implode(', ', $team->product_urls);
+        if (! empty($team->competitor_urls)) $lines[] = 'Competitors: ' . implode(', ', $team->competitor_urls);
+        if (! empty($team->style_reference_urls)) $lines[] = 'Style references: ' . implode(', ', $team->style_reference_urls);
+
+        // Positioning
+        $pos = $team->brandPositioning;
+        if ($pos) {
+            $lines[] = '';
+            $lines[] = '## Positioning';
+            if ($pos->value_proposition) $lines[] = 'Value proposition: ' . $pos->value_proposition;
+            if ($pos->target_market) $lines[] = 'Target market: ' . $pos->target_market;
+            if ($pos->differentiators) $lines[] = 'Differentiators: ' . $pos->differentiators;
+            if ($pos->core_problems) $lines[] = 'Core problems solved: ' . $pos->core_problems;
+            if ($pos->products_services) $lines[] = 'Products/services: ' . $pos->products_services;
+            if ($pos->primary_cta) $lines[] = 'Primary CTA: ' . $pos->primary_cta;
+        } else {
+            $lines[] = '';
+            $lines[] = '## Positioning';
+            $lines[] = 'Not yet defined.';
+        }
+
+        // Personas
+        $personas = $team->audiencePersonas()->get();
+        $lines[] = '';
+        $lines[] = '## Audience Personas';
+        if ($personas->isEmpty()) {
+            $lines[] = 'None defined yet.';
+        } else {
+            foreach ($personas as $p) {
+                $lines[] = '';
+                $lines[] = '### ' . $p->label . ($p->role ? " ({$p->role})" : '');
+                if ($p->description) $lines[] = $p->description;
+                if ($p->pain_points) $lines[] = 'Pain points: ' . $p->pain_points;
+                if ($p->push) $lines[] = 'Push: ' . $p->push;
+                if ($p->pull) $lines[] = 'Pull: ' . $p->pull;
+                if ($p->anxiety) $lines[] = 'Anxiety: ' . $p->anxiety;
+            }
+        }
+
+        // Voice
+        $voice = $team->voiceProfile;
+        $lines[] = '';
+        $lines[] = '## Voice & Tone';
+        if ($voice) {
+            if ($voice->voice_analysis) $lines[] = 'Analysis: ' . $voice->voice_analysis;
+            if ($voice->content_types) $lines[] = 'Content types: ' . $voice->content_types;
+            if ($voice->should_avoid) $lines[] = 'Avoid: ' . $voice->should_avoid;
+            if ($voice->should_use) $lines[] = 'Use: ' . $voice->should_use;
+            if ($voice->style_inspiration) $lines[] = 'Style inspiration: ' . $voice->style_inspiration;
+            if ($voice->preferred_length) $lines[] = 'Preferred length: ' . $voice->preferred_length . ' words';
+        } else {
+            $lines[] = 'Not yet defined.';
+        }
+
+        return implode("\n", $lines);
     }
 
     private static function brandPrompt(string $profile): string
     {
         return <<<PROMPT
-        You are a brand strategist helping build a comprehensive brand intelligence profile. Your goal is to deeply understand the user's brand through conversation and research.
+        You are a brand strategist having a conversation with a business owner to build their brand intelligence profile. Be conversational, helpful, and concise.
 
-        IMPORTANT RULES:
-        - Always respond in plain text. Never output JSON, code blocks, or structured data formats in your messages.
-        - Never wrap your text in arrays, objects, or content block syntax like [{"type":"text"}].
-        - Use markdown formatting (headings, lists, bold) for readability.
-        - When you need to save data, use the update_brand_intelligence tool — don't paste structured data into chat.
+        ## How to respond
+        Talk to the user naturally in plain text. Use markdown for readability (headings, lists, bold). Never output raw data structures, JSON, arrays, or code in your messages. When you learn something worth saving, use the tools silently — don't show the user what you're saving.
 
-        You have two tools:
-        - `update_brand_intelligence`: Save structured brand data (setup, positioning, personas, voice). Use this to persist what you learn.
-        - `fetch_url`: Read web pages to analyze the brand's online presence.
+        ## Your tools
+        - `update_brand_intelligence` — save what you learn about the brand (positioning, personas, voice, etc.)
+        - `fetch_url` — read a web page to analyze the brand
 
-        Strategy:
-        1. Start by asking the user for their website URL if not already provided.
-        2. Fetch and analyze their website to understand the business.
-        3. Ask targeted follow-up questions about positioning, audience, and voice.
-        4. After gathering enough information, use update_brand_intelligence to save your analysis.
-        5. Explain what you saved and ask if anything needs adjustment.
+        ## How to work
+        1. If the brand has no website URL yet, ask for it first
+        2. Fetch their website and key pages to understand the business
+        3. Ask focused follow-up questions — one or two at a time, not a wall of questions
+        4. Save findings as you go using the tool — don't wait until the end
+        5. After saving, briefly summarize what you captured and ask what to refine
 
-        Always save data incrementally — don't wait until the end. Save each section as you complete it.
+        Keep your responses short and focused. Ask one question at a time. Don't dump long analyses — have a conversation.
 
-        Current brand profile:
+        ## Current brand profile (reference data — do not echo this back)
+        <brand-profile>
         {$profile}
+        </brand-profile>
         PROMPT;
     }
 
@@ -96,18 +134,16 @@ class ChatPromptBuilder
         $nudge = $hasProfile ? '' : "\n\nIMPORTANT: The brand profile is mostly empty. Before brainstorming topics, suggest the user starts with \"Build brand knowledge\" to establish their positioning and audience first. You can still brainstorm if they insist, but the results will be more generic without brand context.";
 
         return <<<PROMPT
-        You are a content strategist helping brainstorm content topics. Generate ideas that align with the brand's positioning, resonate with target personas, and match the brand voice.
+        You are a content strategist brainstorming content topics with a business owner. Be creative, specific, and conversational.
 
-        Always respond in plain text with markdown formatting. Never output JSON, arrays, or structured data formats in your messages.
+        Generate ideas that align with the brand's positioning and resonate with their target audience. Consider pain points, content gaps, industry trends, and different formats (blog, social, email, video).
 
-        Consider:
-        - Topics that address audience pain points
-        - Content gaps competitors haven't covered
-        - Trending themes in the brand's industry
-        - Different content formats (blog, social, email, video){$nudge}
+        Keep responses conversational. Use markdown for lists and headings. Don't dump everything at once — suggest a few ideas, get feedback, iterate.{$nudge}
 
-        Current brand profile:
+        ## Brand context (reference data — do not echo this back)
+        <brand-profile>
         {$profile}
+        </brand-profile>
         PROMPT;
     }
 
@@ -116,18 +152,16 @@ class ChatPromptBuilder
         $nudge = $hasProfile ? '' : "\n\nIMPORTANT: The brand profile is mostly empty. Without positioning, audience, and voice data, the content will be generic. Suggest the user starts with \"Build brand knowledge\" first for better results. You can still write if they insist.";
 
         return <<<PROMPT
-        You are a skilled copywriter helping create content. Write in the brand's voice, targeting the specified audience personas. Follow the voice profile guidelines for tone, style, and length.
+        You are a skilled copywriter helping create content. Write in the brand's voice, targeting their audience personas.
 
-        Always respond in plain text with markdown formatting. Never output JSON, arrays, or structured data formats in your messages.
+        When writing, match the brand voice, address audience pain points, stay aligned with positioning, and aim for the preferred content length. Ask what they want to write before drafting.
 
-        When writing:
-        - Match the brand voice (avoid phrases listed in "should_avoid", use phrases from "should_use")
-        - Address the pain points and motivations of the target persona
-        - Stay aligned with the brand's positioning and value proposition
-        - Aim for the preferred content length when specified{$nudge}
+        Keep the conversation natural. Use markdown for formatting drafts.{$nudge}
 
-        Current brand profile:
+        ## Brand context (reference data — do not echo this back)
+        <brand-profile>
         {$profile}
+        </brand-profile>
         PROMPT;
     }
 }
