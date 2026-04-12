@@ -152,6 +152,16 @@ new class extends Component
         $this->isStreaming = false;
     }
 
+    public function getConversationStatsProperty(): array
+    {
+        $messages = $this->conversation->messages()->where('role', 'assistant');
+
+        return [
+            'tokens' => (int) $messages->sum(\DB::raw('input_tokens + output_tokens')),
+            'cost' => (float) $messages->sum('cost'),
+        ];
+    }
+
     public function render()
     {
         return $this->view()->title($this->conversation->title);
@@ -210,6 +220,17 @@ new class extends Component
                 } }}</flux:badge>
             @endif
         </div>
+        @if ($this->conversationStats['tokens'] > 0)
+            <flux:tooltip content="{{ __('Longer chats use more tokens per message. Start a new conversation for a new task to keep costs low.') }}" position="bottom">
+                <div class="flex items-center gap-1.5 cursor-help">
+                    <flux:text class="text-xs text-zinc-500">{{ number_format($this->conversationStats['tokens']) }} {{ __('tokens') }}</flux:text>
+                    @if ($this->conversationStats['cost'] > 0)
+                        <flux:text class="text-xs text-zinc-500">&middot; ${{ number_format($this->conversationStats['cost'], 4) }}</flux:text>
+                    @endif
+                    <flux:icon name="information-circle" variant="mini" class="size-3.5 text-zinc-400" />
+                </div>
+            </flux:tooltip>
+        @endif
     </div>
 
     {{-- Messages --}}
