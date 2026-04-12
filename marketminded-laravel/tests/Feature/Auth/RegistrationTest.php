@@ -9,14 +9,16 @@ test('registration screen can be rendered', function () {
 });
 
 test('new users can register', function () {
+    $email = 'register-test-' . uniqid() . '@example.com';
+
     $response = $this->post(route('register.store'), [
         'name' => 'John Doe',
-        'email' => 'test@example.com',
+        'email' => $email,
         'password' => 'password',
         'password_confirmation' => 'password',
     ]);
 
-    $user = User::where('email', 'test@example.com')->first();
+    $user = User::where('email', $email)->first();
 
     $response->assertSessionHasNoErrors()
         ->assertRedirect(route('dashboard', absolute: false));

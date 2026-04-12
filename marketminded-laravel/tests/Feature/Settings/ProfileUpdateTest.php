@@ -14,9 +14,11 @@ test('profile information can be updated', function () {
 
     $this->actingAs($user);
 
+    $newEmail = 'profile-update-' . $user->id . '@example.com';
+
     $response = Livewire::test('pages::settings.profile')
         ->set('name', 'Test User')
-        ->set('email', 'test@example.com')
+        ->set('email', $newEmail)
         ->call('updateProfileInformation');
 
     $response->assertHasNoErrors();
@@ -24,7 +26,7 @@ test('profile information can be updated', function () {
     $user->refresh();
 
     expect($user->name)->toEqual('Test User');
-    expect($user->email)->toEqual('test@example.com');
+    expect($user->email)->toEqual($newEmail);
     expect($user->email_verified_at)->toBeNull();
 });
 
