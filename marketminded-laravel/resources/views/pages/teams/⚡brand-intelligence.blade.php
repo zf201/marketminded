@@ -64,11 +64,18 @@ new class extends Component
 
     public ?array $voiceProfile = null;
 
+    public ?string $intelligenceStatus = null;
+
+    public ?string $intelligenceError = null;
+
+    public bool $isGenerating = false;
+
     public function mount(Team $current_team): void
     {
         $this->teamModel = $current_team;
         $this->checkPrerequisites();
         $this->loadData();
+        $this->loadGenerationStatus();
     }
 
     public function savePositioning(): void
@@ -229,6 +236,14 @@ new class extends Component
     public function render()
     {
         $this->checkPrerequisites();
+        $this->loadGenerationStatus();
+
+        if ($this->intelligenceStatus === 'completed') {
+            $this->teamModel->update(['intelligence_status' => null]);
+            $this->intelligenceStatus = null;
+            $this->isGenerating = false;
+            $this->loadData();
+        }
 
         return $this->view()->title(__('Brand Intelligence'));
     }
@@ -302,6 +317,14 @@ new class extends Component
             ];
         }
     }
+
+    private function loadGenerationStatus(): void
+    {
+        $team = $this->teamModel->fresh();
+        $this->intelligenceStatus = $team->intelligence_status;
+        $this->intelligenceError = $team->intelligence_error;
+        $this->isGenerating = in_array($this->intelligenceStatus, ['pending', 'fetching', 'positioning', 'personas', 'voice_profile']);
+    }
 }; ?>
 
 <section class="w-full">
@@ -323,15 +346,69 @@ new class extends Component
             </div>
         @endif
 
-        {{-- Bootstrap CTA (when prerequisites met but no data) --}}
-        @if (! $missingPrerequisites && ! $hasPositioning && ! $hasPersonas && ! $hasVoiceProfile)
+        {{-- Generation progress --}}
+        @if ($isGenerating)
+            <div wire:poll.5s class="mt-8">
+                <flux:card class="space-y-4 py-2">
+                    <flux:heading size="lg">{{ __('Generating Brand Intelligence...') }}</flux:heading>
+
+                    <div class="space-y-3">
+                        @php
+                            $steps = [
+                                'fetching' => 'Fetching URLs',
+                                'positioning' => 'Analyzing positioning',
+                                'personas' => 'Building personas',
+                                'voice_profile' => 'Defining voice profile',
+                            ];
+                            $stepKeys = array_keys($steps);
+                            $currentIndex = array_search($intelligenceStatus, $stepKeys);
+                        @endphp
+
+                        @foreach ($steps as $key => $label)
+                            @php
+                                $stepIndex = array_search($key, $stepKeys);
+                                $isDone = $currentIndex !== false && $stepIndex < $currentIndex;
+                                $isCurrent = $key === $intelligenceStatus;
+                            @endphp
+                            <div class="flex items-center gap-3">
+                                @if ($isDone)
+                                    <flux:icon name="check-circle" class="text-green-500" variant="solid" />
+                                @elseif ($isCurrent)
+                                    <flux:icon name="arrow-path" class="animate-spin text-indigo-400" />
+                                @else
+                                    <flux:icon name="ellipsis-horizontal-circle" class="text-zinc-500" />
+                                @endif
+                                <flux:text class="{{ $isCurrent ? 'text-white font-medium' : ($isDone ? 'text-zinc-400' : 'text-zinc-500') }}">{{ $label }}</flux:text>
+                            </div>
+                        @endforeach
+                    </div>
+                </flux:card>
+            </div>
+        @endif
+
+        {{-- Error state --}}
+        @if ($intelligenceStatus === 'failed')
+            <flux:callout variant="danger" icon="exclamation-circle" class="mt-6">
+                <flux:callout.heading>{{ __('Generation failed') }}</flux:callout.heading>
+                <flux:callout.text>{{ $intelligenceError }}</flux:callout.text>
+            </flux:callout>
+            @if ($this->permissions->canUpdateTeam)
+                <div class="mt-4">
+                    <flux:button variant="primary" wire:click="startGeneration">{{ __('Retry') }}</flux:button>
+                </div>
+            @endif
+        @endif
+
+        {{-- Generate button (when prerequisites met, no data, not generating) --}}
+        @if (! $missingPrerequisites && ! $hasPositioning && ! $hasPersonas && ! $hasVoiceProfile && ! $isGenerating && $intelligenceStatus !== 'failed')
             <flux:card class="mt-8 text-center">
                 <div class="space-y-4 py-4">
                     <flux:text>{{ __('Ready to analyze your brand. This will crawl your URLs and generate positioning, audience personas, and voice profile.') }}</flux:text>
-                    <flux:button variant="primary" disabled>
-                        {{ __('Generate Brand Intelligence') }}
-                    </flux:button>
-                    <flux:text class="text-xs">{{ __('Coming soon — AI generation will be available in a future update.') }}</flux:text>
+                    @if ($this->permissions->canUpdateTeam)
+                        <flux:button variant="primary" wire:click="startGeneration">
+                            {{ __('Generate Brand Intelligence') }}
+                        </flux:button>
+                    @endif
                 </div>
             </flux:card>
         @endif
@@ -378,7 +455,7 @@ new class extends Component
 
                         @if ($this->permissions->canUpdateTeam)
                             <div class="flex justify-end gap-2">
-                                <flux:button variant="subtle" size="sm" disabled>{{ __('Regenerate') }}</flux:button>
+                                <flux:button variant="subtle" size="sm" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
                                 <flux:button variant="subtle" size="sm" wire:click="startEditingPositioning">{{ __('Edit') }}</flux:button>
                             </div>
                         @endif
@@ -464,7 +541,7 @@ new class extends Component
 
                     @if ($this->permissions->canUpdateTeam)
                         <div class="flex justify-end gap-2">
-                            <flux:button variant="subtle" size="sm" disabled>{{ __('Regenerate all') }}</flux:button>
+                            <flux:button variant="subtle" size="sm" wire:click="startGeneration">{{ __('Regenerate all') }}</flux:button>
                             <flux:modal.trigger name="edit-persona-modal">
                                 <flux:button variant="subtle" size="sm" icon="plus" wire:click="resetPersonaForm">{{ __('Add persona') }}</flux:button>
                             </flux:modal.trigger>
@@ -522,7 +599,7 @@ new class extends Component
 
                         @if ($this->permissions->canUpdateTeam)
                             <div class="flex justify-end gap-2">
-                                <flux:button variant="subtle" size="sm" disabled>{{ __('Regenerate') }}</flux:button>
+                                <flux:button variant="subtle" size="sm" wire:click="startGeneration">{{ __('Regenerate') }}</flux:button>
                                 <flux:button variant="subtle" size="sm" wire:click="startEditingVoiceProfile">{{ __('Edit') }}</flux:button>
                             </div>
                         @endif
