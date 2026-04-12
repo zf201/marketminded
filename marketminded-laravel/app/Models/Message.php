@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['conversation_id', 'role', 'content', 'model', 'input_tokens', 'output_tokens', 'cost'])]
+#[Fillable(['conversation_id', 'role', 'content', 'model', 'input_tokens', 'output_tokens', 'cost', 'metadata'])]
 class Message extends Model
 {
     public $timestamps = false;
@@ -16,6 +16,7 @@ class Message extends Model
         return [
             'cost' => 'decimal:6',
             'created_at' => 'datetime',
+            'metadata' => 'array',
         ];
     }
 

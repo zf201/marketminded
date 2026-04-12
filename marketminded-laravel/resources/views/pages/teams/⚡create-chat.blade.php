@@ -24,12 +24,6 @@ new class extends Component
 
     public array $messages = [];
 
-    public int $webSearchRequests = 0;
-
-    public int $lastTokens = 0;
-
-    public float $lastCost = 0;
-
     public function mount(Team $current_team, Conversation $conversation): void
     {
         $this->teamModel = $current_team;
@@ -66,13 +60,13 @@ new class extends Component
             $this->conversation->update(['title' => mb_substr($content, 0, 80)]);
         }
 
-        $this->messages[] = ['role' => 'user', 'content' => $content];
+        $this->messages[] = [
+            'role' => 'user',
+            'content' => $content,
+            'metadata' => null,
+        ];
         $this->prompt = '';
         $this->isStreaming = true;
-        $this->toolActivity = [];
-        $this->webSearchRequests = 0;
-        $this->lastTokens = 0;
-        $this->lastCost = 0;
 
         $this->js('$wire.ask()');
     }
@@ -80,7 +74,7 @@ new class extends Component
     public function ask(): void
     {
         set_time_limit(300);
-        ignore_user_abort(false); // PHP will terminate when browser disconnects
+        ignore_user_abort(false);
 
         $type = $this->conversation->type;
         $this->teamModel->refresh();
@@ -118,28 +112,39 @@ new class extends Component
         try {
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
                 if ($item instanceof ToolEvent) {
-                    if ($item->status === 'started') {
-                        // Show current tool as in-progress
-                        $this->streamUI($completedTools, $item, $fullContent);
-                    } else {
-                        // Tool completed — add to completed list, clear active
+                    if ($item->status === 'completed') {
                         $completedTools[] = $item;
-                        $this->streamUI($completedTools, null, $fullContent);
                     }
+                    $activeTool = $item->status === 'started' ? $item : null;
+                    $this->streamUI($this->cleanContent($fullContent), $completedTools, $activeTool);
                 } elseif ($item instanceof StreamResult) {
                     $streamResult = $item;
                 } else {
                     $fullContent .= $item;
-                    $this->streamUI($completedTools, null, $this->cleanContent($fullContent));
+                    $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
                 }
             }
         } catch (\Throwable $e) {
             \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
-            $fullContent .= $fullContent ? "\n\n[Error: streaming interrupted]" : 'Sorry, something went wrong. Please try again.';
-            $this->streamUI($completedTools, null, $fullContent);
+            if (! $fullContent) {
+                $fullContent = 'Sorry, something went wrong. Please try again.';
+            }
+            $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
         }
 
         $fullContent = $this->cleanContent($fullContent);
+
+        // Build metadata to persist
+        $metadata = [];
+        if (! empty($completedTools)) {
+            $metadata['tools'] = collect($completedTools)->map(fn (ToolEvent $t) => [
+                'name' => $t->name,
+                'args' => $t->arguments,
+            ])->toArray();
+        }
+        if ($streamResult?->webSearchRequests > 0) {
+            $metadata['web_searches'] = $streamResult->webSearchRequests;
+        }
 
         Message::create([
             'conversation_id' => $this->conversation->id,
@@ -149,23 +154,26 @@ new class extends Component
             'input_tokens' => $streamResult?->inputTokens ?? 0,
             'output_tokens' => $streamResult?->outputTokens ?? 0,
             'cost' => $streamResult?->cost ?? 0,
+            'metadata' => ! empty($metadata) ? $metadata : null,
         ]);
 
-        $this->messages[] = ['role' => 'assistant', 'content' => $fullContent];
-        $this->webSearchRequests = $streamResult?->webSearchRequests ?? 0;
-        $this->lastTokens = ($streamResult?->inputTokens ?? 0) + ($streamResult?->outputTokens ?? 0);
-        $this->lastCost = $streamResult?->cost ?? 0;
+        $this->messages[] = [
+            'role' => 'assistant',
+            'content' => $fullContent,
+            'metadata' => ! empty($metadata) ? $metadata : null,
+            'input_tokens' => $streamResult?->inputTokens ?? 0,
+            'output_tokens' => $streamResult?->outputTokens ?? 0,
+            'cost' => $streamResult?->cost ?? 0,
+        ];
         $this->isStreaming = false;
     }
 
     public function getConversationStatsProperty(): array
     {
-        $assistantMessages = $this->conversation->messages()->where('role', 'assistant');
         $lastAssistant = $this->conversation->messages()->where('role', 'assistant')->latest('id')->first();
 
         return [
             'context' => (int) ($lastAssistant?->input_tokens ?? 0),
-            'cost' => (float) $assistantMessages->sum('cost'),
         ];
     }
 
@@ -176,31 +184,20 @@ new class extends Component
 
     private function loadMessages(): void
     {
-        $messages = $this->conversation->messages;
-
-        $this->messages = $messages
+        $this->messages = $this->conversation->messages
             ->map(fn (Message $m) => [
                 'role' => $m->role,
                 'content' => $this->cleanContent($m->content),
+                'metadata' => $m->metadata,
+                'input_tokens' => $m->input_tokens,
+                'output_tokens' => $m->output_tokens,
+                'cost' => (float) $m->cost,
             ])
             ->toArray();
-
-        // Restore stats from last assistant message
-        $lastAssistant = $messages->where('role', 'assistant')->last();
-        if ($lastAssistant) {
-            $this->lastTokens = $lastAssistant->input_tokens + $lastAssistant->output_tokens;
-            $this->lastCost = (float) $lastAssistant->cost;
-        }
     }
 
-    /**
-     * Strip content block artifacts that DeepSeek sometimes generates as literal text.
-     * Handles both Python-style [{'type': 'text', 'text': "..."}] and JSON-style.
-     */
     private function cleanContent(string $content): string
     {
-        // Strip Python-style content blocks: [{'type': 'text', 'text': "..."}]
-        // These can be nested, so loop until no more matches
         $maxPasses = 5;
         for ($i = 0; $i < $maxPasses; $i++) {
             $cleaned = preg_replace(
@@ -214,56 +211,73 @@ new class extends Component
             $content = $cleaned;
         }
 
-        // Strip JSON-style content blocks if the entire content is a JSON array
         $decoded = json_decode($content, true);
         if (is_array($decoded) && isset($decoded[0]['type']) && $decoded[0]['type'] === 'text') {
             $content = collect($decoded)->pluck('text')->implode('');
         }
 
-        // Unescape any escaped quotes/newlines left from stripping
         $content = str_replace(["\\'", '\\"', '\\n'], ["'", '"', "\n"], $content);
 
         return $content;
     }
 
     /**
-     * Stream the full current UI state — completed tools + active tool + text content.
-     * Always replaces the entire streamed-response element so nothing flashes or disappears.
+     * Stream UI: text content first, then tools below as pills, then active tool.
      */
-    private function streamUI(array $completedTools, ?ToolEvent $activeTool, string $content): void
+    private function streamUI(string $content, array $completedTools, ?ToolEvent $activeTool): void
     {
         $html = '';
 
-        // Completed tools
-        foreach ($completedTools as $tool) {
-            if ($tool->name === 'fetch_url') {
-                $url = e($tool->arguments['url'] ?? '');
-                $html .= "<div class=\"text-xs text-zinc-500 mb-1\">✓ Read {$url}</div>";
-            } elseif ($tool->name === 'update_brand_intelligence') {
-                $result = json_decode($tool->result ?? '{}', true);
-                $sections = e(implode(', ', $result['sections'] ?? []));
-                $html .= "<div class=\"text-xs text-zinc-500 mb-1\">✓ Updated brand profile: {$sections}</div>";
-            }
-        }
-
-        // Active tool (in progress)
-        if ($activeTool) {
-            if ($activeTool->name === 'fetch_url') {
-                $url = e($activeTool->arguments['url'] ?? '');
-                $html .= "<div class=\"text-xs text-indigo-400 mb-1\">⟳ Reading {$url}...</div>";
-            } elseif ($activeTool->name === 'update_brand_intelligence') {
-                $html .= "<div class=\"text-xs text-indigo-400 mb-1\">⟳ Updating brand profile...</div>";
-            }
-        }
-
-        // Text content
+        // Text content first
         if ($content !== '') {
-            $html .= '<div class="whitespace-pre-wrap mt-2">' . e($content) . '</div>';
-        } elseif (! $activeTool && empty($completedTools)) {
-            $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><span class="size-3.5 animate-spin">⟳</span> Thinking...</span>';
+            $html .= '<div class="whitespace-pre-wrap">' . e($content) . '</div>';
+        }
+
+        // Active tool (in progress) — show below text
+        if ($activeTool) {
+            $label = match ($activeTool->name) {
+                'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
+                'update_brand_intelligence' => 'Updating brand profile',
+                default => $activeTool->name,
+            };
+            $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
+            // Show completed tools as pills first
+            foreach ($completedTools as $tool) {
+                $html .= $this->toolPill($tool, false);
+            }
+            $html .= '<span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs text-indigo-400"><span class="animate-spin">&#8635;</span> ' . e($label) . '</span>';
+            $html .= '</div>';
+        } elseif (! empty($completedTools)) {
+            // All tools done — show as pills below text
+            $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
+            foreach ($completedTools as $tool) {
+                $html .= $this->toolPill($tool, false);
+            }
+            $html .= '</div>';
+        } elseif ($content === '') {
+            // Nothing yet — thinking
+            $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><span class="size-3.5 animate-spin">&#8635;</span> Thinking...</span>';
         }
 
         $this->stream(to: 'streamed-response', content: $html, replace: true);
+    }
+
+    private function toolPill(ToolEvent $tool, bool $active): string
+    {
+        $label = match ($tool->name) {
+            'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
+            'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
+            default => $tool->name,
+        };
+
+        $classes = 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs';
+        $classes .= $active
+            ? ' bg-indigo-500/10 text-indigo-400'
+            : ' bg-zinc-500/10 text-zinc-500';
+
+        $icon = $active ? '<span class="animate-spin">&#8635;</span>' : '&#10003;';
+
+        return "<span class=\"{$classes}\">{$icon} " . e($label) . '</span>';
     }
 }; ?>
 
@@ -283,7 +297,7 @@ new class extends Component
             @endif
         </div>
         @if ($this->conversationStats['context'] > 0)
-            <flux:tooltip content="{{ __('Current context size. Longer chats send more tokens per message — start a new conversation for a new task to keep costs low.') }}" position="bottom">
+            <flux:tooltip content="{{ __('Current context size. Longer chats send more tokens per message -- start a new conversation for a new task to keep costs low.') }}" position="bottom">
                 <div class="flex items-center gap-1.5 cursor-help">
                     <flux:text class="text-xs text-zinc-500">{{ number_format($this->conversationStats['context']) }} {{ __('context tokens') }}</flux:text>
                     <flux:icon name="information-circle" variant="mini" class="size-3.5 text-zinc-400" />
@@ -304,7 +318,7 @@ new class extends Component
             @endif
 
             {{-- Message history (reversed for flex-col-reverse) --}}
-            @foreach (array_reverse($messages) as $index => $message)
+            @foreach (array_reverse($messages) as $message)
                 @if ($message['role'] === 'user')
                     <div class="mb-6 flex justify-end">
                         <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 dark:bg-zinc-700">
@@ -315,17 +329,25 @@ new class extends Component
                     <div class="mb-6">
                         <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
                         <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
-                        @if ($index === 0 && !$isStreaming && ($webSearchRequests > 0 || $lastTokens > 0))
-                            <div class="mt-2 flex items-center gap-2">
-                                @if ($webSearchRequests > 0)
-                                    <flux:text class="text-xs text-zinc-500">{{ $webSearchRequests }} {{ __('web searches') }}</flux:text>
-                                    <flux:text class="text-xs text-zinc-500">&middot;</flux:text>
+
+                        {{-- Tool pills + stats for every assistant message --}}
+                        @if (!empty($message['metadata']['tools']) || ($message['input_tokens'] ?? 0) > 0)
+                            <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                @foreach ($message['metadata']['tools'] ?? [] as $tool)
+                                    @if ($tool['name'] === 'fetch_url')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Read {{ $tool['args']['url'] ?? '' }}</span>
+                                    @elseif ($tool['name'] === 'update_brand_intelligence')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated profile</span>
+                                    @endif
+                                @endforeach
+                                @if (!empty($message['metadata']['web_searches']))
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">{{ $message['metadata']['web_searches'] }} web searches</span>
                                 @endif
-                                @if ($lastTokens > 0)
-                                    <flux:text class="text-xs text-zinc-500">{{ number_format($lastTokens) }} {{ __('tokens') }}</flux:text>
+                                @if (($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0) > 0)
+                                    <span class="text-xs text-zinc-500">{{ number_format(($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0)) }} tokens</span>
                                 @endif
-                                @if ($lastCost > 0)
-                                    <flux:text class="text-xs text-zinc-500">&middot; ${{ number_format($lastCost, 4) }}</flux:text>
+                                @if (($message['cost'] ?? 0) > 0)
+                                    <span class="text-xs text-zinc-500">&middot; ${{ number_format($message['cost'], 4) }}</span>
                                 @endif
                             </div>
                         @endif
