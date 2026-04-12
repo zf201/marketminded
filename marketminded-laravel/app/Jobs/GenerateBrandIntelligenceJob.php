@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\AiTask;
 use App\Models\Team;
 use App\Services\Agents\PersonaAgent;
 use App\Services\Agents\PositioningAgent;
@@ -20,35 +21,39 @@ class GenerateBrandIntelligenceJob implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(public Team $team) {}
+    public function __construct(
+        public Team $team,
+        public AiTask $aiTask,
+    ) {}
 
     public function uniqueId(): string
     {
         return "team:{$this->team->id}";
     }
 
-    public function handle(
-        ?UrlFetcher $urlFetcher = null,
-        ?PositioningAgent $positioningAgent = null,
-        ?PersonaAgent $personaAgent = null,
-        ?VoiceProfileAgent $voiceProfileAgent = null,
-    ): void {
+    public function handle(?UrlFetcher $urlFetcher = null): void
+    {
         $team = $this->team;
+        $aiTask = $this->aiTask;
         $urlFetcher ??= app(UrlFetcher::class);
 
-        if (! $positioningAgent || ! $personaAgent || ! $voiceProfileAgent) {
-            $client = new OpenRouterClient(
-                apiKey: $team->openrouter_api_key,
-                model: $team->powerful_model,
-                urlFetcher: $urlFetcher,
-            );
+        $client = new OpenRouterClient(
+            apiKey: $team->openrouter_api_key,
+            model: $team->powerful_model,
+            urlFetcher: $urlFetcher,
+        );
 
-            $positioningAgent ??= new PositioningAgent($client);
-            $personaAgent ??= new PersonaAgent($client);
-            $voiceProfileAgent ??= new VoiceProfileAgent($client);
-        }
+        $aiTask->markRunning();
 
-        $team->update(["intelligence_status" => "fetching", "intelligence_error" => null]);
+        $steps = $aiTask->steps()->orderBy('id')->get();
+        $fetchStep = $steps->firstWhere('name', 'fetching');
+        $positioningStep = $steps->firstWhere('name', 'positioning');
+        $personasStep = $steps->firstWhere('name', 'personas');
+        $voiceStep = $steps->firstWhere('name', 'voice_profile');
+
+        // Step 1: Fetch URLs
+        $aiTask->update(['current_step' => 'fetching']);
+        $fetchStep?->markRunning($team->powerful_model);
 
         $urlsToFetch = array_merge(
             [$team->homepage_url],
@@ -58,24 +63,41 @@ class GenerateBrandIntelligenceJob implements ShouldBeUnique, ShouldQueue
         );
 
         $fetchedContent = $urlFetcher->fetchMany($urlsToFetch);
+        $fetchStep?->markCompleted(['iterations' => count($fetchedContent)]);
+        $aiTask->update(['completed_steps' => 1]);
 
-        $team->update(["intelligence_status" => "positioning"]);
-        $positioning = $positioningAgent->generate($team, $fetchedContent);
+        if ($aiTask->fresh()->isCancelled()) {
+            return;
+        }
 
-        $team->update(["intelligence_status" => "personas"]);
-        $personaAgent->generate($team, $positioning, $fetchedContent);
+        // Step 2: Positioning
+        $aiTask->update(['current_step' => 'positioning']);
+        $positioning = (new PositioningAgent($client))->generate($team, $fetchedContent, $positioningStep);
+        $aiTask->update(['completed_steps' => 2]);
 
-        $team->update(["intelligence_status" => "voice_profile"]);
-        $voiceProfileAgent->generate($team, $positioning, $fetchedContent);
+        if ($aiTask->fresh()->isCancelled()) {
+            return;
+        }
 
-        $team->update(["intelligence_status" => "completed"]);
+        // Step 3: Personas
+        $aiTask->update(['current_step' => 'personas']);
+        (new PersonaAgent($client))->generate($team, $positioning, $fetchedContent, $personasStep);
+        $aiTask->update(['completed_steps' => 3]);
+
+        if ($aiTask->fresh()->isCancelled()) {
+            return;
+        }
+
+        // Step 4: Voice Profile
+        $aiTask->update(['current_step' => 'voice_profile']);
+        (new VoiceProfileAgent($client))->generate($team, $positioning, $fetchedContent, $voiceStep);
+        $aiTask->update(['completed_steps' => 4]);
+
+        $aiTask->markCompleted();
     }
 
     public function failed(?\Throwable $exception): void
     {
-        $this->team->update([
-            "intelligence_status" => "failed",
-            "intelligence_error" => $exception?->getMessage(),
-        ]);
+        $this->aiTask->markFailed($exception?->getMessage() ?? 'Unknown error');
     }
 }

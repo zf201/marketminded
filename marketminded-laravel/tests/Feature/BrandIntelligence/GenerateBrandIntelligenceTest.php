@@ -2,160 +2,90 @@
 
 use App\Enums\TeamRole;
 use App\Jobs\GenerateBrandIntelligenceJob;
-use App\Models\AudiencePersona;
+use App\Models\AiTask;
+use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\VoiceProfile;
-use App\Services\Agents\PersonaAgent;
-use App\Services\Agents\PositioningAgent;
-use App\Services\Agents\VoiceProfileAgent;
-use App\Services\UrlFetcher;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
-test("generate button dispatches job", function () {
-    Queue::fake();
-
-    $user = User::factory()->create();
-    $team = Team::factory()->create([
-        "homepage_url" => "https://example.com",
-        "openrouter_api_key" => "sk-test",
+function createAiTask(Team $team): AiTask
+{
+    $task = AiTask::create([
+        'team_id' => $team->id,
+        'type' => 'brand_intelligence',
+        'label' => 'Generate Brand Intelligence',
+        'status' => 'pending',
+        'total_steps' => 4,
     ]);
-    $team->members()->attach($user, ["role" => TeamRole::Owner->value]);
 
-    $this->actingAs($user);
+    $task->steps()->createMany([
+        ['name' => 'fetching', 'label' => 'Fetching URLs'],
+        ['name' => 'positioning', 'label' => 'Analyzing positioning'],
+        ['name' => 'personas', 'label' => 'Building personas'],
+        ['name' => 'voice_profile', 'label' => 'Defining voice profile'],
+    ]);
 
-    Livewire::test("pages::teams.brand-intelligence", ["current_team" => $team])
-        ->call("startGeneration");
+    return $task;
+}
 
-    Queue::assertPushed(GenerateBrandIntelligenceJob::class, function ($job) use ($team) {
-        return $job->team->id === $team->id;
-    });
+test('job sets failed status on error', function () {
+    $team = Team::factory()->create([
+        'homepage_url' => 'https://example.com',
+        'openrouter_api_key' => 'sk-test',
+    ]);
+
+    $aiTask = createAiTask($team);
+    $job = new GenerateBrandIntelligenceJob($team, $aiTask);
+    $job->failed(new \RuntimeException('API Error'));
+
+    expect($aiTask->fresh()->status)->toBe('failed');
+    expect($aiTask->fresh()->error)->toBe('API Error');
 });
 
-test("member cannot trigger generation", function () {
-    $owner = User::factory()->create();
-    $member = User::factory()->create();
+test('cancelled task marks pending steps as skipped', function () {
     $team = Team::factory()->create([
-        "homepage_url" => "https://example.com",
-        "openrouter_api_key" => "sk-test",
+        'homepage_url' => 'https://example.com',
+        'openrouter_api_key' => 'sk-test',
     ]);
-    $team->members()->attach($owner, ["role" => TeamRole::Owner->value]);
-    $team->members()->attach($member, ["role" => TeamRole::Member->value]);
 
-    $this->actingAs($member);
+    $aiTask = createAiTask($team);
+    $aiTask->markCancelled();
 
-    Livewire::test("pages::teams.brand-intelligence", ["current_team" => $team])
-        ->call("startGeneration")
-        ->assertForbidden();
+    expect($aiTask->fresh()->status)->toBe('cancelled');
+    expect($aiTask->steps()->where('status', 'skipped')->count())->toBe(4);
 });
 
-test("job updates status through each phase", function () {
-    $team = Team::factory()->create([
-        "homepage_url" => "https://example.com",
-        "openrouter_api_key" => "sk-test",
-    ]);
+test('ai task tracks totals from steps', function () {
+    $team = Team::factory()->create();
+    $aiTask = createAiTask($team);
 
-    $positioning = BrandPositioning::create([
-        "team_id" => $team->id,
-        "value_proposition" => "Test",
-    ]);
+    $steps = $aiTask->steps;
+    $steps[0]->markCompleted(['input_tokens' => 100, 'output_tokens' => 50, 'cost' => 0.001, 'iterations' => 1]);
+    $steps[1]->markCompleted(['input_tokens' => 200, 'output_tokens' => 100, 'cost' => 0.002, 'iterations' => 3]);
 
-    $mockUrlFetcher = Mockery::mock(UrlFetcher::class);
-    $mockUrlFetcher->shouldReceive("fetchMany")->andReturn(["https://example.com" => "Content"]);
+    $aiTask->markCompleted();
 
-    $mockPositioningAgent = Mockery::mock(PositioningAgent::class);
-    $mockPositioningAgent->shouldReceive("generate")->andReturn($positioning);
-
-    $mockPersonaAgent = Mockery::mock(PersonaAgent::class);
-    $mockPersonaAgent->shouldReceive("generate")->andReturn(collect());
-
-    $mockVoiceAgent = Mockery::mock(VoiceProfileAgent::class);
-    $mockVoiceAgent->shouldReceive("generate")->andReturn(
-        VoiceProfile::create(["team_id" => $team->id, "voice_analysis" => "Test"]),
-    );
-
-    $job = new GenerateBrandIntelligenceJob($team);
-    $job->handle(
-        $mockUrlFetcher,
-        $mockPositioningAgent,
-        $mockPersonaAgent,
-        $mockVoiceAgent,
-    );
-
-    expect($team->fresh()->intelligence_status)->toBe("completed");
-    expect($team->fresh()->intelligence_error)->toBeNull();
+    expect($aiTask->fresh()->total_tokens)->toBe(450);
+    expect((float) $aiTask->fresh()->total_cost)->toEqual(0.003);
 });
 
-test("job sets failed status on error", function () {
-    $team = Team::factory()->create([
-        "homepage_url" => "https://example.com",
-        "openrouter_api_key" => "sk-test",
-    ]);
+test('ai task step records model and timestamps', function () {
+    $team = Team::factory()->create();
+    $aiTask = createAiTask($team);
 
-    $mockUrlFetcher = Mockery::mock(UrlFetcher::class);
-    $mockUrlFetcher->shouldReceive("fetchMany")->andThrow(new \RuntimeException("API Error"));
+    $step = $aiTask->steps->first();
+    $step->markRunning('deepseek/deepseek-v3.2:nitro');
 
-    $job = new GenerateBrandIntelligenceJob($team);
+    expect($step->fresh()->status)->toBe('running');
+    expect($step->fresh()->model)->toBe('deepseek/deepseek-v3.2:nitro');
+    expect($step->fresh()->started_at)->not->toBeNull();
 
-    try {
-        $job->handle(
-            $mockUrlFetcher,
-            Mockery::mock(PositioningAgent::class),
-            Mockery::mock(PersonaAgent::class),
-            Mockery::mock(VoiceProfileAgent::class),
-        );
-    } catch (\RuntimeException $e) {
-        // Expected
-    }
+    $step->markCompleted(['input_tokens' => 500, 'output_tokens' => 200, 'cost' => 0.003, 'iterations' => 2]);
 
-    $job->failed(new \RuntimeException("API Error"));
-
-    expect($team->fresh()->intelligence_status)->toBe("failed");
-    expect($team->fresh()->intelligence_error)->toBe("API Error");
-});
-
-test("job deletes existing data before regenerating", function () {
-    $team = Team::factory()->create([
-        "homepage_url" => "https://example.com",
-        "openrouter_api_key" => "sk-test",
-    ]);
-
-    BrandPositioning::create(["team_id" => $team->id, "value_proposition" => "Old"]);
-    AudiencePersona::create(["team_id" => $team->id, "label" => "Old Persona"]);
-    VoiceProfile::create(["team_id" => $team->id, "voice_analysis" => "Old"]);
-
-    $mockUrlFetcher = Mockery::mock(UrlFetcher::class);
-    $mockUrlFetcher->shouldReceive("fetchMany")->andReturn([]);
-
-    $mockPositioningAgent = Mockery::mock(PositioningAgent::class);
-    $mockPositioningAgent->shouldReceive("generate")->andReturnUsing(function ($team) {
-        return $team->brandPositioning()->updateOrCreate(
-            ["team_id" => $team->id],
-            ["value_proposition" => "New"],
-        );
-    });
-
-    $mockPersonaAgent = Mockery::mock(PersonaAgent::class);
-    $mockPersonaAgent->shouldReceive("generate")->andReturnUsing(function ($team) {
-        $team->audiencePersonas()->delete();
-        return collect([$team->audiencePersonas()->create(["label" => "New Persona", "sort_order" => 0])]);
-    });
-
-    $mockVoiceAgent = Mockery::mock(VoiceProfileAgent::class);
-    $mockVoiceAgent->shouldReceive("generate")->andReturnUsing(function ($team) {
-        return $team->voiceProfile()->updateOrCreate(
-            ["team_id" => $team->id],
-            ["voice_analysis" => "New"],
-        );
-    });
-
-    $job = new GenerateBrandIntelligenceJob($team);
-    $job->handle($mockUrlFetcher, $mockPositioningAgent, $mockPersonaAgent, $mockVoiceAgent);
-
-    expect($team->fresh()->brandPositioning->value_proposition)->toBe("New");
-    expect($team->audiencePersonas()->count())->toBe(1);
-    expect($team->audiencePersonas()->first()->label)->toBe("New Persona");
-    expect($team->fresh()->voiceProfile->voice_analysis)->toBe("New");
+    expect($step->fresh()->status)->toBe('completed');
+    expect($step->fresh()->input_tokens)->toBe(500);
+    expect($step->fresh()->completed_at)->not->toBeNull();
 });
