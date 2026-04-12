@@ -190,7 +190,10 @@ new class extends Component
         $messages = $this->conversation->messages;
 
         $this->messages = $messages
-            ->map(fn (Message $m) => ['role' => $m->role, 'content' => $m->content])
+            ->map(fn (Message $m) => [
+                'role' => $m->role,
+                'content' => $this->cleanContent($m->content),
+            ])
             ->toArray();
 
         // Restore stats from last assistant message
@@ -199,6 +202,25 @@ new class extends Component
             $this->lastTokens = $lastAssistant->input_tokens + $lastAssistant->output_tokens;
             $this->lastCost = (float) $lastAssistant->cost;
         }
+    }
+
+    /**
+     * Strip any content block artifacts from stored messages.
+     */
+    private function cleanContent(string $content): string
+    {
+        // Remove nested [{'type': 'text', 'text': '...'}] artifacts
+        while (preg_match("/\[\{'type': 'text', 'text': ['\"](.+?)['\"]\}\]/s", $content, $matches)) {
+            $content = str_replace($matches[0], $matches[1], $content);
+        }
+
+        // Also handle JSON format [{"type":"text","text":"..."}]
+        $decoded = json_decode($content, true);
+        if (is_array($decoded) && isset($decoded[0]['type']) && $decoded[0]['type'] === 'text') {
+            $content = collect($decoded)->pluck('text')->implode('');
+        }
+
+        return $content;
     }
 
     /**
