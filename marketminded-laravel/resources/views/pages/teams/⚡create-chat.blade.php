@@ -307,7 +307,17 @@ new class extends Component
     </div>
 
     {{-- Messages --}}
-    <div class="flex-1 overflow-y-auto">
+    <div
+        class="flex-1 overflow-y-auto"
+        id="chat-scroll"
+        x-data
+        x-init="
+            const el = $el;
+            const scroll = () => el.scrollTop = el.scrollHeight;
+            scroll();
+            new MutationObserver(scroll).observe(el, { childList: true, subtree: true, characterData: true });
+        "
+    >
         <div class="mx-auto flex max-w-3xl flex-col-reverse px-6 py-4">
             {{-- Streaming response --}}
             @if ($isStreaming)
