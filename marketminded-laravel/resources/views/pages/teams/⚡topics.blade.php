@@ -70,8 +70,8 @@ new class extends Component
     @else
         <div class="grid gap-2 px-6 py-4 sm:grid-cols-2">
             @foreach ($this->topics as $topic)
-                <div>
-                    <flux:card class="p-4">
+                <div class="flex flex-col">
+                    <flux:card class="flex-1 p-4">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
                                 <flux:heading>{{ $topic->title }}</flux:heading>
