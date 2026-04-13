@@ -306,6 +306,7 @@ new class extends Component
     private function savedTopicCards(array $completedTools): string
     {
         $html = '';
+        $topicsUrl = route('topics', ['current_team' => $this->teamModel]);
         foreach ($completedTools as $tool) {
             if ($tool->name !== 'save_topics') {
                 continue;
@@ -313,7 +314,10 @@ new class extends Component
             $topics = $tool->arguments['topics'] ?? [];
             foreach ($topics as $topic) {
                 $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
-                $html .= '<div class="mb-1"><span class="text-xs text-purple-400">&#10003; Saved</span></div>';
+                $html .= '<div class="flex items-center justify-between mb-1">';
+                $html .= '<span class="text-xs text-purple-400">&#10003; Saved</span>';
+                $html .= '<a href="' . e($topicsUrl) . '" class="text-xs text-zinc-500 hover:text-zinc-300">Manage in Topics &rarr;</a>';
+                $html .= '</div>';
                 $html .= '<div class="text-sm font-semibold text-zinc-200">' . e($topic['title'] ?? '') . '</div>';
                 $html .= '<div class="mt-1 text-xs text-zinc-400">' . e($topic['angle'] ?? '') . '</div>';
                 $html .= '</div>';
@@ -411,7 +415,10 @@ new class extends Component
                             @if ($tool['name'] === 'save_topics')
                                 @foreach ($tool['args']['topics'] ?? [] as $topic)
                                     <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                        <div class="mb-1"><span class="text-xs text-purple-400">&#10003; {{ __('Saved') }}</span></div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-xs text-purple-400">&#10003; {{ __('Saved') }}</span>
+                                            <a href="{{ route('topics', ['current_team' => $teamModel]) }}" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-300">{{ __('Manage in Topics') }} &rarr;</a>
+                                        </div>
                                         <div class="text-sm font-semibold text-zinc-200">{{ $topic['title'] ?? '' }}</div>
                                         <div class="mt-1 text-xs text-zinc-400">{{ $topic['angle'] ?? '' }}</div>
                                     </div>
