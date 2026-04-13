@@ -44,19 +44,19 @@ new class extends Component
 }; ?>
 
 <div>
-    <div class="flex items-center justify-between px-6 py-3">
-        <div class="flex items-center gap-3">
-            <flux:heading size="xl">{{ __('Topics') }}</flux:heading>
-            @if ($this->topics->isNotEmpty())
-                <flux:badge variant="pill" size="sm">{{ $this->topics->count() }}</flux:badge>
-            @endif
+    <div class="mx-auto max-w-3xl px-6">
+        <div class="flex items-center justify-between py-3">
+            <div class="flex items-center gap-3">
+                <flux:heading size="xl">{{ __('Topics') }}</flux:heading>
+                @if ($this->topics->isNotEmpty())
+                    <flux:badge variant="pill" size="sm">{{ $this->topics->count() }}</flux:badge>
+                @endif
+            </div>
+            <flux:button variant="primary" size="sm" icon="plus" :href="route('create')" wire:navigate>
+                {{ __('New brainstorm') }}
+            </flux:button>
         </div>
-        <flux:button variant="primary" size="sm" icon="plus" :href="route('create')" wire:navigate>
-            {{ __('New brainstorm') }}
-        </flux:button>
-    </div>
 
-    <div class="mx-auto max-w-3xl px-6 py-4">
         @if ($this->topics->isEmpty())
             <div class="py-20 text-center">
                 <flux:icon name="light-bulb" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
@@ -69,32 +69,29 @@ new class extends Component
                 </div>
             </div>
         @else
-            <div class="space-y-2">
+            <div class="space-y-2 py-4">
                 @foreach ($this->topics as $topic)
-                    <flux:card class="p-4">
+                    <div class="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
-                                <flux:heading class="truncate">{{ $topic->title }}</flux:heading>
-                                <flux:text class="mt-1 text-sm text-zinc-500">{{ $topic->angle }}</flux:text>
+                                <flux:heading>{{ $topic->title }}</flux:heading>
+                                <flux:text class="mt-1 text-sm">{{ $topic->angle }}</flux:text>
 
-                                <div class="mt-3 flex items-center gap-4">
-                                    {{-- Score slider --}}
-                                    <div class="flex items-center gap-2">
-                                        <flux:text class="text-xs text-zinc-500">{{ __('Score') }}</flux:text>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="10"
-                                            value="{{ $topic->score ?? 5 }}"
-                                            wire:change="updateScore({{ $topic->id }}, $event.target.value)"
-                                            class="h-1.5 w-24 cursor-pointer accent-indigo-500"
-                                        />
-                                        <flux:text class="w-5 text-xs font-medium text-zinc-400">{{ $topic->score ?? '-' }}</flux:text>
-                                    </div>
+                                <div class="mt-3 flex items-center gap-2">
+                                    <flux:text class="shrink-0 text-xs text-zinc-500">{{ __('Score') }}</flux:text>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="10"
+                                        value="{{ $topic->score ?? 5 }}"
+                                        wire:change="updateScore({{ $topic->id }}, $event.target.value)"
+                                        class="h-1.5 flex-1 cursor-pointer accent-indigo-500"
+                                    />
+                                    <flux:text class="w-5 shrink-0 text-xs font-medium text-zinc-400">{{ $topic->score ?? '-' }}</flux:text>
 
                                     {{-- Conversation link --}}
                                     @if ($topic->conversation_id)
-                                        <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $topic->conversation_id]) }}" wire:navigate class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300">
+                                        <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $topic->conversation_id]) }}" wire:navigate class="ml-2 inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300">
                                             <flux:icon name="chat-bubble-left" variant="mini" class="size-3.5" />
                                             {{ __('Chat') }}
                                         </a>
@@ -102,7 +99,7 @@ new class extends Component
 
                                     {{-- Status badge --}}
                                     @if ($topic->status === 'used')
-                                        <flux:badge variant="pill" size="sm" color="green">{{ __('Used') }}</flux:badge>
+                                        <flux:badge variant="pill" size="sm" color="green" class="ml-2">{{ __('Used') }}</flux:badge>
                                     @endif
                                 </div>
                             </div>
@@ -111,7 +108,7 @@ new class extends Component
                                 <flux:button variant="ghost" size="xs" icon="trash" />
                             </flux:modal.trigger>
                         </div>
-                    </flux:card>
+                    </div>
 
                     <flux:modal :name="'delete-topic-'.$topic->id" class="min-w-[22rem]">
                         <div class="space-y-6">
