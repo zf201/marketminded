@@ -126,6 +126,7 @@ new class extends Component
         $fullContent = '';
         $streamResult = null;
         $completedTools = [];
+        $interrupted = false;
 
         try {
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
@@ -143,47 +144,58 @@ new class extends Component
                 }
             }
         } catch (\Throwable $e) {
+            $interrupted = true;
             \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
-            if (! $fullContent) {
+            if (! $fullContent && empty($completedTools)) {
                 $fullContent = 'Sorry, something went wrong. Please try again.';
             }
-            $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
+        } finally {
+            // Always save the message, even if the connection was interrupted.
+            // Tool side effects (e.g. Topic::create) are already committed,
+            // so the message metadata must be persisted to render cards.
+            ignore_user_abort(true);
+
+            $fullContent = $this->cleanContent($fullContent);
+
+            $metadata = [];
+            if (! empty($completedTools)) {
+                $metadata['tools'] = collect($completedTools)->map(fn (ToolEvent $t) => [
+                    'name' => $t->name,
+                    'args' => $t->arguments,
+                ])->toArray();
+            }
+            if ($streamResult?->webSearchRequests > 0) {
+                $metadata['web_searches'] = $streamResult->webSearchRequests;
+            }
+            if ($interrupted) {
+                $metadata['interrupted'] = true;
+            }
+
+            // Only save if there's content or tool calls (avoid empty messages)
+            if ($fullContent !== '' || ! empty($metadata)) {
+                Message::create([
+                    'conversation_id' => $this->conversation->id,
+                    'role' => 'assistant',
+                    'content' => $fullContent,
+                    'model' => $this->teamModel->fast_model,
+                    'input_tokens' => $streamResult?->inputTokens ?? 0,
+                    'output_tokens' => $streamResult?->outputTokens ?? 0,
+                    'cost' => $streamResult?->cost ?? 0,
+                    'metadata' => ! empty($metadata) ? $metadata : null,
+                ]);
+
+                $this->messages[] = [
+                    'role' => 'assistant',
+                    'content' => $fullContent,
+                    'metadata' => ! empty($metadata) ? $metadata : null,
+                    'input_tokens' => $streamResult?->inputTokens ?? 0,
+                    'output_tokens' => $streamResult?->outputTokens ?? 0,
+                    'cost' => $streamResult?->cost ?? 0,
+                ];
+            }
+
+            $this->isStreaming = false;
         }
-
-        $fullContent = $this->cleanContent($fullContent);
-
-        // Build metadata to persist
-        $metadata = [];
-        if (! empty($completedTools)) {
-            $metadata['tools'] = collect($completedTools)->map(fn (ToolEvent $t) => [
-                'name' => $t->name,
-                'args' => $t->arguments,
-            ])->toArray();
-        }
-        if ($streamResult?->webSearchRequests > 0) {
-            $metadata['web_searches'] = $streamResult->webSearchRequests;
-        }
-
-        Message::create([
-            'conversation_id' => $this->conversation->id,
-            'role' => 'assistant',
-            'content' => $fullContent,
-            'model' => $this->teamModel->fast_model,
-            'input_tokens' => $streamResult?->inputTokens ?? 0,
-            'output_tokens' => $streamResult?->outputTokens ?? 0,
-            'cost' => $streamResult?->cost ?? 0,
-            'metadata' => ! empty($metadata) ? $metadata : null,
-        ]);
-
-        $this->messages[] = [
-            'role' => 'assistant',
-            'content' => $fullContent,
-            'metadata' => ! empty($metadata) ? $metadata : null,
-            'input_tokens' => $streamResult?->inputTokens ?? 0,
-            'output_tokens' => $streamResult?->outputTokens ?? 0,
-            'cost' => $streamResult?->cost ?? 0,
-        ];
-        $this->isStreaming = false;
     }
 
     public function getConversationStatsProperty(): array
@@ -398,6 +410,9 @@ new class extends Component
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Saved {{ count($tool['args']['topics'] ?? []) }} topics</span>
                                     @endif
                                 @endforeach
+                                @if (!empty($message['metadata']['interrupted']))
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs text-amber-500">&#9888; {{ __('Interrupted') }}</span>
+                                @endif
                                 @if (!empty($message['metadata']['web_searches']))
                                     <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">{{ $message['metadata']['web_searches'] }} web searches</span>
                                 @endif
