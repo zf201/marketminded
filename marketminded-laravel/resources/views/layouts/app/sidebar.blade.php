@@ -23,8 +23,8 @@
                     <flux:sidebar.item icon="light-bulb" :href="route('topics')" :current="request()->routeIs('topics')" wire:navigate>
                         {{ __('Topics') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="chart-bar" :href="route('ai.operations')" :current="request()->routeIs('ai.operations')" wire:navigate>
-                        {{ __('AI Operations') }}
+                    <flux:sidebar.item icon="chart-bar" :href="route('ai.log')" :current="request()->routeIs('ai.log')" wire:navigate>
+                        {{ __('AI Log') }}
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="chat-bubble-left-right" :href="route('create')" :current="request()->routeIs('create')" wire:navigate>
                         {{ __('Create') }}
