@@ -2,7 +2,6 @@
 
 use App\Models\Team;
 use App\Models\Topic;
-use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
 new class extends Component
