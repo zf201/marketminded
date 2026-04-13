@@ -49,6 +49,7 @@ new class extends Component
     private function loadSummary(): void
     {
         $thirtyDays = $this->teamModel->conversations()
+            ->reorder()
             ->join('messages', 'conversations.id', '=', 'messages.conversation_id')
             ->where('messages.role', 'assistant')
             ->where('messages.cost', '>', 0)
