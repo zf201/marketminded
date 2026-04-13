@@ -45,7 +45,7 @@ new class extends Component
         $this->topicsMode = $mode;
 
         if ($mode === 'discover') {
-            $this->prompt = __('Research current trends and discover content topics for my brand.');
+            $this->prompt = __('Search for current trends and news in my industry and propose 3-5 content topics.');
             $this->submitPrompt();
         }
     }
