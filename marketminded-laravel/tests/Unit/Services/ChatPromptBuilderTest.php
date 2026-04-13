@@ -16,7 +16,7 @@ test('brand type prompt includes tool instructions', function () {
     expect($prompt)->toContain('https://example.com');
 });
 
-test('topics type prompt includes brand profile', function () {
+test('topics type prompt includes brand profile and tool instructions', function () {
     $user = User::factory()->create();
     $team = $user->currentTeam;
     $team->update(['homepage_url' => 'https://example.com', 'brand_description' => 'We do stuff']);
@@ -24,7 +24,7 @@ test('topics type prompt includes brand profile', function () {
     $prompt = ChatPromptBuilder::build('topics', $team);
 
     expect($prompt)->toContain('We do stuff');
-    expect($prompt)->not->toContain('update_brand_intelligence');
+    expect($prompt)->toContain('save_topics');
 });
 
 test('write type prompt includes voice profile when available', function () {
@@ -57,9 +57,12 @@ test('returns tools for brand type', function () {
     expect($names)->toContain('fetch_url');
 });
 
-test('returns no custom tools for topics type', function () {
+test('returns save_topics and fetch_url tools for topics type', function () {
     $tools = ChatPromptBuilder::tools('topics');
-    expect($tools)->toBeEmpty();
+
+    $names = collect($tools)->map(fn ($t) => $t['function']['name'])->toArray();
+    expect($names)->toContain('save_topics');
+    expect($names)->toContain('fetch_url');
 });
 
 test('returns no custom tools for write type', function () {

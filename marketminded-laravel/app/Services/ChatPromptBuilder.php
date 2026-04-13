@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Team;
+use App\Models\Topic;
 
 class ChatPromptBuilder
 {
@@ -13,7 +14,7 @@ class ChatPromptBuilder
 
         return match ($type) {
             'brand' => self::brandPrompt($profile),
-            'topics' => self::topicsPrompt($profile, $hasProfile),
+            'topics' => self::topicsPrompt($profile, $hasProfile, $team),
             'write' => self::writePrompt($profile, $hasProfile),
             default => 'You are a helpful AI assistant.',
         };
@@ -24,6 +25,10 @@ class ChatPromptBuilder
         return match ($type) {
             'brand' => [
                 BrandIntelligenceToolHandler::toolSchema(),
+                BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+            ],
+            'topics' => [
+                TopicToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
             ],
             default => [],
@@ -125,14 +130,32 @@ PROMPT
 PROMPT;
     }
 
-    private static function topicsPrompt(string $profile, bool $hasProfile): string
+    private static function topicsPrompt(string $profile, bool $hasProfile, Team $team): string
     {
         $prompt = <<<'PROMPT'
-You are a content strategist brainstorming content topics with a business owner. Be creative, specific, and conversational.
+You are a content strategist helping a business owner discover and refine content topics. Be creative, specific, and conversational.
 
-Generate ideas that align with the brand positioning and resonate with their target audience. Consider pain points, content gaps, industry trends, and different formats (blog, social, email, video).
+## How to respond
+Talk naturally in plain text. Use markdown for readability. Never output raw data structures, JSON, or code.
 
-Keep responses conversational. Use markdown for lists and headings. Do not dump everything at once -- suggest a few ideas, get feedback, iterate.
+## Your tools
+- save_topics -- save approved topics to the team's backlog. Only call this AFTER the user confirms which topics to save.
+- fetch_url -- read a web page to research content ideas
+- You also have web search available -- use it to find current trends, news, and content gaps.
+
+## How to work
+1. Use web search to research current trends, news, and gaps in the brand's space
+2. Propose 3-5 topics as a numbered list. For each topic include:
+   - A specific, compelling title
+   - Why this topic fits the brand (the angle)
+   - What research evidence supports it
+3. Wait for the user to tell you which topics to save
+4. Call save_topics only with the topics the user approved
+5. After saving, ask if they want to explore more or refine saved topics
+
+Topics should be timely, specific, and connected to the brand's positioning. Think like a journalist: what's the story? What's the hook? Avoid generic "Ultimate Guide" filler.
+
+Keep responses conversational. Suggest a few ideas, get feedback, iterate.
 PROMPT;
 
         if (! $hasProfile) {
@@ -141,6 +164,24 @@ PROMPT;
 
 The brand profile is mostly empty. Before brainstorming topics, suggest the user starts with Build brand knowledge to establish their positioning and audience first. You can still brainstorm if they insist, but the results will be more generic without brand context.
 NUDGE;
+        }
+
+        // Add existing backlog to avoid duplicates
+        $existingTopics = Topic::where('team_id', $team->id)
+            ->whereIn('status', ['available', 'used'])
+            ->pluck('title')
+            ->toArray();
+
+        if (! empty($existingTopics)) {
+            $topicList = implode("\n", array_map(fn ($t) => "- {$t}", $existingTopics));
+            $prompt .= <<<BACKLOG
+
+
+## Existing topics in backlog (do not propose duplicates)
+<existing-topics>
+{$topicList}
+</existing-topics>
+BACKLOG;
         }
 
         $prompt .= <<<'PROMPT'
