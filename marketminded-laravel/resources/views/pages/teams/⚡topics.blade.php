@@ -71,42 +71,40 @@ new class extends Component
         <div class="grid gap-2 px-6 py-4 sm:grid-cols-2">
             @foreach ($this->topics as $topic)
                 <div class="flex flex-col">
-                    <flux:card class="flex-1 p-4">
+                    <flux:card class="flex flex-1 flex-col p-4">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
                                 <flux:heading>{{ $topic->title }}</flux:heading>
                                 <flux:text class="mt-1 text-sm">{{ $topic->angle }}</flux:text>
-
-                                <div class="mt-3 flex items-center gap-2">
-                                    <flux:text class="shrink-0 text-xs text-zinc-500">{{ __('Score') }}</flux:text>
-                                    <input
-                                        type="range"
-                                        min="1"
-                                        max="10"
-                                        value="{{ $topic->score ?? 5 }}"
-                                        wire:change="updateScore({{ $topic->id }}, $event.target.value)"
-                                        class="h-1.5 flex-1 cursor-pointer accent-indigo-500"
-                                    />
-                                    <flux:text class="w-5 shrink-0 text-xs font-medium text-zinc-400">{{ $topic->score ?? '-' }}</flux:text>
-
-                                    {{-- Conversation link --}}
-                                    @if ($topic->conversation_id)
-                                        <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $topic->conversation_id]) }}" wire:navigate class="ml-2 inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300">
-                                            <flux:icon name="chat-bubble-left" variant="mini" class="size-3.5" />
-                                            {{ __('Chat') }}
-                                        </a>
-                                    @endif
-
-                                    {{-- Status badge --}}
-                                    @if ($topic->status === 'used')
-                                        <flux:badge variant="pill" size="sm" color="green" class="ml-2">{{ __('Used') }}</flux:badge>
-                                    @endif
-                                </div>
                             </div>
 
                             <flux:modal.trigger :name="'delete-topic-'.$topic->id">
                                 <flux:button variant="ghost" size="xs" icon="trash" />
                             </flux:modal.trigger>
+                        </div>
+
+                        <div class="mt-auto flex items-center gap-2 pt-3">
+                            <flux:text class="shrink-0 text-xs text-zinc-500">{{ __('Score') }}</flux:text>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                value="{{ $topic->score ?? 5 }}"
+                                wire:change="updateScore({{ $topic->id }}, $event.target.value)"
+                                class="h-1.5 flex-1 cursor-pointer accent-indigo-500"
+                            />
+                            <flux:text class="w-5 shrink-0 text-xs font-medium text-zinc-400">{{ $topic->score ?? '-' }}</flux:text>
+
+                            @if ($topic->conversation_id)
+                                <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $topic->conversation_id]) }}" wire:navigate class="ml-2 inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300">
+                                    <flux:icon name="chat-bubble-left" variant="mini" class="size-3.5" />
+                                    {{ __('Chat') }}
+                                </a>
+                            @endif
+
+                            @if ($topic->status === 'used')
+                                <flux:badge variant="pill" size="sm" color="green" class="ml-2">{{ __('Used') }}</flux:badge>
+                            @endif
                         </div>
                     </flux:card>
 
