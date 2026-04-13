@@ -44,33 +44,32 @@ new class extends Component
 }; ?>
 
 <div>
-    <div class="mx-auto max-w-3xl px-6">
-        <div class="flex items-center justify-between py-3">
-            <div class="flex items-center gap-3">
-                <flux:heading size="xl">{{ __('Topics') }}</flux:heading>
-                @if ($this->topics->isNotEmpty())
-                    <flux:badge variant="pill" size="sm">{{ $this->topics->count() }}</flux:badge>
-                @endif
-            </div>
-            <flux:button variant="primary" size="sm" icon="plus" :href="route('create')" wire:navigate>
-                {{ __('New brainstorm') }}
-            </flux:button>
+    <div class="flex items-center justify-between px-6 py-3">
+        <div class="flex items-center gap-3">
+            <flux:heading size="xl">{{ __('Topics') }}</flux:heading>
+            @if ($this->topics->isNotEmpty())
+                <flux:badge variant="pill" size="sm">{{ $this->topics->count() }}</flux:badge>
+            @endif
         </div>
+        <flux:button variant="primary" size="sm" icon="plus" :href="route('create')" wire:navigate>
+            {{ __('New brainstorm') }}
+        </flux:button>
+    </div>
 
-        @if ($this->topics->isEmpty())
-            <div class="py-20 text-center">
-                <flux:icon name="light-bulb" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
-                <flux:heading size="lg" class="mt-4">{{ __('No topics yet') }}</flux:heading>
-                <flux:subheading class="mt-1">{{ __('Start a Brainstorm topics conversation to discover content ideas.') }}</flux:subheading>
-                <div class="mt-6">
-                    <flux:button variant="primary" icon="plus" :href="route('create')" wire:navigate>
-                        {{ __('New brainstorm') }}
-                    </flux:button>
-                </div>
+    @if ($this->topics->isEmpty())
+        <div class="py-20 text-center">
+            <flux:icon name="light-bulb" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
+            <flux:heading size="lg" class="mt-4">{{ __('No topics yet') }}</flux:heading>
+            <flux:subheading class="mt-1">{{ __('Start a Brainstorm topics conversation to discover content ideas.') }}</flux:subheading>
+            <div class="mt-6">
+                <flux:button variant="primary" icon="plus" :href="route('create')" wire:navigate>
+                    {{ __('New brainstorm') }}
+                </flux:button>
             </div>
-        @else
-            <div class="space-y-2 py-4">
-                @foreach ($this->topics as $topic)
+        </div>
+    @else
+        <div class="grid gap-2 px-6 py-4 sm:grid-cols-2">
+            @foreach ($this->topics as $topic)
                     <flux:card class="p-4">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
@@ -128,7 +127,6 @@ new class extends Component
                         </div>
                     </flux:modal>
                 @endforeach
-            </div>
-        @endif
-    </div>
+        </div>
+    @endif
 </div>
