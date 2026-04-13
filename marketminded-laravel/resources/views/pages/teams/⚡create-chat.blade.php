@@ -8,6 +8,7 @@ use App\Services\ChatPromptBuilder;
 use App\Services\OpenRouterClient;
 use App\Services\StreamResult;
 use App\Services\ToolEvent;
+use App\Services\TopicToolHandler;
 use App\Services\UrlFetcher;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
@@ -22,6 +23,8 @@ new class extends Component
 
     public bool $isStreaming = false;
 
+    public ?string $topicsMode = null;
+
     public array $messages = [];
 
     public function mount(Team $current_team, Conversation $conversation): void
@@ -35,6 +38,16 @@ new class extends Component
     {
         $this->conversation->update(['type' => $type]);
         $this->conversation->refresh();
+    }
+
+    public function selectTopicsMode(string $mode): void
+    {
+        $this->topicsMode = $mode;
+
+        if ($mode === 'discover') {
+            $this->prompt = __('Research current trends and discover content topics for my brand.');
+            $this->submitPrompt();
+        }
     }
 
     public function submitPrompt(): void
@@ -93,11 +106,16 @@ new class extends Component
         );
 
         $brandHandler = new BrandIntelligenceToolHandler;
+        $topicHandler = new TopicToolHandler;
         $team = $this->teamModel;
+        $conversation = $this->conversation;
 
-        $toolExecutor = function (string $name, array $args) use ($brandHandler, $team): string {
+        $toolExecutor = function (string $name, array $args) use ($brandHandler, $topicHandler, $team, $conversation): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
+            }
+            if ($name === 'save_topics') {
+                return $topicHandler->execute($team, $conversation->id, $args);
             }
             if ($name === 'fetch_url') {
                 return (new UrlFetcher)->fetch($args['url'] ?? '');
@@ -238,6 +256,7 @@ new class extends Component
             $label = match ($activeTool->name) {
                 'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
                 'update_brand_intelligence' => 'Updating brand profile',
+                'save_topics' => 'Saving topics...',
                 default => $activeTool->name,
             };
             $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
@@ -259,6 +278,9 @@ new class extends Component
             $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><span class="size-3.5 animate-spin">&#8635;</span> Thinking...</span>';
         }
 
+        // Saved topic cards
+        $html .= $this->savedTopicCards($completedTools);
+
         $this->stream(to: 'streamed-response', content: $html, replace: true);
     }
 
@@ -267,6 +289,7 @@ new class extends Component
         $label = match ($tool->name) {
             'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
             'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
+            'save_topics' => 'Saved ' . (json_decode($tool->result ?? '{}', true)['count'] ?? 0) . ' topics',
             default => $tool->name,
         };
 
@@ -278,6 +301,25 @@ new class extends Component
         $icon = $active ? '<span class="animate-spin">&#8635;</span>' : '&#10003;';
 
         return "<span class=\"{$classes}\">{$icon} " . e($label) . '</span>';
+    }
+
+    private function savedTopicCards(array $completedTools): string
+    {
+        $html = '';
+        foreach ($completedTools as $tool) {
+            if ($tool->name !== 'save_topics') {
+                continue;
+            }
+            $topics = $tool->arguments['topics'] ?? [];
+            foreach ($topics as $topic) {
+                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
+                $html .= '<div class="mb-1"><span class="text-xs text-purple-400">&#10003; Saved</span></div>';
+                $html .= '<div class="text-sm font-semibold text-zinc-200">' . e($topic['title'] ?? '') . '</div>';
+                $html .= '<div class="mt-1 text-xs text-zinc-400">' . e($topic['angle'] ?? '') . '</div>';
+                $html .= '</div>';
+            }
+        }
+        return $html;
     }
 }; ?>
 
@@ -348,6 +390,8 @@ new class extends Component
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Read {{ $tool['args']['url'] ?? '' }}</span>
                                     @elseif ($tool['name'] === 'update_brand_intelligence')
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated profile</span>
+                                    @elseif ($tool['name'] === 'save_topics')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Saved {{ count($tool['args']['topics'] ?? []) }} topics</span>
                                     @endif
                                 @endforeach
                                 @if (!empty($message['metadata']['web_searches']))
@@ -361,6 +405,19 @@ new class extends Component
                                 @endif
                             </div>
                         @endif
+
+                        {{-- Saved topic cards from history --}}
+                        @foreach ($message['metadata']['tools'] ?? [] as $tool)
+                            @if ($tool['name'] === 'save_topics')
+                                @foreach ($tool['args']['topics'] ?? [] as $topic)
+                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                        <div class="mb-1"><span class="text-xs text-purple-400">&#10003; {{ __('Saved') }}</span></div>
+                                        <div class="text-sm font-semibold text-zinc-200">{{ $topic['title'] ?? '' }}</div>
+                                        <div class="mt-1 text-xs text-zinc-400">{{ $topic['angle'] ?? '' }}</div>
+                                    </div>
+                                @endforeach
+                            @endif
+                        @endforeach
                     </div>
                 @endif
             @endforeach
@@ -392,11 +449,33 @@ new class extends Component
                     </div>
                 </div>
             @endif
+
+            {{-- Topics sub-card selection --}}
+            @if ($conversation->type === 'topics' && !$topicsMode && empty($messages))
+                <div class="flex flex-col items-center justify-center py-16">
+                    <flux:heading size="xl" class="mb-2">{{ __('How would you like to brainstorm?') }}</flux:heading>
+                    <flux:subheading class="mb-8">{{ __('Choose how to discover topics.') }}</flux:subheading>
+
+                    <div class="grid w-full max-w-xl gap-3 sm:grid-cols-2">
+                        <button wire:click="selectTopicsMode('discover')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="magnifying-glass" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Auto-discover topics') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Research trends and discover topics for your brand automatically') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectTopicsMode('conversation')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="chat-bubble-left" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Start a conversation') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Guide the brainstorming with your own direction') }}</flux:text>
+                        </button>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 
     {{-- Input (only shown after type is selected) --}}
-    @if ($conversation->type)
+    @if ($conversation->type && !($conversation->type === 'topics' && !$topicsMode && empty($messages)))
         <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
             @if ($isStreaming)
                 <div class="flex justify-center">
