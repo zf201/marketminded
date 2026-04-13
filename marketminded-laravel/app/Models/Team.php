@@ -149,6 +149,16 @@ class Team extends Model
     }
 
     /**
+     * Get all topics for this team.
+     *
+     * @return HasMany<Topic, $this>
+     */
+    public function topics(): HasMany
+    {
+        return $this->hasMany(Topic::class)->orderByDesc('created_at');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
