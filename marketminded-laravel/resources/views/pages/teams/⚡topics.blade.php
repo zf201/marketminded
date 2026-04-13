@@ -71,7 +71,7 @@ new class extends Component
         @else
             <div class="space-y-2 py-4">
                 @foreach ($this->topics as $topic)
-                    <div class="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
+                    <flux:card class="p-4">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
                                 <flux:heading>{{ $topic->title }}</flux:heading>
@@ -108,7 +108,7 @@ new class extends Component
                                 <flux:button variant="ghost" size="xs" icon="trash" />
                             </flux:modal.trigger>
                         </div>
-                    </div>
+                    </flux:card>
 
                     <flux:modal :name="'delete-topic-'.$topic->id" class="min-w-[22rem]">
                         <div class="space-y-6">
