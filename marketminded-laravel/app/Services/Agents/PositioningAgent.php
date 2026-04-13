@@ -2,7 +2,6 @@
 
 namespace App\Services\Agents;
 
-use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Services\OpenRouterClient;
@@ -11,10 +10,8 @@ class PositioningAgent
 {
     public function __construct(private OpenRouterClient $client) {}
 
-    public function generate(Team $team, array $fetchedContent, ?AiTaskStep $step = null): BrandPositioning
+    public function generate(Team $team, array $fetchedContent): BrandPositioning
     {
-        $step?->markRunning($this->client->getModel());
-
         try {
             $systemPrompt = $this->buildSystemPrompt($team, $fetchedContent);
 
@@ -47,11 +44,8 @@ class PositioningAgent
                 ],
             );
 
-            $step?->markCompleted($result->usage());
-
             return $positioning;
         } catch (\Throwable $e) {
-            $step?->markFailed($e->getMessage());
             throw $e;
         }
     }

@@ -2,7 +2,6 @@
 
 namespace App\Services\Agents;
 
-use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Models\VoiceProfile;
@@ -12,10 +11,8 @@ class VoiceProfileAgent
 {
     public function __construct(private OpenRouterClient $client) {}
 
-    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent, ?AiTaskStep $step = null): VoiceProfile
+    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent): VoiceProfile
     {
-        $step?->markRunning($this->client->getModel());
-
         try {
             $systemPrompt = $this->buildSystemPrompt($team, $positioning, $fetchedContent);
 
@@ -48,11 +45,8 @@ class VoiceProfileAgent
                 ],
             );
 
-            $step?->markCompleted($result->usage());
-
             return $profile;
         } catch (\Throwable $e) {
-            $step?->markFailed($e->getMessage());
             throw $e;
         }
     }

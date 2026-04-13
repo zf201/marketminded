@@ -2,7 +2,6 @@
 
 namespace App\Services\Agents;
 
-use App\Models\AiTaskStep;
 use App\Models\BrandPositioning;
 use App\Models\Team;
 use App\Services\OpenRouterClient;
@@ -12,10 +11,8 @@ class PersonaAgent
 {
     public function __construct(private OpenRouterClient $client) {}
 
-    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent, ?AiTaskStep $step = null): Collection
+    public function generate(Team $team, BrandPositioning $positioning, array $fetchedContent): Collection
     {
-        $step?->markRunning($this->client->getModel());
-
         try {
             $systemPrompt = $this->buildSystemPrompt($team, $positioning, $fetchedContent);
 
@@ -54,11 +51,8 @@ class PersonaAgent
                 $personas->push($persona);
             }
 
-            $step?->markCompleted($result->usage());
-
             return $personas;
         } catch (\Throwable $e) {
-            $step?->markFailed($e->getMessage());
             throw $e;
         }
     }
