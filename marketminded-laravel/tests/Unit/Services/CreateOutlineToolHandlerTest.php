@@ -1,127 +1,98 @@
 <?php
 
 use App\Models\Conversation;
-use App\Models\Message;
+use App\Models\Topic;
 use App\Models\User;
 use App\Services\CreateOutlineToolHandler;
+use App\Services\Writer\Agent;
+use App\Services\Writer\AgentResult;
+use App\Services\Writer\Brief;
+use App\Models\Team;
 
-function makeWriterConversation(): Conversation
+class FakeEditorAgent implements Agent
+{
+    public ?AgentResult $stubResult = null;
+
+    public function execute(Brief $brief, Team $team): AgentResult
+    {
+        return $this->stubResult ?? AgentResult::error('no stub');
+    }
+}
+
+function writerConvWithResearch(): array
 {
     $user = User::factory()->create();
-    return Conversation::create([
-        'team_id' => $user->currentTeam->id,
+    $team = $user->currentTeam;
+    $topic = Topic::create(['team_id' => $team->id, 'title' => 'X', 'angle' => 'a', 'status' => 'available']);
+    $conversation = Conversation::create([
+        'team_id' => $team->id,
         'user_id' => $user->id,
-        'title' => 'W',
-        'type' => 'writer',
-    ]);
-}
-
-function addResearchMessage(Conversation $c, array $claimIds): void
-{
-    Message::create([
-        'conversation_id' => $c->id,
-        'role' => 'assistant',
-        'content' => '',
-        'metadata' => [
-            'tools' => [[
-                'name' => 'research_topic',
-                'args' => [
-                    'topic_summary' => 's',
-                    'claims' => array_map(fn($id) => [
-                        'id' => $id,
-                        'text' => 't',
-                        'sources' => [['url' => 'u', 'title' => 't']],
-                    ], $claimIds),
-                ],
-            ]],
-        ],
-    ]);
-}
-
-test('execute accepts outline when all claim_ids exist in prior research', function () {
-    $c = makeWriterConversation();
-    addResearchMessage($c, ['c1', 'c2', 'c3']);
-
-    $handler = new CreateOutlineToolHandler;
-    $result = $handler->execute($c->team, $c->id, [
-        'title' => 'Intro to Zero Party Data',
-        'angle' => 'Privacy-first wins long-term',
-        'target_length_words' => 1500,
-        'sections' => [
-            ['heading' => 'Intro', 'purpose' => 'Hook', 'claim_ids' => ['c1']],
-            ['heading' => 'Body', 'purpose' => 'Evidence', 'claim_ids' => ['c2', 'c3']],
-        ],
-    ]);
-
-    expect(json_decode($result, true)['status'])->toBe('ok');
-});
-
-test('execute rejects outline when claim_ids are missing', function () {
-    $c = makeWriterConversation();
-    addResearchMessage($c, ['c1']);
-
-    $handler = new CreateOutlineToolHandler;
-    $result = $handler->execute($c->team, $c->id, [
-        'title' => 'x',
-        'angle' => 'y',
-        'target_length_words' => 1200,
-        'sections' => [
-            ['heading' => 'Intro', 'purpose' => 'hook', 'claim_ids' => ['c1', 'c9']],
-        ],
-    ]);
-
-    $decoded = json_decode($result, true);
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('c9');
-});
-
-test('execute errors when no research_topic output exists', function () {
-    $c = makeWriterConversation();
-
-    $handler = new CreateOutlineToolHandler;
-    $result = $handler->execute($c->team, $c->id, [
-        'title' => 'x',
-        'angle' => 'y',
-        'target_length_words' => 1200,
-        'sections' => [
-            ['heading' => 'Intro', 'purpose' => 'hook', 'claim_ids' => ['c1']],
-        ],
-    ]);
-
-    $decoded = json_decode($result, true);
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('research_topic');
-});
-
-test('execute accepts outline using in-turn research_topic result (no DB message)', function () {
-    $c = makeWriterConversation();
-    // NOT adding a persisted research_topic message. Pass it via priorTurnTools.
-    $priorTurnTools = [[
-        'name' => 'research_topic',
-        'args' => [
-            'topic_summary' => 's',
-            'claims' => [
-                ['id' => 'c1', 'text' => 't', 'sources' => [['url' => 'u', 'title' => 't']]],
-                ['id' => 'c2', 'text' => 't', 'sources' => [['url' => 'u', 'title' => 't']]],
-            ],
-        ],
-    ]];
-
-    $handler = new CreateOutlineToolHandler;
-    $result = $handler->execute($c->team, $c->id, [
         'title' => 't',
+        'type' => 'writer',
+        'topic_id' => $topic->id,
+        'brief' => [
+            'topic' => ['id' => $topic->id, 'title' => 'X', 'angle' => 'a', 'sources' => []],
+            'research' => ['topic_summary' => 's', 'claims' => [['id' => 'c1', 'text' => 't', 'type' => 'fact', 'source_ids' => ['s1']]], 'sources' => [['id' => 's1', 'url' => 'u', 'title' => 't']]],
+        ],
+    ]);
+    return [$team, $conversation];
+}
+
+test('handler returns ok and persists brief on agent success', function () {
+    [$team, $conversation] = writerConvWithResearch();
+
+    $newBrief = Brief::fromJson($conversation->brief)->withOutline([
         'angle' => 'a',
         'target_length_words' => 1500,
-        'sections' => [
-            ['heading' => 'Intro', 'purpose' => 'hook', 'claim_ids' => ['c1']],
-            ['heading' => 'Body', 'purpose' => 'evidence', 'claim_ids' => ['c2']],
-        ],
-    ], $priorTurnTools);
+        'sections' => [['heading' => 'h', 'purpose' => 'p', 'claim_ids' => ['c1']], ['heading' => 'h', 'purpose' => 'p', 'claim_ids' => ['c1']]],
+    ]);
 
-    expect(json_decode($result, true)['status'])->toBe('ok');
+    $agent = new FakeEditorAgent;
+    $agent->stubResult = AgentResult::ok($newBrief, ['kind' => 'outline', 'summary' => 'Outline ready · 2 sections · ~1500 words'], 'Outline ready · 2 sections · ~1500 words');
+
+    $handler = new CreateOutlineToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [], []);
+
+    $decoded = json_decode($result, true);
+    expect($decoded['status'])->toBe('ok');
+    expect($decoded['summary'])->toContain('2 sections');
+
+    $conversation->refresh();
+    expect(Brief::fromJson($conversation->brief)->hasOutline())->toBeTrue();
+});
+
+test('handler refuses second call (retry guard)', function () {
+    [$team, $conversation] = writerConvWithResearch();
+
+    $agent = new FakeEditorAgent;
+    $agent->stubResult = AgentResult::error('should not be called');
+
+    $handler = new CreateOutlineToolHandler($agent);
+    $priorTurnTools = [['name' => 'create_outline', 'args' => []]];
+
+    $result = $handler->execute($team, $conversation->id, [], $priorTurnTools);
+    $decoded = json_decode($result, true);
+
+    expect($decoded['status'])->toBe('error');
+    expect($decoded['message'])->toContain('Already retried');
+});
+
+test('handler propagates agent error', function () {
+    [$team, $conversation] = writerConvWithResearch();
+
+    $agent = new FakeEditorAgent;
+    $agent->stubResult = AgentResult::error('outline references unknown claim id: c99');
+
+    $handler = new CreateOutlineToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [], []);
+    $decoded = json_decode($result, true);
+
+    expect($decoded['status'])->toBe('error');
+    expect($decoded['message'])->toContain('c99');
 });
 
 test('toolSchema returns valid schema', function () {
     $schema = CreateOutlineToolHandler::toolSchema();
     expect($schema['function']['name'])->toBe('create_outline');
+    expect($schema['function']['parameters']['properties'])->toHaveKey('extra_context');
 });
