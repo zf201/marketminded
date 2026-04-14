@@ -12,7 +12,7 @@ class EditorAgent extends BaseAgent
     /** @var array<int, string> */
     private array $knownClaimIds = [];
 
-    final public function execute(Brief $brief, Team $team): AgentResult
+    public function execute(Brief $brief, Team $team): AgentResult
     {
         if (! $brief->hasResearch()) {
             return AgentResult::error('Cannot create outline without research. Run research_topic first.');

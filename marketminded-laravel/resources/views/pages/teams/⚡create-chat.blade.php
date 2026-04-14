@@ -497,7 +497,7 @@ new class extends Component
             'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
             'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
             'save_topics' => 'Saved ' . (json_decode($tool->result ?? '{}', true)['count'] ?? 0) . ' topics',
-            'research_topic' => 'Gathered ' . (json_decode($tool->result ?? '{}', true)['claim_count'] ?? 0) . ' claims',
+            'research_topic' => 'Gathered ' . count(json_decode($tool->result ?? '{}', true)['card']['claims'] ?? []) . ' claims',
             'create_outline' => 'Outline ready',
             'write_blog_post' => 'Draft created',
             'proofread_blog_post' => 'Revised',
