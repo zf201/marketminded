@@ -72,7 +72,7 @@ abstract class BaseAgent implements Agent
      */
     abstract protected function buildSummary(array $payload): string;
 
-    final public function execute(Brief $brief, Team $team): AgentResult
+    public function execute(Brief $brief, Team $team): AgentResult
     {
         $payload = $this->llmCall(
             $this->systemPrompt($brief, $team),
