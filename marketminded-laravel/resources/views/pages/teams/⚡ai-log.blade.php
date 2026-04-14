@@ -66,56 +66,62 @@ new class extends Component
 }; ?>
 
 <div>
-    <flux:heading size="xl">{{ __('AI Log') }}</flux:heading>
-    <flux:subheading>{{ __('AI usage and spend across all conversations.') }}</flux:subheading>
-
-    {{-- Summary cards --}}
-    <div class="mt-8 flex gap-4">
-        <flux:card class="flex-1 text-center">
-            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Total Cost (30d)') }}</flux:text>
-            <div class="mt-1 text-2xl font-semibold">${{ number_format($summary['total_cost'], 4) }}</div>
-        </flux:card>
-        <flux:card class="flex-1 text-center">
-            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('AI Messages') }}</flux:text>
-            <div class="mt-1 text-2xl font-semibold">{{ $summary['total_messages'] }}</div>
-        </flux:card>
-        <flux:card class="flex-1 text-center">
-            <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Total Tokens') }}</flux:text>
-            <div class="mt-1 text-2xl font-semibold">{{ number_format($summary['total_tokens']) }}</div>
-        </flux:card>
+    <div class="flex items-center justify-between px-6 py-3">
+        <div>
+            <flux:heading size="xl">{{ __('AI Log') }}</flux:heading>
+            <flux:subheading>{{ __('AI usage and spend across all conversations.') }}</flux:subheading>
+        </div>
     </div>
 
-    {{-- Log table --}}
-    <div class="mt-8">
-        @if (count($entries) > 0)
-            <flux:table>
-                <flux:table.columns>
-                    <flux:table.column>{{ __('Conversation') }}</flux:table.column>
-                    <flux:table.column>{{ __('Model') }}</flux:table.column>
-                    <flux:table.column align="end">{{ __('In Tokens') }}</flux:table.column>
-                    <flux:table.column align="end">{{ __('Out Tokens') }}</flux:table.column>
-                    <flux:table.column align="end">{{ __('Cost') }}</flux:table.column>
-                    <flux:table.column align="end">{{ __('When') }}</flux:table.column>
-                </flux:table.columns>
-
-                <flux:table.rows>
-                    @foreach ($entries as $entry)
-                        <flux:table.row>
-                            <flux:table.cell variant="strong">{{ Str::limit($entry['conversation_title'], 40) }}</flux:table.cell>
-                            <flux:table.cell>{{ $entry['model'] ? Str::afterLast($entry['model'], '/') : '—' }}</flux:table.cell>
-                            <flux:table.cell align="end">{{ number_format($entry['input_tokens']) }}</flux:table.cell>
-                            <flux:table.cell align="end">{{ number_format($entry['output_tokens']) }}</flux:table.cell>
-                            <flux:table.cell align="end">{{ $entry['cost'] > 0 ? '$' . number_format($entry['cost'], 4) : '—' }}</flux:table.cell>
-                            <flux:table.cell align="end">{{ $entry['created_at'] }}</flux:table.cell>
-                        </flux:table.row>
-                    @endforeach
-                </flux:table.rows>
-            </flux:table>
-        @else
-            <flux:card class="py-8 text-center">
-                <flux:icon name="chart-bar" class="mx-auto text-zinc-500" />
-                <flux:text class="mt-2">{{ __('No AI usage recorded yet.') }}</flux:text>
+    <div class="mx-auto max-w-5xl px-6 py-4">
+        {{-- Summary cards --}}
+        <div class="flex gap-4">
+            <flux:card class="flex-1 text-center">
+                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Total Cost (30d)') }}</flux:text>
+                <div class="mt-1 text-2xl font-semibold">${{ number_format($summary['total_cost'], 4) }}</div>
             </flux:card>
-        @endif
+            <flux:card class="flex-1 text-center">
+                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('AI Messages') }}</flux:text>
+                <div class="mt-1 text-2xl font-semibold">{{ $summary['total_messages'] }}</div>
+            </flux:card>
+            <flux:card class="flex-1 text-center">
+                <flux:text class="text-xs font-medium uppercase tracking-wide text-zinc-400">{{ __('Total Tokens') }}</flux:text>
+                <div class="mt-1 text-2xl font-semibold">{{ number_format($summary['total_tokens']) }}</div>
+            </flux:card>
+        </div>
+
+        {{-- Log table --}}
+        <div class="mt-8">
+            @if (count($entries) > 0)
+                <flux:table>
+                    <flux:table.columns>
+                        <flux:table.column>{{ __('Conversation') }}</flux:table.column>
+                        <flux:table.column>{{ __('Model') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('In Tokens') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Out Tokens') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Cost') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('When') }}</flux:table.column>
+                    </flux:table.columns>
+
+                    <flux:table.rows>
+                        @foreach ($entries as $entry)
+                            <flux:table.row>
+                                <flux:table.cell variant="strong">{{ Str::limit($entry['conversation_title'], 40) }}</flux:table.cell>
+                                <flux:table.cell>{{ $entry['model'] ? Str::afterLast($entry['model'], '/') : '—' }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ number_format($entry['input_tokens']) }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ number_format($entry['output_tokens']) }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ $entry['cost'] > 0 ? '$' . number_format($entry['cost'], 4) : '—' }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ $entry['created_at'] }}</flux:table.cell>
+                            </flux:table.row>
+                        @endforeach
+                    </flux:table.rows>
+                </flux:table>
+            @else
+                <flux:card class="py-8 text-center">
+                    <flux:icon name="chart-bar" class="mx-auto text-zinc-500" />
+                    <flux:text class="mt-2">{{ __('No AI usage recorded yet.') }}</flux:text>
+                </flux:card>
+            @endif
+        </div>
     </div>
 </div>
