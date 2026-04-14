@@ -107,3 +107,22 @@ test('Conversation contentPieces() returns linked pieces', function () {
 
     expect($conversation->contentPieces)->toHaveCount(1);
 });
+
+test('Conversation casts brief as array and accepts updates', function () {
+    $user = \App\Models\User::factory()->create();
+    $team = $user->currentTeam;
+
+    $conversation = \App\Models\Conversation::create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'title' => 'W',
+        'type' => 'writer',
+    ]);
+
+    expect($conversation->brief)->toBe([]);
+
+    $conversation->update(['brief' => ['topic' => ['id' => 1, 'title' => 'X']]]);
+    $conversation->refresh();
+
+    expect($conversation->brief)->toBe(['topic' => ['id' => 1, 'title' => 'X']]);
+});
