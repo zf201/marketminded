@@ -85,7 +85,7 @@ new class extends Component
                                             <flux:badge variant="pill" size="sm" class="shrink-0">{{ match($conversation->type) {
                                                 'brand' => __('Brand'),
                                                 'topics' => __('Topics'),
-                                                'write' => __('Write'),
+                                                'writer' => __('Writer'),
                                                 default => $conversation->type,
                                             } }}</flux:badge>
                                         @endif
