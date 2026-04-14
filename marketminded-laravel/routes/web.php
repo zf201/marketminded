@@ -17,8 +17,8 @@ Route::prefix('{current_team}')
         Route::livewire('create', 'pages::teams.create')->name('create');
         Route::livewire('create/{conversation}', 'pages::teams.create-chat')->name('create.chat');
         Route::livewire('topics', 'pages::teams.topics')->name('topics');
-            Route::livewire('content', 'pages::teams.content')->name('content.index');
-            Route::livewire('content/{contentPiece}', 'pages::teams.content-piece')->name('content.show');
+        Route::livewire('content', 'pages::teams.content')->name('content.index');
+        Route::livewire('content/{contentPiece}', 'pages::teams.content-piece')->name('content.show');
     });
 
 Route::middleware(['auth'])->group(function () {

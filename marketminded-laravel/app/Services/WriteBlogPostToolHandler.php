@@ -19,7 +19,9 @@ class WriteBlogPostToolHandler
             ]);
         }
 
-        if (ContentPiece::where('conversation_id', $conversationId)->exists()) {
+        if (ContentPiece::where('team_id', $team->id)
+            ->where('conversation_id', $conversationId)
+            ->exists()) {
             return json_encode([
                 'status' => 'error',
                 'message' => 'A blog post already exists for this conversation. Use update_blog_post to revise it.',
