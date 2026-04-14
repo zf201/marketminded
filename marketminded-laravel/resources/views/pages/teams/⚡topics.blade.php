@@ -56,19 +56,20 @@ new class extends Component
         </flux:button>
     </div>
 
-    @if ($this->topics->isEmpty())
-        <div class="py-20 text-center">
-            <flux:icon name="light-bulb" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
-            <flux:heading size="lg" class="mt-4">{{ __('No topics yet') }}</flux:heading>
-            <flux:subheading class="mt-1">{{ __('Start a Brainstorm topics conversation to discover content ideas.') }}</flux:subheading>
-            <div class="mt-6">
-                <flux:button variant="primary" icon="plus" :href="route('create')" wire:navigate>
-                    {{ __('New brainstorm') }}
-                </flux:button>
+    <div class="mx-auto max-w-5xl px-6 py-4">
+        @if ($this->topics->isEmpty())
+            <div class="py-20 text-center">
+                <flux:icon name="light-bulb" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
+                <flux:heading size="lg" class="mt-4">{{ __('No topics yet') }}</flux:heading>
+                <flux:subheading class="mt-1">{{ __('Start a Brainstorm topics conversation to discover content ideas.') }}</flux:subheading>
+                <div class="mt-6">
+                    <flux:button variant="primary" icon="plus" :href="route('create')" wire:navigate>
+                        {{ __('New brainstorm') }}
+                    </flux:button>
+                </div>
             </div>
-        </div>
-    @else
-        <div class="grid gap-2 px-6 py-4 sm:grid-cols-2">
+        @else
+            <div class="grid gap-2 sm:grid-cols-2">
             @foreach ($this->topics as $topic)
                 <div class="flex flex-col">
                     <flux:card class="flex flex-1 flex-col p-4">
@@ -129,4 +130,5 @@ new class extends Component
             @endforeach
         </div>
     @endif
+    </div>
 </div>
