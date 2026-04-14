@@ -408,7 +408,12 @@ new class extends Component
 
         $content = str_replace(["\\'", '\\"', '\\n'], ["'", '"', "\n"], $content);
 
-        return $content;
+        // Collapse runs of 3+ newlines (multiple blank lines) down to a single
+        // blank line. These appear when the model emits text chunks between
+        // tool calls and each chunk starts/ends with its own newlines.
+        $content = preg_replace("/\n{3,}/", "\n\n", $content);
+
+        return trim($content);
     }
 
     /**
