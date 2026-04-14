@@ -5,11 +5,15 @@ use App\Models\Message;
 use App\Models\Team;
 use App\Services\BrandIntelligenceToolHandler;
 use App\Services\ChatPromptBuilder;
+use App\Services\CreateOutlineToolHandler;
 use App\Services\OpenRouterClient;
+use App\Services\ResearchTopicToolHandler;
 use App\Services\StreamResult;
 use App\Services\ToolEvent;
 use App\Services\TopicToolHandler;
+use App\Services\UpdateBlogPostToolHandler;
 use App\Services\UrlFetcher;
+use App\Services\WriteBlogPostToolHandler;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -91,6 +95,35 @@ new class extends Component
             return;
         }
 
+        // Writer mode commands intercept
+        if ($this->conversation->type === 'writer') {
+            $lower = strtolower($content);
+            if ($lower === '!autopilot' || $lower === '!checkpoint') {
+                $mode = ltrim($lower, '!');
+                $this->conversation->update(['writer_mode' => $mode]);
+                $this->conversation->refresh();
+                $this->writerMode = $mode;
+
+                $notice = $mode === 'autopilot'
+                    ? __('Switched to autopilot mode. I\'ll run research, outline, and write in sequence.')
+                    : __('Switched to checkpoint mode. I\'ll pause after research and after the outline for your approval.');
+
+                Message::create([
+                    'conversation_id' => $this->conversation->id,
+                    'role' => 'assistant',
+                    'content' => $notice,
+                    'metadata' => ['command_result' => true],
+                ]);
+                $this->messages[] = [
+                    'role' => 'assistant',
+                    'content' => $notice,
+                    'metadata' => ['command_result' => true],
+                ];
+                $this->prompt = '';
+                return;
+            }
+        }
+
         if (! $this->teamModel->openrouter_api_key) {
             \Flux\Flux::toast(variant: 'danger', text: __('OpenRouter API key required. Add it in Team Settings.'));
             return;
@@ -124,7 +157,8 @@ new class extends Component
 
         $type = $this->conversation->type;
         $this->teamModel->refresh();
-        $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel);
+        $this->conversation->load('topic');
+        $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel, $this->conversation);
         $tools = ChatPromptBuilder::tools($type);
 
         $apiMessages = collect($this->messages)
@@ -140,10 +174,17 @@ new class extends Component
 
         $brandHandler = new BrandIntelligenceToolHandler;
         $topicHandler = new TopicToolHandler;
+        $researchHandler = new ResearchTopicToolHandler;
+        $outlineHandler = new CreateOutlineToolHandler;
+        $writeHandler = new WriteBlogPostToolHandler;
+        $updateHandler = new UpdateBlogPostToolHandler;
         $team = $this->teamModel;
         $conversation = $this->conversation;
 
-        $toolExecutor = function (string $name, array $args) use ($brandHandler, $topicHandler, $team, $conversation): string {
+        $toolExecutor = function (string $name, array $args) use (
+            $brandHandler, $topicHandler, $researchHandler, $outlineHandler,
+            $writeHandler, $updateHandler, $team, $conversation
+        ): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
             }
@@ -152,6 +193,18 @@ new class extends Component
             }
             if ($name === 'fetch_url') {
                 return (new UrlFetcher)->fetch($args['url'] ?? '');
+            }
+            if ($name === 'research_topic') {
+                return $researchHandler->execute($team, $conversation->id, $args, $conversation->topic);
+            }
+            if ($name === 'create_outline') {
+                return $outlineHandler->execute($team, $conversation->id, $args);
+            }
+            if ($name === 'write_blog_post') {
+                return $writeHandler->execute($team, $conversation->id, $args, $conversation->topic);
+            }
+            if ($name === 'update_blog_post') {
+                return $updateHandler->execute($team, $conversation->id, $args);
             }
             return "Unknown tool: {$name}";
         };
@@ -302,6 +355,10 @@ new class extends Component
                 'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
                 'update_brand_intelligence' => 'Updating brand profile',
                 'save_topics' => 'Saving topics...',
+                'research_topic' => 'Researching topic...',
+                'create_outline' => 'Building outline...',
+                'write_blog_post' => 'Writing blog post...',
+                'update_blog_post' => 'Revising...',
                 default => $activeTool->name,
             };
             $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
@@ -335,6 +392,10 @@ new class extends Component
             'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
             'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
             'save_topics' => 'Saved ' . (json_decode($tool->result ?? '{}', true)['count'] ?? 0) . ' topics',
+            'research_topic' => 'Gathered ' . (json_decode($tool->result ?? '{}', true)['claim_count'] ?? 0) . ' claims',
+            'create_outline' => 'Outline ready',
+            'write_blog_post' => 'Draft created',
+            'update_blog_post' => 'Revised (v' . (json_decode($tool->result ?? '{}', true)['version'] ?? '?') . ')',
             default => $tool->name,
         };
 
@@ -386,6 +447,11 @@ new class extends Component
                     default => $conversation->type,
                 } }}</flux:badge>
             @endif
+                @if ($conversation->type === 'writer' && $writerMode)
+                    <flux:badge variant="pill" size="sm" color="{{ $writerMode === 'autopilot' ? 'indigo' : 'amber' }}">
+                        {{ $writerMode === 'autopilot' ? __('Autopilot') : __('Checkpoint') }}
+                    </flux:badge>
+                @endif
         </div>
         @if ($this->conversationStats['context'] > 0)
             <flux:tooltip content="{{ __('Current context size. Longer chats send more tokens per message -- start a new conversation for a new task to keep costs low.') }}" position="bottom">
