@@ -17,8 +17,13 @@ moving between pages feels consistent.
 
 Adopt a single standard for all content pages:
 
-- **Header**: `flex items-center justify-between px-6 py-3`
+- **Header**: `mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-3`
 - **Content**: `mx-auto max-w-5xl px-6 py-4`
+
+Both rows are capped at the same `max-w-5xl` so the header's heading/button
+sit flush with the left/right edges of the content block directly below. A
+header that spans the full sidebar-adjacent width while content caps at 5xl
+creates a visible misalignment; matching the caps fixes that.
 
 `max-w-5xl` (1024px) is the chosen width. Rationale: it is wide enough for
 cards, tables, and two-column grids to breathe, but narrow enough to keep
