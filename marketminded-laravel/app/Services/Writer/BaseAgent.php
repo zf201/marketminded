@@ -74,17 +74,46 @@ abstract class BaseAgent implements Agent
 
     public function execute(Brief $brief, Team $team): AgentResult
     {
+        $systemPrompt = $this->systemPrompt($brief, $team);
+        $submitToolName = $this->submitToolSchema()['function']['name'] ?? '?';
+        $model = $this->model($team);
+
         $payload = $this->llmCall(
-            $this->systemPrompt($brief, $team),
+            $systemPrompt,
             array_merge([$this->submitToolSchema()], $this->additionalTools()),
-            $this->model($team),
+            $model,
             $this->temperature(),
             $this->useServerTools(),
             $team->openrouter_api_key,
         );
 
+        // Append a sub-agent log line to storage/logs/agent-debug.log so we can
+        // see what each sub-agent's LLM actually did. One JSON line per call.
+        try {
+            $logPath = storage_path('logs/agent-debug.log');
+            file_put_contents(
+                $logPath,
+                json_encode([
+                    'ts' => now()->toIso8601String(),
+                    'agent' => static::class,
+                    'model' => $model,
+                    'submit_tool' => $submitToolName,
+                    'system_prompt_length' => strlen($systemPrompt),
+                    'result_is_array' => is_array($payload),
+                    'result' => is_array($payload) ? $payload : null,
+                    'text_response' => $this->lastTextResponse !== null ? mb_substr($this->lastTextResponse, 0, 2000) : null,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n",
+                FILE_APPEND | LOCK_EX,
+            );
+        } catch (\Throwable) {
+            // swallow — don't let logging break the agent
+        }
+
         if ($payload === null) {
-            return AgentResult::error('Sub-agent did not call the submit tool. Check the agent prompt and try again.');
+            $hint = $this->lastTextResponse !== null
+                ? ' Model said: "' . mb_substr($this->lastTextResponse, 0, 300) . '"'
+                : '';
+            return AgentResult::error("Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}");
         }
 
         $err = $this->validate($payload);
@@ -110,6 +139,9 @@ abstract class BaseAgent implements Agent
      * @param array<int, array<string, mixed>> $tools
      * @return array<string, mixed>|null
      */
+    /** Captured when llmCall's response is text (not a tool call) — used for diagnostics. */
+    protected ?string $lastTextResponse = null;
+
     protected function llmCall(
         string $systemPrompt,
         array $tools,
@@ -140,7 +172,13 @@ abstract class BaseAgent implements Agent
             useServerTools: $useServerTools,
         );
 
-        return is_array($result->data) ? $result->data : null;
+        if (is_array($result->data)) {
+            $this->lastTextResponse = null;
+            return $result->data;
+        }
+
+        $this->lastTextResponse = is_string($result->data) ? $result->data : null;
+        return null;
     }
 
     protected function extraContextBlock(): string
