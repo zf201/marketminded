@@ -153,7 +153,11 @@ new class extends Component
     public function ask(): void
     {
         set_time_limit(300);
-        ignore_user_abort(false);
+        // Let the PHP process run to completion even if the client stops the
+        // stream — otherwise the finally block (which persists the message
+        // and writes chat-debug.log) may be killed mid-flight, losing the
+        // debug trace for aborted attempts.
+        ignore_user_abort(true);
 
         $type = $this->conversation->type;
         $this->teamModel->refresh();
@@ -497,10 +501,24 @@ new class extends Component
             'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
             'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
             'save_topics' => 'Saved ' . (json_decode($tool->result ?? '{}', true)['count'] ?? 0) . ' topics',
-            'research_topic' => 'Gathered ' . count(json_decode($tool->result ?? '{}', true)['card']['claims'] ?? []) . ' claims',
-            'create_outline' => 'Outline ready',
-            'write_blog_post' => 'Draft created',
-            'proofread_blog_post' => 'Revised',
+            'research_topic' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'ok'
+                    ? 'Gathered ' . count($r['card']['claims'] ?? []) . ' claims'
+                    : 'Research failed';
+            })(),
+            'create_outline' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'ok' ? 'Outline ready' : 'Outline failed';
+            })(),
+            'write_blog_post' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'ok' ? 'Draft created' : 'Draft failed';
+            })(),
+            'proofread_blog_post' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'ok' ? 'Revised' : 'Proofread failed';
+            })(),
             default => $tool->name,
         };
 
