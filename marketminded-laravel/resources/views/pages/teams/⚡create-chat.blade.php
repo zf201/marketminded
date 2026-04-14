@@ -280,7 +280,69 @@ new class extends Component
                 ];
             }
 
+            $this->writeChatDebugLog(
+                systemPrompt: $systemPrompt,
+                tools: $tools,
+                apiMessages: $apiMessages,
+                responseContent: $fullContent,
+                completedTools: $completedTools,
+                streamResult: $streamResult,
+                interrupted: $interrupted,
+            );
+
             $this->isStreaming = false;
+        }
+    }
+
+    /**
+     * Append a structured JSON line to storage/logs/chat-debug.log for each
+     * completed ask() turn. Captures everything needed to diagnose why a model
+     * did or did not call tools: full system prompt, registered tool schemas,
+     * conversation history sent, raw response, every tool invocation with args
+     * and result, plus token/cost/web-search metrics.
+     */
+    private function writeChatDebugLog(
+        string $systemPrompt,
+        array $tools,
+        array $apiMessages,
+        string $responseContent,
+        array $completedTools,
+        ?StreamResult $streamResult,
+        bool $interrupted,
+    ): void {
+        $entry = [
+            'ts' => now()->toIso8601String(),
+            'conversation_id' => $this->conversation->id,
+            'type' => $this->conversation->type,
+            'writer_mode' => $this->conversation->writer_mode,
+            'topic_id' => $this->conversation->topic_id,
+            'team_id' => $this->teamModel->id,
+            'model' => $this->teamModel->fast_model,
+            'system_prompt' => $systemPrompt,
+            'tool_schemas' => array_map(fn ($t) => $t['function']['name'] ?? ($t['type'] ?? 'unknown'), $tools),
+            'history_sent' => $apiMessages,
+            'response_content' => $responseContent,
+            'tool_calls' => array_map(fn (ToolEvent $t) => [
+                'name' => $t->name,
+                'args' => $t->arguments,
+                'result' => mb_substr((string) ($t->result ?? ''), 0, 2000),
+            ], $completedTools),
+            'input_tokens' => $streamResult?->inputTokens ?? 0,
+            'output_tokens' => $streamResult?->outputTokens ?? 0,
+            'cost' => (float) ($streamResult?->cost ?? 0),
+            'web_searches' => (int) ($streamResult?->webSearchRequests ?? 0),
+            'interrupted' => $interrupted,
+        ];
+
+        try {
+            $path = storage_path('logs/chat-debug.log');
+            file_put_contents(
+                $path,
+                json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n",
+                FILE_APPEND | LOCK_EX,
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('chat-debug log write failed', ['error' => $e->getMessage()]);
         }
     }
 
