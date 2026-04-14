@@ -9,9 +9,13 @@ use App\Models\Topic;
 
 class WriteBlogPostToolHandler
 {
-    public function execute(Team $team, int $conversationId, array $data, ?Topic $topic = null): string
+    /**
+     * @param array $priorTurnTools Tool calls completed earlier in the same ask() turn.
+     *                              Each entry: ['name' => string, 'args' => array]
+     */
+    public function execute(Team $team, int $conversationId, array $data, ?Topic $topic = null, array $priorTurnTools = []): string
     {
-        $missing = $this->missingPrereqs($conversationId);
+        $missing = $this->missingPrereqs($conversationId, $priorTurnTools);
         if (! empty($missing)) {
             return json_encode([
                 'status' => 'error',
@@ -65,13 +69,24 @@ class WriteBlogPostToolHandler
     }
 
     /**
-     * Returns an array of prerequisite tool names that were not found in the conversation history.
+     * Returns an array of prerequisite tool names that were not found in either the
+     * in-flight tool calls for this turn or the persisted conversation history.
      */
-    private function missingPrereqs(int $conversationId): array
+    private function missingPrereqs(int $conversationId, array $priorTurnTools = []): array
     {
         $needed = ['research_topic', 'create_outline'];
         $found = [];
 
+        // Check in-flight tool calls from the current ask() turn first — the
+        // assistant message isn't persisted until after the stream ends.
+        foreach ($priorTurnTools as $tool) {
+            $name = $tool['name'] ?? null;
+            if (in_array($name, $needed, true)) {
+                $found[$name] = true;
+            }
+        }
+
+        // Fall back to persisted history (for cross-turn continuity, e.g. checkpoint mode).
         $messages = Message::where('conversation_id', $conversationId)
             ->where('role', 'assistant')
             ->get();

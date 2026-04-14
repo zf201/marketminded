@@ -115,6 +115,25 @@ test('write_blog_post refuses when piece already exists for conversation', funct
     expect($decoded['message'])->toContain('update_blog_post');
 });
 
+test('write_blog_post accepts in-turn research_topic and create_outline (no persisted messages)', function () {
+    [$team, $conversation, $topic] = writerConversationWithTopic();
+
+    $priorTurnTools = [
+        ['name' => 'research_topic', 'args' => []],
+        ['name' => 'create_outline', 'args' => []],
+    ];
+
+    $handler = new WriteBlogPostToolHandler;
+    $result = $handler->execute($team, $conversation->id, [
+        'title' => 'T',
+        'body' => 'B',
+    ], $topic, $priorTurnTools);
+
+    $decoded = json_decode($result, true);
+    expect($decoded['status'])->toBe('ok');
+    expect($decoded['version'])->toBe(1);
+});
+
 test('toolSchema returns valid schema', function () {
     $schema = WriteBlogPostToolHandler::toolSchema();
     expect($schema['function']['name'])->toBe('write_blog_post');

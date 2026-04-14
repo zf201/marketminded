@@ -93,6 +93,34 @@ test('execute errors when no research_topic output exists', function () {
     expect($decoded['message'])->toContain('research_topic');
 });
 
+test('execute accepts outline using in-turn research_topic result (no DB message)', function () {
+    $c = makeWriterConversation();
+    // NOT adding a persisted research_topic message. Pass it via priorTurnTools.
+    $priorTurnTools = [[
+        'name' => 'research_topic',
+        'args' => [
+            'topic_summary' => 's',
+            'claims' => [
+                ['id' => 'c1', 'text' => 't', 'sources' => [['url' => 'u', 'title' => 't']]],
+                ['id' => 'c2', 'text' => 't', 'sources' => [['url' => 'u', 'title' => 't']]],
+            ],
+        ],
+    ]];
+
+    $handler = new CreateOutlineToolHandler;
+    $result = $handler->execute($c->team, $c->id, [
+        'title' => 't',
+        'angle' => 'a',
+        'target_length_words' => 1500,
+        'sections' => [
+            ['heading' => 'Intro', 'purpose' => 'hook', 'claim_ids' => ['c1']],
+            ['heading' => 'Body', 'purpose' => 'evidence', 'claim_ids' => ['c2']],
+        ],
+    ], $priorTurnTools);
+
+    expect(json_decode($result, true)['status'])->toBe('ok');
+});
+
 test('toolSchema returns valid schema', function () {
     $schema = CreateOutlineToolHandler::toolSchema();
     expect($schema['function']['name'])->toBe('create_outline');

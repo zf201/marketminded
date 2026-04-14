@@ -7,9 +7,14 @@ use App\Models\Team;
 
 class CreateOutlineToolHandler
 {
-    public function execute(Team $team, int $conversationId, array $data): string
+    /**
+     * @param array $priorTurnTools Tool calls completed earlier in the same ask() turn.
+     *                              Each entry: ['name' => string, 'args' => array]
+     */
+    public function execute(Team $team, int $conversationId, array $data, array $priorTurnTools = []): string
     {
-        $knownIds = $this->latestResearchClaimIds($conversationId);
+        $knownIds = $this->claimIdsFromPriorTurnTools($priorTurnTools)
+            ?? $this->latestResearchClaimIds($conversationId);
 
         if ($knownIds === null) {
             return json_encode([
@@ -56,6 +61,24 @@ class CreateOutlineToolHandler
                     $claims = $tool['args']['claims'] ?? [];
                     return array_map(fn ($c) => (string) ($c['id'] ?? ''), $claims);
                 }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Look for research_topic in tool calls made earlier in the same ask() turn.
+     * The assistant message isn't persisted until the turn finishes, so
+     * latestResearchClaimIds() can't see in-flight tool calls — this does.
+     *
+     * @return array<string>|null
+     */
+    private function claimIdsFromPriorTurnTools(array $priorTurnTools): ?array
+    {
+        foreach ($priorTurnTools as $tool) {
+            if (($tool['name'] ?? null) === 'research_topic') {
+                $claims = $tool['args']['claims'] ?? [];
+                return array_map(fn ($c) => (string) ($c['id'] ?? ''), $claims);
             }
         }
         return null;

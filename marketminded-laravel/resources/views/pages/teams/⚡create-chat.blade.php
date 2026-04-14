@@ -181,9 +181,15 @@ new class extends Component
         $team = $this->teamModel;
         $conversation = $this->conversation;
 
+        // Tool calls completed earlier in this ask() turn. The writer's gate
+        // checks this first so research_topic results are visible to
+        // create_outline and write_blog_post within the same turn (before the
+        // assistant message is persisted).
+        $priorTurnTools = [];
+
         $toolExecutor = function (string $name, array $args) use (
             $brandHandler, $topicHandler, $researchHandler, $outlineHandler,
-            $writeHandler, $updateHandler, $team, $conversation
+            $writeHandler, $updateHandler, $team, $conversation, &$priorTurnTools
         ): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
@@ -195,13 +201,19 @@ new class extends Component
                 return (new UrlFetcher)->fetch($args['url'] ?? '');
             }
             if ($name === 'research_topic') {
-                return $researchHandler->execute($team, $conversation->id, $args, $conversation->topic);
+                $result = $researchHandler->execute($team, $conversation->id, $args, $conversation->topic);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                return $result;
             }
             if ($name === 'create_outline') {
-                return $outlineHandler->execute($team, $conversation->id, $args);
+                $result = $outlineHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                return $result;
             }
             if ($name === 'write_blog_post') {
-                return $writeHandler->execute($team, $conversation->id, $args, $conversation->topic);
+                $result = $writeHandler->execute($team, $conversation->id, $args, $conversation->topic, $priorTurnTools);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                return $result;
             }
             if ($name === 'update_blog_post') {
                 return $updateHandler->execute($team, $conversation->id, $args);
