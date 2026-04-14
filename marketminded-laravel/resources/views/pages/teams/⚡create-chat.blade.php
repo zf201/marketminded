@@ -11,7 +11,7 @@ use App\Services\ResearchTopicToolHandler;
 use App\Services\StreamResult;
 use App\Services\ToolEvent;
 use App\Services\TopicToolHandler;
-use App\Services\UpdateBlogPostToolHandler;
+use App\Services\ProofreadBlogPostToolHandler;
 use App\Services\UrlFetcher;
 use App\Services\WriteBlogPostToolHandler;
 use Illuminate\Support\Facades\Auth;
@@ -158,6 +158,22 @@ new class extends Component
         $type = $this->conversation->type;
         $this->teamModel->refresh();
         $this->conversation->load('topic');
+
+        // Hydrate brief.topic on first writer turn if missing (also covers
+        // conversations created before the brief column existed).
+        if ($type === 'writer' && $this->conversation->topic && empty(($this->conversation->brief ?? [])['topic'])) {
+            $topic = $this->conversation->topic;
+            $brief = $this->conversation->brief ?? [];
+            $brief['topic'] = [
+                'id' => $topic->id,
+                'title' => $topic->title,
+                'angle' => $topic->angle,
+                'sources' => $topic->sources ?? [],
+            ];
+            $this->conversation->update(['brief' => $brief]);
+            $this->conversation->refresh();
+        }
+
         $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel, $this->conversation);
         $tools = ChatPromptBuilder::tools($type);
 
@@ -177,7 +193,7 @@ new class extends Component
         $researchHandler = new ResearchTopicToolHandler;
         $outlineHandler = new CreateOutlineToolHandler;
         $writeHandler = new WriteBlogPostToolHandler;
-        $updateHandler = new UpdateBlogPostToolHandler;
+        $proofreadHandler = new ProofreadBlogPostToolHandler;
         $team = $this->teamModel;
         $conversation = $this->conversation;
 
@@ -189,7 +205,7 @@ new class extends Component
 
         $toolExecutor = function (string $name, array $args) use (
             $brandHandler, $topicHandler, $researchHandler, $outlineHandler,
-            $writeHandler, $updateHandler, $team, $conversation, &$priorTurnTools
+            $writeHandler, $proofreadHandler, $team, $conversation, &$priorTurnTools
         ): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
@@ -201,7 +217,7 @@ new class extends Component
                 return (new UrlFetcher)->fetch($args['url'] ?? '');
             }
             if ($name === 'research_topic') {
-                $result = $researchHandler->execute($team, $conversation->id, $args, $conversation->topic);
+                $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args];
                 return $result;
             }
@@ -211,12 +227,14 @@ new class extends Component
                 return $result;
             }
             if ($name === 'write_blog_post') {
-                $result = $writeHandler->execute($team, $conversation->id, $args, $conversation->topic, $priorTurnTools);
+                $result = $writeHandler->execute($team, $conversation->id, $args, $priorTurnTools);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args];
                 return $result;
             }
-            if ($name === 'update_blog_post') {
-                return $updateHandler->execute($team, $conversation->id, $args);
+            if ($name === 'proofread_blog_post') {
+                $result = $proofreadHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                return $result;
             }
             return "Unknown tool: {$name}";
         };
@@ -257,10 +275,17 @@ new class extends Component
 
             $metadata = [];
             if (! empty($completedTools)) {
-                $metadata['tools'] = collect($completedTools)->map(fn (ToolEvent $t) => [
-                    'name' => $t->name,
-                    'args' => $t->arguments,
-                ])->toArray();
+                $metadata['tools'] = collect($completedTools)->map(function (ToolEvent $t) {
+                    $entry = [
+                        'name' => $t->name,
+                        'args' => $t->arguments,
+                    ];
+                    $result = json_decode($t->result ?? '{}', true);
+                    if (isset($result['card'])) {
+                        $entry['card'] = $result['card'];
+                    }
+                    return $entry;
+                })->toArray();
             }
             if ($streamResult?->webSearchRequests > 0) {
                 $metadata['web_searches'] = $streamResult->webSearchRequests;
@@ -437,7 +462,7 @@ new class extends Component
                 'research_topic' => 'Researching topic...',
                 'create_outline' => 'Building outline...',
                 'write_blog_post' => 'Writing blog post...',
-                'update_blog_post' => 'Revising...',
+                'proofread_blog_post' => 'Proofreading...',
                 default => $activeTool->name,
             };
             $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
@@ -475,7 +500,7 @@ new class extends Component
             'research_topic' => 'Gathered ' . (json_decode($tool->result ?? '{}', true)['claim_count'] ?? 0) . ' claims',
             'create_outline' => 'Outline ready',
             'write_blog_post' => 'Draft created',
-            'update_blog_post' => 'Revised (v' . (json_decode($tool->result ?? '{}', true)['version'] ?? '?') . ')',
+            'proofread_blog_post' => 'Revised',
             default => $tool->name,
         };
 
@@ -516,32 +541,83 @@ new class extends Component
     {
         $html = '';
         foreach ($completedTools as $tool) {
-            if (! in_array($tool->name, ['write_blog_post', 'update_blog_post'], true)) {
-                continue;
-            }
             $result = json_decode($tool->result ?? '{}', true);
             if (($result['status'] ?? '') !== 'ok') {
                 continue;
             }
-            $piece = \App\Models\ContentPiece::where('team_id', $this->teamModel->id)
-                ->find($result['content_piece_id'] ?? 0);
-            if (! $piece) {
-                continue;
-            }
-            $url = route('content.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece->id]);
-            $preview = trim(mb_substr(strip_tags($piece->body), 0, 200));
-            $badge = $tool->name === 'write_blog_post' ? __('Draft created') : __('Revised');
 
-            $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
-            $html .= '<div class="flex items-center justify-between mb-1">';
-            $html .= '<span class="text-xs text-green-400">&#10003; ' . e($badge) . ' &middot; v' . e($piece->current_version) . '</span>';
-            $html .= '<a href="' . e($url) . '" class="text-xs text-indigo-400 hover:text-indigo-300">' . e(__('Open')) . ' &rarr;</a>';
-            $html .= '</div>';
-            $html .= '<div class="text-sm font-semibold text-zinc-200">' . e($piece->title) . '</div>';
-            $html .= '<div class="mt-1 text-xs text-zinc-400 line-clamp-3">' . e($preview) . '</div>';
-            $html .= '</div>';
+            $card = $result['card'] ?? null;
+            $kind = $card['kind'] ?? null;
+
+            if ($tool->name === 'research_topic' && $kind === 'research') {
+                $html .= $this->renderResearchCard($card);
+            } elseif ($tool->name === 'create_outline' && $kind === 'outline') {
+                $html .= $this->renderOutlineCard($card);
+            } elseif (in_array($tool->name, ['write_blog_post', 'proofread_blog_post'], true)) {
+                $piece = \App\Models\ContentPiece::where('team_id', $this->teamModel->id)
+                    ->where('conversation_id', $this->conversation->id)
+                    ->first();
+                if ($piece) {
+                    $html .= $this->renderContentPieceCard($piece, $tool->name);
+                }
+            }
         }
         return $html;
+    }
+
+    private function renderResearchCard(array $card): string
+    {
+        $summary = e($card['summary'] ?? 'Research complete');
+        $count = count($card['claims'] ?? []);
+        return sprintf(
+            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="text-xs text-purple-400">&#10003; %s</div>'
+            . '<div class="mt-1 text-xs text-zinc-400">%d structured claims with source attribution</div>'
+            . '</div>',
+            $summary,
+            $count,
+        );
+    }
+
+    private function renderOutlineCard(array $card): string
+    {
+        $summary = e($card['summary'] ?? 'Outline ready');
+        $sections = $card['sections'] ?? [];
+        $sectionList = collect($sections)
+            ->map(fn ($s) => '<li class="text-xs text-zinc-400">' . e($s['heading']) . '</li>')
+            ->implode('');
+        return sprintf(
+            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="text-xs text-blue-400">&#10003; %s</div>'
+            . '<ul class="mt-1 list-disc pl-5">%s</ul>'
+            . '</div>',
+            $summary,
+            $sectionList,
+        );
+    }
+
+    private function renderContentPieceCard(\App\Models\ContentPiece $piece, string $toolName): string
+    {
+        $url = route('content.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece->id]);
+        $preview = trim(mb_substr(strip_tags($piece->body), 0, 200));
+        $badge = $toolName === 'write_blog_post' ? __('Draft created') : __('Revised');
+
+        return sprintf(
+            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="flex items-center justify-between mb-1">'
+            . '<span class="text-xs text-green-400">&#10003; %s &middot; v%d</span>'
+            . '<a href="%s" class="text-xs text-indigo-400 hover:text-indigo-300">%s &rarr;</a>'
+            . '</div>'
+            . '<div class="text-sm font-semibold text-zinc-200">%s</div>'
+            . '<div class="mt-1 text-xs text-zinc-400 line-clamp-3">%s</div>'
+            . '</div>',
+            e($badge),
+            e($piece->current_version),
+            e($url),
+            e(__('Open')),
+            e($piece->title),
+            e($preview),
+        );
     }
 }; ?>
 
@@ -655,11 +731,29 @@ new class extends Component
                             @endif
                         @endforeach
 
-                        {{-- Content piece cards from history --}}
+                        {{-- Sub-agent cards from history --}}
                         @foreach ($message['metadata']['tools'] ?? [] as $tool)
-                            @if ($tool['name'] === 'write_blog_post' || $tool['name'] === 'update_blog_post')
+                            @php
+                                $card = $tool['card'] ?? null;
+                                $kind = $card['kind'] ?? null;
+                            @endphp
+
+                            @if ($tool['name'] === 'research_topic' && $kind === 'research')
+                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                    <div class="text-xs text-purple-400">&#10003; {{ $card['summary'] ?? 'Research complete' }}</div>
+                                    <div class="mt-1 text-xs text-zinc-400">{{ count($card['claims'] ?? []) }} structured claims with source attribution</div>
+                                </div>
+                            @elseif ($tool['name'] === 'create_outline' && $kind === 'outline')
+                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                    <div class="text-xs text-blue-400">&#10003; {{ $card['summary'] ?? 'Outline ready' }}</div>
+                                    <ul class="mt-1 list-disc pl-5">
+                                        @foreach ($card['sections'] ?? [] as $s)
+                                            <li class="text-xs text-zinc-400">{{ $s['heading'] }}</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @elseif (in_array($tool['name'], ['write_blog_post', 'proofread_blog_post'], true))
                                 @php
-                                    // Each writer conversation has at most one piece; history cards reflect its latest state.
                                     $piece = \App\Models\ContentPiece::where('team_id', $teamModel->id)
                                         ->where('conversation_id', $conversation->id)
                                         ->first();
