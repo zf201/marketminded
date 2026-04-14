@@ -376,7 +376,7 @@ new class extends Component
             new MutationObserver(scroll).observe(el, { childList: true, subtree: true, characterData: true });
         "
     >
-        <div class="mx-auto flex max-w-3xl flex-col-reverse px-6 py-4">
+        <div class="mx-auto flex max-w-5xl flex-col-reverse px-6 py-4">
             {{-- Streaming response --}}
             @if ($isStreaming)
                 <div class="mb-6">
@@ -498,7 +498,7 @@ new class extends Component
 
     {{-- Input (only shown after type is selected) --}}
     @if ($conversation->type && !($conversation->type === 'topics' && !$topicsMode && empty($messages)))
-        <div class="mx-auto w-full max-w-3xl px-6 pb-4 pt-2">
+        <div class="mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
             @if ($isStreaming)
                 <div class="flex justify-center">
                     <flux:button variant="danger" size="sm" icon="stop-circle" x-on:click="window.location.reload()">
