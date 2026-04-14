@@ -25,6 +25,10 @@ new class extends Component
 
     public ?string $topicsMode = null;
 
+    public ?int $topicId = null;
+
+    public ?string $writerMode = null;
+
     public array $messages = [];
 
     public function mount(Team $current_team, Conversation $conversation): void
@@ -32,6 +36,8 @@ new class extends Component
         $this->teamModel = $current_team;
         $this->conversation = $conversation;
         $this->loadMessages();
+        $this->topicId = $this->conversation->topic_id;
+        $this->writerMode = $this->conversation->writer_mode;
     }
 
     public function selectType(string $type): void
@@ -47,6 +53,33 @@ new class extends Component
         if ($mode === 'discover') {
             $this->prompt = __('Search for current trends and news in my industry and propose 3-5 content topics.');
             $this->submitPrompt();
+        }
+    }
+
+    public function selectWriterTopic(int $topicId): void
+    {
+        $topic = \App\Models\Topic::where('team_id', $this->teamModel->id)
+            ->where('status', 'available')
+            ->findOrFail($topicId);
+
+        $this->conversation->update(['topic_id' => $topic->id]);
+        $this->conversation->refresh();
+        $this->topicId = $topic->id;
+    }
+
+    public function selectWriterMode(string $mode): void
+    {
+        if (! in_array($mode, ['autopilot', 'checkpoint'], true)) {
+            return;
+        }
+
+        $this->conversation->update(['writer_mode' => $mode]);
+        $this->conversation->refresh();
+        $this->writerMode = $mode;
+
+        $topic = $this->conversation->topic;
+        if ($topic) {
+            $this->prompt = __('Let\'s write a blog post about: :title', ['title' => $topic->title]);
         }
     }
 
@@ -349,7 +382,7 @@ new class extends Component
                 <flux:badge variant="pill" size="sm">{{ match($conversation->type) {
                     'brand' => __('Brand Knowledge'),
                     'topics' => __('Brainstorm'),
-                    'write' => __('Write'),
+                    'writer' => __('Writer'),
                     default => $conversation->type,
                 } }}</flux:badge>
             @endif
@@ -450,7 +483,7 @@ new class extends Component
                     <flux:heading size="xl" class="mb-2">{{ __('What would you like to create?') }}</flux:heading>
                     <flux:subheading class="mb-8">{{ __('Choose a mode to get started.') }}</flux:subheading>
 
-                    <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-3">
+                    <div class="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
                         <button wire:click="selectType('brand')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
                             <flux:icon name="building-storefront" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
                             <flux:heading size="sm">{{ __('Build brand knowledge') }}</flux:heading>
@@ -463,10 +496,10 @@ new class extends Component
                             <flux:text class="mt-1 text-xs">{{ __('Generate fresh content ideas for your audience') }}</flux:text>
                         </button>
 
-                        <button wire:click="selectType('write')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                            <flux:icon name="pencil-square" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
-                            <flux:heading size="sm">{{ __('Write content') }}</flux:heading>
-                            <flux:text class="mt-1 text-xs">{{ __('Draft blog posts, social copy, emails, and more') }}</flux:text>
+                        <button wire:click="selectType('writer')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="document-text" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Write a blog post') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Produce a cornerstone blog post grounded in one of your topics') }}</flux:text>
                         </button>
                     </div>
                 </div>
@@ -493,11 +526,72 @@ new class extends Component
                     </div>
                 </div>
             @endif
+
+            {{-- Writer: Topic picker (required before mode) --}}
+            @if ($conversation->type === 'writer' && !$topicId && empty($messages))
+                @php
+                    $availableTopics = \App\Models\Topic::where('team_id', $teamModel->id)
+                        ->where('status', 'available')
+                        ->latest()
+                        ->get();
+                @endphp
+
+                <div class="flex flex-col items-center justify-center py-16">
+                    <flux:heading size="xl" class="mb-2">{{ __('Pick a topic for this blog post') }}</flux:heading>
+                    <flux:subheading class="mb-8">{{ __('The writer grounds the post in one of your topics.') }}</flux:subheading>
+
+                    @if ($availableTopics->isEmpty())
+                        <div class="w-full max-w-xl text-center">
+                            <flux:icon name="light-bulb" class="mx-auto size-10 text-zinc-400" />
+                            <flux:heading size="sm" class="mt-3">{{ __('No available topics') }}</flux:heading>
+                            <flux:subheading class="mt-1">{{ __('Brainstorm topics first, then come back to write one.') }}</flux:subheading>
+                            <div class="mt-4">
+                                <flux:button variant="primary" icon="light-bulb" :href="route('topics', ['current_team' => $teamModel])" wire:navigate>
+                                    {{ __('Go to Topics') }}
+                                </flux:button>
+                            </div>
+                        </div>
+                    @else
+                        <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
+                            @foreach ($availableTopics as $t)
+                                <button wire:click="selectWriterTopic({{ $t->id }})" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                                    <flux:heading size="sm">{{ $t->title }}</flux:heading>
+                                    <flux:text class="mt-1 text-xs">{{ $t->angle }}</flux:text>
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            {{-- Writer: Mode sub-cards (after topic, before first message) --}}
+            @if ($conversation->type === 'writer' && $topicId && !$writerMode && empty($messages))
+                <div class="flex flex-col items-center justify-center py-16">
+                    <flux:heading size="xl" class="mb-2">{{ __('How should the writer work?') }}</flux:heading>
+                    <flux:subheading class="mb-8">{{ __('You can switch modes later with !autopilot or !checkpoint.') }}</flux:subheading>
+
+                    <div class="grid w-full max-w-xl gap-3 sm:grid-cols-2">
+                        <button wire:click="selectWriterMode('autopilot')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="bolt" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Autopilot') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Research, outline, and write in one go') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectWriterMode('checkpoint')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="check-circle" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Checkpoint mode') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Pause after research and after the outline so you can approve') }}</flux:text>
+                        </button>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 
     {{-- Input (only shown after type is selected) --}}
-    @if ($conversation->type && !($conversation->type === 'topics' && !$topicsMode && empty($messages)))
+    @if ($conversation->type
+        && !($conversation->type === 'topics' && !$topicsMode && empty($messages))
+        && !($conversation->type === 'writer' && (!$topicId || !$writerMode) && empty($messages)))
         <div class="mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
             @if ($isStreaming)
                 <div class="flex justify-center">
