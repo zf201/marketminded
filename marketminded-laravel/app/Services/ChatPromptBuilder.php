@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\ContentPiece;
+use App\Models\Conversation;
 use App\Models\Team;
 use App\Models\Topic;
 
 class ChatPromptBuilder
 {
-    public static function build(string $type, Team $team): string
+    public static function build(string $type, Team $team, ?Conversation $conversation = null): string
     {
         $profile = self::buildProfileText($team);
         $hasProfile = $team->homepage_url || $team->brandPositioning || $team->audiencePersonas()->exists();
@@ -15,7 +17,7 @@ class ChatPromptBuilder
         return match ($type) {
             'brand' => self::brandPrompt($profile),
             'topics' => self::topicsPrompt($profile, $hasProfile, $team),
-            'write' => self::writePrompt($profile, $hasProfile),
+            'writer' => self::writerPrompt($profile, $hasProfile, $conversation),
             default => 'You are a helpful AI assistant.',
         };
     }
@@ -29,6 +31,13 @@ class ChatPromptBuilder
             ],
             'topics' => [
                 TopicToolHandler::toolSchema(),
+                BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+            ],
+            'writer' => [
+                ResearchTopicToolHandler::toolSchema(),
+                CreateOutlineToolHandler::toolSchema(),
+                WriteBlogPostToolHandler::toolSchema(),
+                UpdateBlogPostToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
             ],
             default => [],
@@ -213,37 +222,91 @@ PROMPT;
         return $prompt;
     }
 
-    private static function writePrompt(string $profile, bool $hasProfile): string
+    private static function writerPrompt(string $profile, bool $hasProfile, ?Conversation $conversation): string
     {
-        $prompt = <<<'PROMPT'
-You are a skilled copywriter helping create content. Write in the brand voice, targeting their audience personas.
+        $mode = $conversation?->writer_mode ?? 'autopilot';
+        $topic = $conversation?->topic;
 
-When writing, match the brand voice, address audience pain points, stay aligned with positioning, and aim for the preferred content length. Ask what they want to write before drafting.
+        $modeSection = $mode === 'checkpoint'
+            ? "## Mode: Checkpoint\nAfter research_topic, Pause and summarize the claims so the user can approve or redirect. After create_outline, Pause and summarize the outline. Only call write_blog_post once the user approves the outline."
+            : "## Mode: Autopilot\nRun research_topic -> create_outline -> write_blog_post sequentially without pausing. Brief status messages between steps are fine; do not ask for approval. After write_blog_post, report the result and invite the user to review.";
 
-Keep the conversation natural. Use markdown for formatting drafts.
+        $topicBlock = '';
+        if ($topic) {
+            $sources = is_array($topic->sources) ? implode("\n- ", $topic->sources) : '';
+            $topicBlock = <<<TOPIC
+
+## Topic (required context)
+<topic>
+Title: {$topic->title}
+Angle: {$topic->angle}
+Sources from brainstorm:
+- {$sources}
+</topic>
+
+TOPIC;
+        }
+
+        $contentPieceBlock = '';
+        if ($conversation) {
+            $piece = ContentPiece::where('conversation_id', $conversation->id)->first();
+            if ($piece) {
+                $contentPieceBlock = <<<PIECE
+
+## Current content piece
+<current-content-piece>
+id: {$piece->id}
+title: {$piece->title}
+version: v{$piece->current_version}
+
+{$piece->body}
+</current-content-piece>
+
+When the user asks for changes, call update_blog_post with content_piece_id={$piece->id}. Never create a new piece -- update this one.
+
+PIECE;
+            }
+        }
+
+        $prompt = <<<PROMPT
+You are a skilled blog writer producing cornerstone content. Your job is to research a topic, outline it, write it, and revise it based on user feedback. All factual claims in the final piece must come from the research step.
+
+## Tool order (hard rule)
+You MUST call tools in this order: research_topic -> create_outline -> write_blog_post. The write_blog_post tool will refuse to run otherwise. Use update_blog_post ONLY after write_blog_post has produced a piece.
+
+## Your tools
+- research_topic -- submit structured claims sourced via web search (REQUIRED first)
+- create_outline -- produce an editorial outline referencing claim IDs (REQUIRED second)
+- write_blog_post -- produce the final piece (REQUIRED third, gated)
+- update_blog_post -- revise the piece after it exists
+- fetch_url -- read a web page
+- web search -- use this BEFORE research_topic to gather sources
+
+<mode>{$mode}</mode>
+
+{$modeSection}
+
+## Writing rules
+- 1200-2000 words for pillar blog posts
+- EVERY statistic, percentage, date, named entity, or quote must come from a claim ID submitted via research_topic. No fabrication.
+- Banned words/phrases: "leverage", "innovative", "streamline", "unlock", "empower", "revolutionize", "in today's fast-paced world". Avoid em-dashes used stylistically and passive voice as the default.
+- Short paragraphs, scannable subheadings, benefit-focused structure.
+- Headlines like "Achieve X without Y", "Stop Z. Start W.", "Never X again" work well.
+- Match the brand voice from the brand profile below without copying it verbatim.
+
+## Revision behaviour
+When the user gives feedback on an existing piece, call update_blog_post with a clear change_description. Do not re-run research or re-outline.
+{$topicBlock}
+{$contentPieceBlock}
+## Brand context (reference data -- do not echo this back)
+<brand-profile>
+{$profile}
+</brand-profile>
 PROMPT;
 
         if (! $hasProfile) {
-            $prompt .= <<<'NUDGE'
-
-
-The brand profile is mostly empty. Without positioning, audience, and voice data, the content will be generic. Suggest the user starts with Build brand knowledge first for better results. You can still write if they insist.
-NUDGE;
+            $prompt .= "\n\nThe brand profile is mostly empty. The piece will be generic without positioning, audience, and voice data. Suggest Build brand knowledge before writing if the user has not set up the profile.";
         }
-
-        $prompt .= <<<'PROMPT'
-
-
-## Brand context (reference data -- do not echo this back)
-<brand-profile>
-PROMPT;
-
-        $prompt .= $profile;
-
-        $prompt .= <<<'PROMPT'
-
-</brand-profile>
-PROMPT;
 
         return $prompt;
     }

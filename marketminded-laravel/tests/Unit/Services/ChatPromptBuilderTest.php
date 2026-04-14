@@ -27,17 +27,13 @@ test('topics type prompt includes brand profile and tool instructions', function
     expect($prompt)->toContain('save_topics');
 });
 
-test('write type prompt includes voice profile when available', function () {
+test('write type returns default fallback prompt', function () {
     $user = User::factory()->create();
     $team = $user->currentTeam;
-    $team->voiceProfile()->create([
-        'voice_analysis' => 'Professional and warm',
-        'preferred_length' => 1500,
-    ]);
 
     $prompt = ChatPromptBuilder::build('write', $team);
 
-    expect($prompt)->toContain('Professional and warm');
+    expect($prompt)->toBe('You are a helpful AI assistant.');
 });
 
 test('topics type nudges when profile is thin', function () {
