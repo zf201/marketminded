@@ -59,7 +59,7 @@ new class extends Component
         </flux:button>
     </div>
 
-    <div class="mx-auto max-w-3xl px-6 py-4">
+    <div class="mx-auto max-w-5xl px-6 py-4">
         @if ($this->conversations->isEmpty())
             <div class="py-20 text-center">
                 <flux:icon name="chat-bubble-left-right" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
