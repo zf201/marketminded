@@ -591,7 +591,10 @@ new class extends Component
             {{-- Streaming response --}}
             @if ($isStreaming)
                 <div class="mb-6">
-                    <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
+                    <div class="mb-1.5 flex items-center gap-2">
+                        <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
+                        <flux:icon.loading class="size-3.5 text-zinc-500" />
+                    </div>
                     <div class="text-sm" wire:stream="streamed-response"><span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span></div>
                 </div>
             @endif
