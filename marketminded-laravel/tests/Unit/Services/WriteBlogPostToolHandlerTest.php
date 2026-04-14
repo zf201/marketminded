@@ -2,139 +2,109 @@
 
 use App\Models\ContentPiece;
 use App\Models\Conversation;
-use App\Models\Message;
+use App\Models\Team;
 use App\Models\Topic;
 use App\Models\User;
 use App\Services\WriteBlogPostToolHandler;
+use App\Services\Writer\Agent;
+use App\Services\Writer\AgentResult;
+use App\Services\Writer\Brief;
 
-function writerConversationWithTopic(): array
+class FakeWriterAgent implements Agent
+{
+    public ?AgentResult $stubResult = null;
+
+    public function execute(Brief $brief, Team $team): AgentResult
+    {
+        return $this->stubResult ?? AgentResult::error('no stub');
+    }
+}
+
+function writerConvWithFullBrief(): array
 {
     $user = User::factory()->create();
     $team = $user->currentTeam;
-    $topic = Topic::create([
-        'team_id' => $team->id,
-        'title' => 'Zero Party Data',
-        'angle' => 'Privacy angle',
-        'status' => 'available',
-    ]);
+    $topic = Topic::create(['team_id' => $team->id, 'title' => 'X', 'angle' => 'a', 'status' => 'available']);
     $conversation = Conversation::create([
         'team_id' => $team->id,
         'user_id' => $user->id,
-        'title' => 'W',
+        'title' => 't',
         'type' => 'writer',
         'topic_id' => $topic->id,
-        'writer_mode' => 'autopilot',
+        'brief' => [
+            'topic' => ['id' => $topic->id, 'title' => 'X', 'angle' => 'a', 'sources' => []],
+            'research' => ['topic_summary' => 's', 'claims' => [['id' => 'c1', 'text' => 't', 'type' => 'fact', 'source_ids' => ['s1']]], 'sources' => [['id' => 's1', 'url' => 'u', 'title' => 't']]],
+            'outline' => ['angle' => 'a', 'target_length_words' => 1500, 'sections' => [['heading' => 'h', 'purpose' => 'p', 'claim_ids' => ['c1']], ['heading' => 'h', 'purpose' => 'p', 'claim_ids' => ['c1']]]],
+        ],
     ]);
     return [$team, $conversation, $topic];
 }
 
-function addToolMessage(Conversation $c, string $toolName, array $args = []): void
-{
-    Message::create([
-        'conversation_id' => $c->id,
-        'role' => 'assistant',
-        'content' => '',
-        'metadata' => [
-            'tools' => [['name' => $toolName, 'args' => $args]],
-        ],
+test('handler returns ok, persists brief, patches conversation_id onto piece', function () {
+    [$team, $conversation, $topic] = writerConvWithFullBrief();
+
+    // Pre-create the piece as the agent would
+    $piece = ContentPiece::create([
+        'team_id' => $team->id,
+        'topic_id' => $topic->id,
+        'title' => '',
+        'body' => '',
+        'current_version' => 0,
     ]);
-}
+    $piece->saveSnapshot('Title', str_repeat('w ', 850), 'Initial draft');
 
-test('write_blog_post gates on missing research_topic', function () {
-    [$team, $conversation, $topic] = writerConversationWithTopic();
-    addToolMessage($conversation, 'create_outline');
+    $newBrief = Brief::fromJson($conversation->brief)->withContentPieceId($piece->id);
 
-    $handler = new WriteBlogPostToolHandler;
-    $result = $handler->execute($team, $conversation->id, [
-        'title' => 'T',
-        'body' => 'B',
-    ], $topic);
+    $agent = new FakeWriterAgent;
+    $agent->stubResult = AgentResult::ok(
+        $newBrief,
+        ['kind' => 'content_piece', 'summary' => 'Draft created · v1', 'title' => 'Title', 'preview' => '...'],
+        'Draft created · v1 · 850 words'
+    );
 
-    $decoded = json_decode($result, true);
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('research_topic');
-});
-
-test('write_blog_post gates on missing create_outline', function () {
-    [$team, $conversation, $topic] = writerConversationWithTopic();
-    addToolMessage($conversation, 'research_topic');
-
-    $handler = new WriteBlogPostToolHandler;
-    $result = $handler->execute($team, $conversation->id, [
-        'title' => 'T',
-        'body' => 'B',
-    ], $topic);
-
-    $decoded = json_decode($result, true);
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('create_outline');
-});
-
-test('write_blog_post creates content piece with v1 when prerequisites met', function () {
-    [$team, $conversation, $topic] = writerConversationWithTopic();
-    addToolMessage($conversation, 'research_topic');
-    addToolMessage($conversation, 'create_outline');
-
-    $handler = new WriteBlogPostToolHandler;
-    $result = $handler->execute($team, $conversation->id, [
-        'title' => 'The Case for Zero Party Data',
-        'body' => "# Intro\n\nBody.",
-    ], $topic);
+    $handler = new WriteBlogPostToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [], []);
 
     $decoded = json_decode($result, true);
     expect($decoded['status'])->toBe('ok');
-    expect($decoded['version'])->toBe(1);
 
-    $piece = ContentPiece::findOrFail($decoded['content_piece_id']);
-    expect($piece->title)->toBe('The Case for Zero Party Data');
-    expect($piece->body)->toBe("# Intro\n\nBody.");
-    expect($piece->current_version)->toBe(1);
-    expect($piece->topic_id)->toBe($topic->id);
+    $piece->refresh();
     expect($piece->conversation_id)->toBe($conversation->id);
-    expect($piece->team_id)->toBe($team->id);
-    expect($piece->status)->toBe('draft');
-    expect($piece->platform)->toBe('blog');
-    expect($piece->format)->toBe('pillar');
-    expect($piece->versions()->count())->toBe(1);
 
-    expect($topic->refresh()->status)->toBe('used');
+    $conversation->refresh();
+    expect(Brief::fromJson($conversation->brief)->contentPieceId())->toBe($piece->id);
 });
 
-test('write_blog_post refuses when piece already exists for conversation', function () {
-    [$team, $conversation, $topic] = writerConversationWithTopic();
-    addToolMessage($conversation, 'research_topic');
-    addToolMessage($conversation, 'create_outline');
+test('handler refuses second call (retry guard)', function () {
+    [$team, $conversation] = writerConvWithFullBrief();
 
-    $handler = new WriteBlogPostToolHandler;
-    $first = $handler->execute($team, $conversation->id, ['title' => 'A', 'body' => 'B'], $topic);
-    expect(json_decode($first, true)['status'])->toBe('ok');
+    $agent = new FakeWriterAgent;
+    $agent->stubResult = AgentResult::error('should not be called');
 
-    $second = $handler->execute($team, $conversation->id, ['title' => 'A2', 'body' => 'B2'], $topic);
-    $decoded = json_decode($second, true);
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('update_blog_post');
-});
-
-test('write_blog_post accepts in-turn research_topic and create_outline (no persisted messages)', function () {
-    [$team, $conversation, $topic] = writerConversationWithTopic();
-
-    $priorTurnTools = [
-        ['name' => 'research_topic', 'args' => []],
-        ['name' => 'create_outline', 'args' => []],
-    ];
-
-    $handler = new WriteBlogPostToolHandler;
-    $result = $handler->execute($team, $conversation->id, [
-        'title' => 'T',
-        'body' => 'B',
-    ], $topic, $priorTurnTools);
-
+    $handler = new WriteBlogPostToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [], [['name' => 'write_blog_post', 'args' => []]]);
     $decoded = json_decode($result, true);
-    expect($decoded['status'])->toBe('ok');
-    expect($decoded['version'])->toBe(1);
+
+    expect($decoded['status'])->toBe('error');
+    expect($decoded['message'])->toContain('Already retried');
+});
+
+test('handler propagates agent gate error', function () {
+    [$team, $conversation] = writerConvWithFullBrief();
+
+    $agent = new FakeWriterAgent;
+    $agent->stubResult = AgentResult::error('Cannot write without research. Run research_topic first.');
+
+    $handler = new WriteBlogPostToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [], []);
+    $decoded = json_decode($result, true);
+
+    expect($decoded['status'])->toBe('error');
+    expect($decoded['message'])->toContain('research');
 });
 
 test('toolSchema returns valid schema', function () {
     $schema = WriteBlogPostToolHandler::toolSchema();
     expect($schema['function']['name'])->toBe('write_blog_post');
+    expect($schema['function']['parameters']['properties'])->toHaveKey('extra_context');
 });

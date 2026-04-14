@@ -3,104 +3,54 @@
 namespace App\Services;
 
 use App\Models\ContentPiece;
-use App\Models\Message;
+use App\Models\Conversation;
 use App\Models\Team;
-use App\Models\Topic;
+use App\Services\Writer\Agent;
+use App\Services\Writer\Agents\WriterAgent;
+use App\Services\Writer\Brief;
 
 class WriteBlogPostToolHandler
 {
-    /**
-     * @param array $priorTurnTools Tool calls completed earlier in the same ask() turn.
-     *                              Each entry: ['name' => string, 'args' => array]
-     */
-    public function execute(Team $team, int $conversationId, array $data, ?Topic $topic = null, array $priorTurnTools = []): string
+    public function __construct(private ?Agent $agent = null) {}
+
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
     {
-        $missing = $this->missingPrereqs($conversationId, $priorTurnTools);
-        if (! empty($missing)) {
+        $callsSoFar = collect($priorTurnTools)->where('name', 'write_blog_post')->count();
+        if ($callsSoFar >= 1) {
             return json_encode([
                 'status' => 'error',
-                'message' => 'You must call ' . implode(' and ', $missing) . ' before write_blog_post.',
+                'message' => 'Already retried write_blog_post this turn. Get help from the user.',
             ]);
         }
 
-        if (ContentPiece::where('team_id', $team->id)
-            ->where('conversation_id', $conversationId)
-            ->exists()) {
-            return json_encode([
-                'status' => 'error',
-                'message' => 'A blog post already exists for this conversation. Use update_blog_post to revise it.',
-            ]);
+        $conversation = Conversation::findOrFail($conversationId);
+        $brief = Brief::fromJson($conversation->brief ?? []);
+
+        $extraContext = $args['extra_context'] ?? null;
+        $agent = $extraContext !== null ? new WriterAgent($extraContext) : ($this->agent ?? new WriterAgent);
+
+        try {
+            $result = $agent->execute($brief, $team);
+        } catch (\Throwable $e) {
+            return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
 
-        $title = $data['title'] ?? '';
-        $body = $data['body'] ?? '';
-
-        if ($title === '' || $body === '') {
-            return json_encode([
-                'status' => 'error',
-                'message' => 'title and body are required.',
-            ]);
+        if (! $result->isOk()) {
+            return json_encode(['status' => 'error', 'message' => $result->errorMessage]);
         }
 
-        $piece = ContentPiece::create([
-            'team_id' => $team->id,
-            'conversation_id' => $conversationId,
-            'topic_id' => $topic?->id,
-            'title' => '',
-            'body' => '',
-            'status' => 'draft',
-            'platform' => 'blog',
-            'format' => 'pillar',
-            'current_version' => 0,
-        ]);
-
-        $piece->saveSnapshot($title, $body, 'Initial draft');
-
-        if ($topic) {
-            $topic->update(['status' => 'used']);
+        // Patch conversation_id onto the piece (the agent didn't know it).
+        if ($pieceId = $result->brief->contentPieceId()) {
+            ContentPiece::where('id', $pieceId)->update(['conversation_id' => $conversation->id]);
         }
+
+        $conversation->update(['brief' => $result->brief->toJson()]);
 
         return json_encode([
             'status' => 'ok',
-            'content_piece_id' => $piece->id,
-            'title' => $piece->title,
-            'version' => $piece->current_version,
+            'summary' => $result->summary,
+            'card' => $result->cardPayload,
         ]);
-    }
-
-    /**
-     * Returns an array of prerequisite tool names that were not found in either the
-     * in-flight tool calls for this turn or the persisted conversation history.
-     */
-    private function missingPrereqs(int $conversationId, array $priorTurnTools = []): array
-    {
-        $needed = ['research_topic', 'create_outline'];
-        $found = [];
-
-        // Check in-flight tool calls from the current ask() turn first — the
-        // assistant message isn't persisted until after the stream ends.
-        foreach ($priorTurnTools as $tool) {
-            $name = $tool['name'] ?? null;
-            if (in_array($name, $needed, true)) {
-                $found[$name] = true;
-            }
-        }
-
-        // Fall back to persisted history (for cross-turn continuity, e.g. checkpoint mode).
-        $messages = Message::where('conversation_id', $conversationId)
-            ->where('role', 'assistant')
-            ->get();
-
-        foreach ($messages as $m) {
-            foreach ($m->metadata['tools'] ?? [] as $tool) {
-                $name = $tool['name'] ?? null;
-                if (in_array($name, $needed, true)) {
-                    $found[$name] = true;
-                }
-            }
-        }
-
-        return array_values(array_diff($needed, array_keys($found)));
     }
 
     public static function toolSchema(): array
@@ -109,15 +59,13 @@ class WriteBlogPostToolHandler
             'type' => 'function',
             'function' => [
                 'name' => 'write_blog_post',
-                'description' => 'Produce the final blog post. Requires research_topic and create_outline tool calls earlier in this conversation.',
+                'description' => 'Run the Writer sub-agent. Requires brief.research and brief.outline. Creates the ContentPiece and writes brief.content_piece_id.',
                 'parameters' => [
                     'type' => 'object',
-                    'required' => ['title', 'body'],
                     'properties' => [
-                        'title' => ['type' => 'string'],
-                        'body' => [
+                        'extra_context' => [
                             'type' => 'string',
-                            'description' => 'Full blog post in markdown. 1200-2000 words. Every statistic, percentage, date, named entity, or quote must trace to a claim ID from research_topic.',
+                            'description' => 'Optional guidance for the sub-agent on retry.',
                         ],
                     ],
                 ],
