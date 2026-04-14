@@ -250,6 +250,16 @@ new class extends Component
 
         try {
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
+                // If the user clicked Stop, the browser has closed the stream
+                // connection. We set ignore_user_abort(true) at the top so
+                // PHP keeps running — which means we can stop requesting more
+                // tokens from OpenRouter right here, then fall through to the
+                // finally block to persist the message and write the log.
+                if (connection_aborted()) {
+                    $interrupted = true;
+                    break;
+                }
+
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'completed') {
                         $completedTools[] = $item;

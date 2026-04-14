@@ -125,8 +125,15 @@ abstract class BaseAgent implements Agent
             maxIterations: 10,
         );
 
+        // Sub-agents need a user turn to actually act — most providers will
+        // just acknowledge a system-only message without invoking a tool.
+        // The system prompt tells them WHAT and HOW; this user message is
+        // the "go" signal that triggers the required submit_* tool call.
         $result = $client->chat(
-            messages: [['role' => 'system', 'content' => $systemPrompt]],
+            messages: [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling the submit tool with all required fields. Do not reply with prose.'],
+            ],
             tools: $tools,
             toolChoice: null,
             temperature: $temperature,
