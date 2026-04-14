@@ -111,6 +111,22 @@ test('WriterAgent gate: refuses when outline is missing', function () {
     expect($result->errorMessage)->toContain('outline');
 });
 
+test('WriterAgent refuses to create a second piece when one already exists', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $ctx = fullBriefForWriter($team);
+
+    // Seed the brief with an existing content_piece_id
+    $briefWithPiece = $ctx['brief']->withContentPieceId(42);
+
+    $agent = new StubbedWriterAgent(['title' => 'T', 'body' => str_repeat('w ', 850)]);
+    $result = $agent->execute($briefWithPiece, $team);
+
+    expect($result->isOk())->toBeFalse();
+    expect($result->errorMessage)->toContain('already exists');
+    expect($result->errorMessage)->toContain('proofread_blog_post');
+});
+
 test('WriterAgent rejects body shorter than 800 words', function () {
     $user = User::factory()->create();
     $team = $user->currentTeam;

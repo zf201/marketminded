@@ -19,6 +19,12 @@ class WriterAgent extends BaseAgent
         if (! $brief->hasOutline()) {
             return AgentResult::error('Cannot write without an outline. Run create_outline first.');
         }
+        // Guard against duplicate pieces on this conversation. The orchestrator
+        // might call write_blog_post again after a (possibly interrupted) prior
+        // success — redirect to proofread instead of creating a second draft.
+        if ($brief->hasContentPiece()) {
+            return AgentResult::error('A blog post already exists for this conversation. Use proofread_blog_post with the user\'s feedback to revise it.');
+        }
 
         return parent::execute($brief, $team);
     }
