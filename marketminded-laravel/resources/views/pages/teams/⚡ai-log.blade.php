@@ -66,7 +66,7 @@ new class extends Component
 }; ?>
 
 <div>
-    <div class="flex items-center justify-between px-6 py-3">
+    <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-3">
         <div>
             <flux:heading size="xl">{{ __('AI Log') }}</flux:heading>
             <flux:subheading>{{ __('AI usage and spend across all conversations.') }}</flux:subheading>

@@ -52,7 +52,7 @@ new class extends Component
 }; ?>
 
 <div>
-    <div class="flex items-center justify-between px-6 py-3">
+    <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-3">
         <flux:heading size="xl">{{ __('Create') }}</flux:heading>
         <flux:button variant="primary" size="sm" icon="plus" wire:click="newConversation">
             {{ __('New conversation') }}

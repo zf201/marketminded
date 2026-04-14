@@ -367,7 +367,7 @@ new class extends Component
 }; ?>
 
 <div>
-    <div class="flex items-center justify-between px-6 py-3">
+    <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-3">
         <div>
             <flux:heading size="xl">{{ __('Brand Intelligence') }}</flux:heading>
             <flux:subheading>{{ __('Your brand profile — company info, positioning, audience, and voice. Edit directly or build via AI chat.') }}</flux:subheading>

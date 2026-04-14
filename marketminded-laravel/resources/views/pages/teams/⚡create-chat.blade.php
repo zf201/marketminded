@@ -341,7 +341,7 @@ new class extends Component
 
 <div class="flex h-[calc(100vh-4rem)] flex-col">
     {{-- Header --}}
-    <div class="flex items-center justify-between px-6 py-3">
+    <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-3">
         <div class="flex items-center gap-3">
             <flux:button variant="subtle" size="sm" icon="arrow-left" :href="route('create')" wire:navigate />
             <flux:heading size="lg">{{ $conversation->title }}</flux:heading>
