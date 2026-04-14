@@ -31,17 +31,24 @@ trade is accepted in exchange for uniform page chrome.
 
 ## Pages in scope
 
-All Livewire pages rendered inside `resources/views/layouts/app.blade.php`:
+Livewire pages that render directly inside `flux:main` (via
+`resources/views/layouts/app.blade.php`):
 
 1. `pages/teams/⚡topics.blade.php`
 2. `pages/teams/⚡create.blade.php`
 3. `pages/teams/⚡create-chat.blade.php`
 4. `pages/teams/⚡ai-log.blade.php`
 5. `pages/teams/⚡brand-intelligence.blade.php`
-6. `pages/teams/⚡edit.blade.php`
 
-Auth pages, settings, and modal content are **out of scope** — settings has
-its own layout and auth uses a separate `layouts/auth.blade.php`.
+### Out of scope
+
+- **`pages/teams/⚡edit.blade.php`** — despite living under `teams/`, this
+  page uses `<x-pages::settings.layout>` (the settings two-column layout
+  shared with profile, appearance, and security). Applying our frame here
+  would break consistency with the rest of the settings area.
+- Auth pages (`layouts/auth.blade.php`).
+- Other settings pages (already use `settings.layout`).
+- Modal content.
 
 ## Per-page changes
 
@@ -98,13 +105,14 @@ rhythm.
 
 ### Brand Intelligence (`⚡brand-intelligence.blade.php`)
 
-Apply the same standard frame. This file is large (640+ lines); the change is
-confined to the top-level wrapper — do not touch modal widths (e.g.
-`max-w-lg` on edit modals stays).
+Current root (line 369) is a bare `<div>` with a heading, subheading, and a
+series of two-column `flex flex-col lg:flex-row` sections. No `px-6` anywhere
+— content sits flush against whatever padding `flux:main` provides.
 
-### Edit Team (`⚡edit.blade.php`)
-
-Apply the same standard frame.
+Apply the same standard frame: wrap the heading block in `px-6 py-3`, and
+wrap the rest of the content (separator + all sections) in
+`mx-auto max-w-5xl px-6 py-4`. Do not touch the inner two-column sections or
+modal widths (e.g. `max-w-lg` on edit modals stays).
 
 ## Non-goals
 
