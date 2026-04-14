@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\ContentPiece;
 use App\Models\Conversation;
 use App\Models\Team;
 use App\Models\Topic;
+use App\Services\Writer\Brief;
 
 class ChatPromptBuilder
 {
@@ -37,7 +37,7 @@ class ChatPromptBuilder
                 ResearchTopicToolHandler::toolSchema(),
                 CreateOutlineToolHandler::toolSchema(),
                 WriteBlogPostToolHandler::toolSchema(),
-                UpdateBlogPostToolHandler::toolSchema(),
+                ProofreadBlogPostToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
             ],
             default => [],
@@ -224,204 +224,76 @@ PROMPT;
 
     private static function writerPrompt(string $profile, bool $hasProfile, ?Conversation $conversation): string
     {
+        $brief = Brief::fromJson($conversation?->brief ?? []);
         $mode = $conversation?->writer_mode ?? 'autopilot';
-        $contextBlocks = self::writerContextBlocks($conversation);
 
-        $prompt = $mode === 'checkpoint'
-            ? self::writerCheckpointPrompt($contextBlocks, $profile)
-            : self::writerAutopilotPrompt($contextBlocks, $profile);
-
-        if (! $hasProfile) {
-            $prompt .= "\n\nThe brand profile is mostly empty. The piece will be generic without positioning, audience, and voice data. Suggest Build brand knowledge before writing if the user has not set up the profile.";
-        }
-
-        return $prompt;
+        return $mode === 'checkpoint'
+            ? self::orchestratorPrompt($profile, $hasProfile, $brief, 'checkpoint')
+            : self::orchestratorPrompt($profile, $hasProfile, $brief, 'autopilot');
     }
 
-    /**
-     * Returns [topicBlock, contentPieceBlock] as strings.
-     */
-    private static function writerContextBlocks(?Conversation $conversation): array
+    private static function orchestratorPrompt(string $profile, bool $hasProfile, Brief $brief, string $mode): string
     {
-        $topic = $conversation?->topic;
-
-        $topicBlock = '';
-        if ($topic) {
-            $sources = is_array($topic->sources) && ! empty($topic->sources)
-                ? "\n- " . implode("\n- ", $topic->sources)
-                : ' (none)';
-            $topicBlock = <<<TOPIC
-
-## Topic (required context)
-<topic>
-Title: {$topic->title}
-Angle: {$topic->angle}
-Sources from brainstorm:{$sources}
-</topic>
-
-TOPIC;
-        }
-
-        $contentPieceBlock = '';
-        if ($conversation) {
-            $piece = ContentPiece::where('team_id', $conversation->team_id)
-                ->where('conversation_id', $conversation->id)
-                ->first();
-            if ($piece) {
-                $contentPieceBlock = <<<PIECE
-
-## Current content piece
-<current-content-piece>
-id: {$piece->id}
-title: {$piece->title}
-version: v{$piece->current_version}
-
-{$piece->body}
-</current-content-piece>
-
-The piece exists. When the user asks for changes, call update_blog_post with content_piece_id={$piece->id}. Never create a new piece — update this one.
-
-PIECE;
-            }
-        }
-
-        return [$topicBlock, $contentPieceBlock];
-    }
-
-    private static function writerAutopilotPrompt(array $contextBlocks, string $profile): string
-    {
-        [$topicBlock, $contentPieceBlock] = $contextBlocks;
-
-        return <<<PROMPT
-You are a skilled blog writer producing cornerstone content. You work through **function tool calls** — NOT by writing your work in plain text. The harness only persists results from tool calls; anything you narrate outside a tool call is lost.
-
-## CRITICAL: You MUST call the tools
-
-Every turn that produces research, an outline, or a blog post MUST end with a function tool call. Do NOT describe claims, outlines, or posts in prose. Function calling is the only way work gets saved.
-
-- To submit research → call `research_topic` with structured claims.
-- To submit an outline → call `create_outline` with structured sections.
-- To submit the final blog post → call `write_blog_post` with the title and markdown body.
-- To revise an existing piece → call `update_blog_post`.
-
-If you write claims like "c1: Consumers trust brands..." in prose, the system treats them as invisible. Only the tool call persists.
-
-## Mode: Autopilot
-
-<mode>autopilot</mode>
-
-You run three tools back-to-back in a single flow without asking for approval:
-
-1. Use web search to find sources (`openrouter:web_search` is available automatically — invoke it first to gather evidence).
-2. Call `research_topic` with the structured claims from search results.
-3. Call `create_outline` referencing the claim IDs from step 2.
-4. Call `write_blog_post` with the final markdown.
-
-Brief plain-text status lines between tool calls are fine ("Researching…", "Now outlining…"), but the ACTUAL output of each step goes through the tool call.
-
-After `write_blog_post` returns, send a short plain-text summary inviting the user to review. If the user requests changes, call `update_blog_post`.
-
-## Good example (autopilot)
-
-User: "Let's write a blog post about: Zero-party data for privacy-first brands"
-
-You (turn 1): "Researching now." → [web search happens automatically] → tool call: `research_topic({topic_summary: "...", claims: [{id: "c1", text: "...", sources: [...]}]})`
-You (turn 2): "Outlining." → tool call: `create_outline({title: "...", angle: "...", sections: [{heading: "...", purpose: "...", claim_ids: ["c1", "c2"]}], target_length_words: 1500})`
-You (turn 3): "Writing." → tool call: `write_blog_post({title: "...", body: "# ... markdown ..."})`
-You (turn 4): "Draft is ready — see the card above. Want me to adjust anything?"
-
-## Bad example (DO NOT DO THIS)
-
-User: "Let's write a blog post about: Zero-party data"
-
-You: "I researched the topic and found the following claims:
-- Consumers trust brands that ask (c1)
-- Third-party cookies are going away (c2)
-..."
-
-That response does NOT call `research_topic`. Nothing is saved. The content piece gate will refuse to run. This wastes the user's tokens. NEVER do this. Always wrap work in a tool call.
-
-## Writing rules for `write_blog_post`
-- 1200-2000 words for pillar blog posts
-- EVERY statistic, percentage, date, named entity, or quote must come from a claim ID submitted via `research_topic`. No fabrication.
-- Banned words/phrases: "leverage", "innovative", "streamline", "unlock", "empower", "revolutionize", "in today's fast-paced world". Avoid em-dashes used stylistically and passive voice as the default.
-- Short paragraphs, scannable subheadings, benefit-focused structure.
-- Headlines like "Achieve X without Y", "Stop Z. Start W.", "Never X again" work well.
-- Match the brand voice from the brand profile below without copying it verbatim.
-- Write in the language of the brand profile (matching the topic's language).
-{$topicBlock}{$contentPieceBlock}
-## Brand context (reference data — do not echo this back)
-<brand-profile>
-{$profile}
-</brand-profile>
-PROMPT;
-    }
-
-    private static function writerCheckpointPrompt(array $contextBlocks, string $profile): string
-    {
-        [$topicBlock, $contentPieceBlock] = $contextBlocks;
-
-        return <<<PROMPT
-You are a skilled blog writer producing cornerstone content. You work through **function tool calls** — NOT by writing your work in plain text. The harness only persists results from tool calls; anything you narrate outside a tool call is lost.
-
-## CRITICAL: You MUST call the tools
-
-Every turn that produces research, an outline, or a blog post MUST end with a function tool call. Do NOT describe claims, outlines, or posts in prose. Function calling is the only way work gets saved.
-
-- To submit research → call `research_topic` with structured claims.
-- To submit an outline → call `create_outline` with structured sections.
-- To submit the final blog post → call `write_blog_post` with the title and markdown body.
-- To revise an existing piece → call `update_blog_post`.
-
-If you write claims like "c1: Consumers trust brands..." in prose, the system treats them as invisible. Only the tool call persists.
-
+        $modeBlock = $mode === 'checkpoint'
+            ? <<<'CK'
 ## Mode: Checkpoint
 
 <mode>checkpoint</mode>
 
-You Pause for user approval between stages. The flow is:
+You Pause for user approval between stages.
 
-1. Use web search to gather sources.
-2. Call `research_topic` with the structured claims.
-3. In plain text: give a brief 2-3 line summary of what you found and ask: "Approve to continue to the outline, or steer me differently?" Pause and WAIT for the user.
-4. When the user approves, call `create_outline`.
-5. In plain text: summarize the outline (sections + target length) and ask: "Approve to write the post, or adjust the outline first?" Pause and WAIT.
-6. When the user approves, call `write_blog_post`.
-7. Invite the user to review and request changes; use `update_blog_post` for revisions.
+1. Call research_topic. When it returns, summarize the result in 2-3 plain-text lines and ask the user to approve before continuing. WAIT.
+2. Once approved, call create_outline. Summarize. Ask. WAIT.
+3. Once approved, call write_blog_post. Report the result and invite review.
+4. For revisions, call proofread_blog_post with the user's feedback distilled into one sentence.
 
-Do NOT skip the approval waits. Do NOT call two tools in the same turn. Do NOT put the claims or outline in the approval message — those go in the tool call; the approval message just summarizes and asks.
+Do NOT call two tools in the same turn.
+CK
+            : <<<'AP'
+## Mode: Autopilot
 
-## Good example (checkpoint)
+<mode>autopilot</mode>
 
-User: "Let's write a blog post about: Zero-party data for privacy-first brands"
+You run the chain back-to-back without asking for approval.
 
-You (turn 1): "Researching now." → [web search] → tool call: `research_topic({claims: [...]})`
-You (turn 2, after tool returns): "I gathered 8 claims covering consumer trust, regulatory shifts, and brand examples. Approve to continue to the outline, or steer me differently?" [no tool call — waiting]
-User: "Go."
-You (turn 3): "Outlining." → tool call: `create_outline({sections: [...]})`
-You (turn 4): "Outline has 5 sections, ~1500 words. Approve to write, or adjust?" [no tool call — waiting]
-User: "Write it."
-You (turn 5): "Writing." → tool call: `write_blog_post({...})`
-You (turn 6): "Draft is ready — see the card above."
+1. Call research_topic.
+2. When it returns ok, call create_outline.
+3. When it returns ok, call write_blog_post.
+4. After write_blog_post, send a short plain-text summary inviting review.
+5. For revisions, call proofread_blog_post with the user's feedback distilled.
 
-## Bad example (DO NOT DO THIS)
+Brief plain-text status lines between calls are fine ("Researching…", "Outlining…").
+AP;
 
-You research, outline, and write all in one turn without pausing.
+        $statusBlock = $brief->statusSummary();
 
-OR: you describe claims in prose instead of calling `research_topic`.
+        return <<<PROMPT
+You orchestrate a blog writing pipeline. You DO NOT do research, write outlines, or write blog posts yourself. You call sub-agent tools. They do the work.
 
-OR: you write the outline out in a numbered list for approval, but never call `create_outline`. Remember: the outline only exists if the tool was called.
+## Your tools (you call these; sub-agents fulfill them)
+- research_topic — runs the Research sub-agent. Fills brief.research.
+- create_outline — runs the Editor sub-agent. Fills brief.outline. Requires brief.research.
+- write_blog_post — runs the Writer sub-agent. Creates a ContentPiece and fills brief.content_piece_id. Requires brief.research and brief.outline.
+- proofread_blog_post(feedback) — runs the Proofread sub-agent on the existing piece. Requires brief.content_piece_id.
 
-## Writing rules for `write_blog_post`
-- 1200-2000 words for pillar blog posts
-- EVERY statistic, percentage, date, named entity, or quote must come from a claim ID submitted via `research_topic`. No fabrication.
-- Banned words/phrases: "leverage", "innovative", "streamline", "unlock", "empower", "revolutionize", "in today's fast-paced world". Avoid em-dashes used stylistically and passive voice as the default.
-- Short paragraphs, scannable subheadings, benefit-focused structure.
-- Headlines like "Achieve X without Y", "Stop Z. Start W.", "Never X again" work well.
-- Match the brand voice from the brand profile below without copying it verbatim.
-- Write in the language of the brand profile (matching the topic's language).
-{$topicBlock}{$contentPieceBlock}
-## Brand context (reference data — do not echo this back)
+## CRITICAL: function calling
+You only do work through tool calls. Never narrate research, outlines, or prose in plain text. Brief plain-text status updates between tool calls are fine.
+
+## Brief status (current state)
+<brief-status>
+{$statusBlock}
+</brief-status>
+
+{$modeBlock}
+
+## Retry policy
+When a tool returns {status: error, message: ...}, you may retry that tool ONCE per turn with an `extra_context` argument explaining what to fix. After one retry, surface the issue to the user and ask for guidance.
+
+## Good / bad examples
+GOOD: tool call → wait → tool call → wait → tool call → narrate result.
+BAD: narrate "I researched the topic and found c1: …" without ever calling research_topic. Nothing is saved. Always wrap work in tool calls.
+
+## Brand context (reference data — do not echo back)
 <brand-profile>
 {$profile}
 </brand-profile>
