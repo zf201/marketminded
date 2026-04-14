@@ -75,12 +75,12 @@ abstract class BaseAgent implements Agent
     final public function execute(Brief $brief, Team $team): AgentResult
     {
         $payload = $this->llmCall(
-            systemPrompt: $this->systemPrompt($brief, $team),
-            tools: array_merge([$this->submitToolSchema()], $this->additionalTools()),
-            model: $this->model($team),
-            temperature: $this->temperature(),
-            useServerTools: $this->useServerTools(),
-            apiKey: $team->openrouter_api_key,
+            $this->systemPrompt($brief, $team),
+            array_merge([$this->submitToolSchema()], $this->additionalTools()),
+            $this->model($team),
+            $this->temperature(),
+            $this->useServerTools(),
+            $team->openrouter_api_key,
         );
 
         if ($payload === null) {
@@ -116,7 +116,7 @@ abstract class BaseAgent implements Agent
         string $model,
         float $temperature,
         bool $useServerTools,
-        string $apiKey,
+        ?string $apiKey,
     ): ?array {
         $client = new OpenRouterClient(
             apiKey: $apiKey,
