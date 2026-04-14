@@ -127,6 +127,17 @@ PROMPT;
         return 0.6;
     }
 
+    /**
+     * Writing a 1200-2000 word blog post with a big prompt takes longer than
+     * the 120s default — especially on the powerful model tier. Bump to 5
+     * minutes to avoid cURL timeouts that have nothing to do with the LLM
+     * actually failing.
+     */
+    protected function timeout(): int
+    {
+        return 300;
+    }
+
     protected function validate(array $payload): ?string
     {
         $title = trim($payload['title'] ?? '');

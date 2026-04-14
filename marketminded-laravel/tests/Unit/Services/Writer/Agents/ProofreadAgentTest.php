@@ -12,7 +12,7 @@ class StubbedProofreadAgent extends ProofreadAgent
         parent::__construct($feedback, $extraContext);
     }
 
-    protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key): ?array
+    protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120): ?array
     {
         return $this->stubPayload;
     }
@@ -102,7 +102,7 @@ test('ProofreadAgent system prompt includes the user feedback', function () {
         {
             return $this->systemPrompt($b, $t);
         }
-        protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key): ?array
+        protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120): ?array
         {
             return null;
         }

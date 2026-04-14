@@ -42,6 +42,12 @@ abstract class BaseAgent implements Agent
 
     abstract protected function temperature(): float;
 
+    /** HTTP timeout for this agent's LLM call, in seconds. Override for long-running agents like Writer. */
+    protected function timeout(): int
+    {
+        return 120;
+    }
+
     /**
      * Validate the payload submitted via the submit tool.
      * Return null on success; an error message on failure.
@@ -85,6 +91,7 @@ abstract class BaseAgent implements Agent
             $this->temperature(),
             $this->useServerTools(),
             $team->openrouter_api_key,
+            $this->timeout(),
         );
 
         // Append a sub-agent log line to storage/logs/agent-debug.log so we can
@@ -123,9 +130,17 @@ abstract class BaseAgent implements Agent
 
         $newBrief = $this->applyToBrief($brief, $payload, $team);
 
+        $card = $this->buildCard($payload);
+        // Decorate every card with cost/token metadata so the chat UI can
+        // render it consistently across agents. Subclasses don't need to
+        // carry this — it's universal per sub-agent call.
+        $card['cost'] = $this->lastCost;
+        $card['input_tokens'] = $this->lastInputTokens;
+        $card['output_tokens'] = $this->lastOutputTokens;
+
         return AgentResult::ok(
             brief: $newBrief,
-            cardPayload: $this->buildCard($payload),
+            cardPayload: $card,
             summary: $this->buildSummary($payload),
         );
     }
@@ -142,6 +157,11 @@ abstract class BaseAgent implements Agent
     /** Captured when llmCall's response is text (not a tool call) — used for diagnostics. */
     protected ?string $lastTextResponse = null;
 
+    /** Populated after llmCall so handlers can surface cost/tokens on cards. */
+    protected int $lastInputTokens = 0;
+    protected int $lastOutputTokens = 0;
+    protected float $lastCost = 0.0;
+
     protected function llmCall(
         string $systemPrompt,
         array $tools,
@@ -149,6 +169,7 @@ abstract class BaseAgent implements Agent
         float $temperature,
         bool $useServerTools,
         ?string $apiKey,
+        int $timeout = 120,
     ): ?array {
         $client = new OpenRouterClient(
             apiKey: $apiKey,
@@ -182,7 +203,12 @@ abstract class BaseAgent implements Agent
             toolChoice: $toolChoice,
             temperature: $temperature,
             useServerTools: $useServerTools,
+            timeout: $timeout,
         );
+
+        $this->lastInputTokens = $result->inputTokens;
+        $this->lastOutputTokens = $result->outputTokens;
+        $this->lastCost = $result->cost;
 
         if (is_array($result->data)) {
             $this->lastTextResponse = null;

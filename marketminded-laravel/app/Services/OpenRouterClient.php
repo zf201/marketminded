@@ -27,7 +27,7 @@ class OpenRouterClient
         return $this->model;
     }
 
-    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true): ChatResult
+    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120): ChatResult
     {
         $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;
@@ -53,7 +53,7 @@ class OpenRouterClient
                 $body['tool_choice'] = $toolChoice;
             }
 
-            $response = $this->sendWithRetry($body);
+            $response = $this->sendWithRetry($body, $timeout);
             $usage = $response['usage'] ?? [];
             $totalInputTokens += $usage['prompt_tokens'] ?? 0;
             $totalOutputTokens += $usage['completion_tokens'] ?? 0;
@@ -453,7 +453,7 @@ class OpenRouterClient
         return '';
     }
 
-    private function sendWithRetry(array $body): array
+    private function sendWithRetry(array $body, int $timeout = 120): array
     {
         $lastException = null;
 
@@ -464,7 +464,7 @@ class OpenRouterClient
             }
 
             try {
-                $response = Http::timeout(120)
+                $response = Http::timeout($timeout)
                     ->withHeader('Authorization', "Bearer {$this->apiKey}")
                     ->post(self::API_URL, $body);
 

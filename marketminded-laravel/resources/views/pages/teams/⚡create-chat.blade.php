@@ -152,7 +152,9 @@ new class extends Component
 
     public function ask(): void
     {
-        set_time_limit(300);
+        // 15 minutes: a full autopilot run (research + outline + write) can
+        // take a few minutes each step with a large brand profile + big model.
+        set_time_limit(900);
         // Let the PHP process run to completion even if the client stops the
         // stream — otherwise the finally block (which persists the message
         // and writes chat-debug.log) may be killed mid-flight, losing the
@@ -467,35 +469,38 @@ new class extends Component
             $html .= '<div class="whitespace-pre-wrap">' . e($content) . '</div>';
         }
 
-        // Active tool (in progress) — show below text
+        // Writer sub-agents have dedicated cards (research/outline/write/proofread).
+        // When one is active, suppress its active pill — the card is the full-width
+        // progress indicator. Non-writer tools (fetch_url, save_topics, brand
+        // updates) still use the pill.
+        $writerTools = ['research_topic', 'create_outline', 'write_blog_post', 'proofread_blog_post'];
+        $activeTool = $activeTool && in_array($activeTool->name, $writerTools, true) ? null : $activeTool;
+
         if ($activeTool) {
             $label = match ($activeTool->name) {
                 'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
                 'update_brand_intelligence' => 'Updating brand profile',
                 'save_topics' => 'Saving topics...',
-                'research_topic' => 'Researching topic...',
-                'create_outline' => 'Building outline...',
-                'write_blog_post' => 'Writing blog post...',
-                'proofread_blog_post' => 'Proofreading...',
                 default => $activeTool->name,
             };
             $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
-            // Show completed tools as pills first
             foreach ($completedTools as $tool) {
                 $html .= $this->toolPill($tool, false);
             }
-            $html .= '<span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs text-indigo-400"><span class="animate-spin">&#8635;</span> ' . e($label) . '</span>';
+            $html .= '<span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs text-indigo-400"><svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ' . e($label) . '</span>';
             $html .= '</div>';
         } elseif (! empty($completedTools)) {
-            // All tools done — show as pills below text
-            $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
-            foreach ($completedTools as $tool) {
-                $html .= $this->toolPill($tool, false);
+            // All tools done — show completed pills (excludes writer tools; those get their own cards)
+            $pills = array_filter($completedTools, fn ($t) => ! in_array($t->name, $writerTools, true));
+            if (! empty($pills)) {
+                $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
+                foreach ($pills as $tool) {
+                    $html .= $this->toolPill($tool, false);
+                }
+                $html .= '</div>';
             }
-            $html .= '</div>';
         } elseif ($content === '') {
-            // Nothing yet — thinking
-            $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><span class="size-3.5 animate-spin">&#8635;</span> Thinking...</span>';
+            $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Thinking...</span>';
         }
 
         // Saved topic cards
@@ -531,20 +536,47 @@ new class extends Component
         $meta = $agentMap[$activeTool->name];
         $colorText = "text-{$meta['color']}-400";
 
+        $spinner = '<svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+
         return sprintf(
             '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
             . '<div class="flex items-center gap-2">'
-            . '<span class="%s"><span class="inline-block size-3.5 animate-spin align-middle">&#8635;</span></span>'
+            . '<span class="%s">%s</span>'
             . '<span class="text-xs font-semibold %s">%s</span>'
             . '<span class="text-xs text-zinc-500">working…</span>'
             . '</div>'
             . '<div class="mt-1 text-xs text-zinc-400">%s</div>'
             . '</div>',
             $colorText,
+            $spinner,
             $colorText,
             e($meta['title']),
             e($meta['hint']),
         );
+    }
+
+    /**
+     * Small cost/tokens footer appended to a completed sub-agent card.
+     */
+    private function cardMetricsFooter(array $card): string
+    {
+        $cost = (float) ($card['cost'] ?? 0);
+        $inTok = (int) ($card['input_tokens'] ?? 0);
+        $outTok = (int) ($card['output_tokens'] ?? 0);
+
+        if ($cost === 0.0 && $inTok === 0 && $outTok === 0) {
+            return '';
+        }
+
+        $parts = [];
+        if ($inTok > 0 || $outTok > 0) {
+            $parts[] = number_format($inTok + $outTok) . ' tokens';
+        }
+        if ($cost > 0) {
+            $parts[] = '$' . number_format($cost, 4);
+        }
+
+        return '<div class="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-500">' . e(implode(' · ', $parts)) . '</div>';
     }
 
     private function toolPill(ToolEvent $tool, bool $active): string
@@ -628,7 +660,7 @@ new class extends Component
                     ->where('conversation_id', $this->conversation->id)
                     ->first();
                 if ($piece) {
-                    $html .= $this->renderContentPieceCard($piece, $tool->name);
+                    $html .= $this->renderContentPieceCard($piece, $tool->name, $card ?? []);
                 }
             }
         }
@@ -638,15 +670,19 @@ new class extends Component
     private function renderResearchCard(array $card): string
     {
         $summary = e($card['summary'] ?? 'Research complete');
-        $count = count($card['claims'] ?? []);
-        return sprintf(
-            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="text-xs text-purple-400">&#10003; %s</div>'
-            . '<div class="mt-1 text-xs text-zinc-400">%d structured claims with source attribution</div>'
-            . '</div>',
-            $summary,
-            $count,
-        );
+        $claims = $card['claims'] ?? [];
+        // Show first 5 claims as a bullet preview
+        $preview = collect(array_slice($claims, 0, 5))
+            ->map(fn ($c) => '<li class="text-xs text-zinc-400">' . e($c['text'] ?? '') . '</li>')
+            ->implode('');
+        $more = count($claims) > 5 ? '<div class="mt-1 text-xs text-zinc-500">…and ' . (count($claims) - 5) . ' more</div>' : '';
+
+        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="text-xs text-purple-400">&#10003; ' . $summary . '</div>'
+            . '<ul class="mt-1 list-disc pl-5">' . $preview . '</ul>'
+            . $more
+            . $this->cardMetricsFooter($card)
+            . '</div>';
     }
 
     private function renderOutlineCard(array $card): string
@@ -654,39 +690,41 @@ new class extends Component
         $summary = e($card['summary'] ?? 'Outline ready');
         $sections = $card['sections'] ?? [];
         $sectionList = collect($sections)
-            ->map(fn ($s) => '<li class="text-xs text-zinc-400">' . e($s['heading']) . '</li>')
+            ->map(fn ($s) => '<li class="text-xs text-zinc-400">' . e($s['heading'] ?? '') . '</li>')
             ->implode('');
-        return sprintf(
-            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="text-xs text-blue-400">&#10003; %s</div>'
-            . '<ul class="mt-1 list-disc pl-5">%s</ul>'
-            . '</div>',
-            $summary,
-            $sectionList,
-        );
+
+        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="text-xs text-blue-400">&#10003; ' . $summary . '</div>'
+            . '<ul class="mt-1 list-disc pl-5">' . $sectionList . '</ul>'
+            . $this->cardMetricsFooter($card)
+            . '</div>';
     }
 
-    private function renderContentPieceCard(\App\Models\ContentPiece $piece, string $toolName): string
+    private function renderContentPieceCard(\App\Models\ContentPiece $piece, string $toolName, array $card = []): string
     {
         $url = route('content.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece->id]);
         $preview = trim(mb_substr(strip_tags($piece->body), 0, 200));
         $badge = $toolName === 'write_blog_post' ? __('Draft created') : __('Revised');
+        $wordCount = str_word_count(strip_tags($piece->body));
 
         return sprintf(
             '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
             . '<div class="flex items-center justify-between mb-1">'
-            . '<span class="text-xs text-green-400">&#10003; %s &middot; v%d</span>'
+            . '<span class="text-xs text-green-400">&#10003; %s &middot; v%d &middot; %s words</span>'
             . '<a href="%s" class="text-xs text-indigo-400 hover:text-indigo-300">%s &rarr;</a>'
             . '</div>'
             . '<div class="text-sm font-semibold text-zinc-200">%s</div>'
             . '<div class="mt-1 text-xs text-zinc-400 line-clamp-3">%s</div>'
+            . '%s'
             . '</div>',
             e($badge),
             e($piece->current_version),
+            number_format($wordCount),
             e($url),
             e(__('Open')),
             e($piece->title),
             e($preview),
+            $this->cardMetricsFooter($card),
         );
     }
 }; ?>
@@ -806,12 +844,30 @@ new class extends Component
                             @php
                                 $card = $tool['card'] ?? null;
                                 $kind = $card['kind'] ?? null;
+                                $metricsParts = [];
+                                if ($card) {
+                                    if (($card['input_tokens'] ?? 0) + ($card['output_tokens'] ?? 0) > 0) {
+                                        $metricsParts[] = number_format(($card['input_tokens'] ?? 0) + ($card['output_tokens'] ?? 0)) . ' tokens';
+                                    }
+                                    if (($card['cost'] ?? 0) > 0) {
+                                        $metricsParts[] = '$' . number_format($card['cost'], 4);
+                                    }
+                                }
+                                $metricsFooter = empty($metricsParts) ? '' : '<div class="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-500">' . e(implode(' · ', $metricsParts)) . '</div>';
                             @endphp
 
                             @if ($tool['name'] === 'research_topic' && $kind === 'research')
                                 <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
                                     <div class="text-xs text-purple-400">&#10003; {{ $card['summary'] ?? 'Research complete' }}</div>
-                                    <div class="mt-1 text-xs text-zinc-400">{{ count($card['claims'] ?? []) }} structured claims with source attribution</div>
+                                    <ul class="mt-1 list-disc pl-5">
+                                        @foreach (array_slice($card['claims'] ?? [], 0, 5) as $c)
+                                            <li class="text-xs text-zinc-400">{{ $c['text'] ?? '' }}</li>
+                                        @endforeach
+                                    </ul>
+                                    @if (count($card['claims'] ?? []) > 5)
+                                        <div class="mt-1 text-xs text-zinc-500">…and {{ count($card['claims']) - 5 }} more</div>
+                                    @endif
+                                    {!! $metricsFooter !!}
                                 </div>
                             @elseif ($tool['name'] === 'create_outline' && $kind === 'outline')
                                 <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
@@ -821,6 +877,7 @@ new class extends Component
                                             <li class="text-xs text-zinc-400">{{ $s['heading'] }}</li>
                                         @endforeach
                                     </ul>
+                                    {!! $metricsFooter !!}
                                 </div>
                             @elseif (in_array($tool['name'], ['write_blog_post', 'proofread_blog_post'], true))
                                 @php
@@ -832,11 +889,12 @@ new class extends Component
                                 @if ($piece)
                                     <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
                                         <div class="flex items-center justify-between mb-1">
-                                            <span class="text-xs text-green-400">&#10003; {{ $badge }} &middot; v{{ $piece->current_version }}</span>
+                                            <span class="text-xs text-green-400">&#10003; {{ $badge }} &middot; v{{ $piece->current_version }} &middot; {{ number_format(str_word_count(strip_tags($piece->body))) }} words</span>
                                             <a href="{{ route('content.show', ['current_team' => $teamModel, 'contentPiece' => $piece->id]) }}" wire:navigate class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
                                         </div>
                                         <div class="text-sm font-semibold text-zinc-200">{{ $piece->title }}</div>
                                         <div class="mt-1 text-xs text-zinc-400 line-clamp-3">{{ mb_substr(strip_tags($piece->body), 0, 200) }}</div>
+                                        {!! $metricsFooter !!}
                                     </div>
                                 @endif
                             @endif
