@@ -376,7 +376,7 @@ new class extends Component
             new MutationObserver(scroll).observe(el, { childList: true, subtree: true, characterData: true });
         "
     >
-        <div class="mx-auto flex max-w-5xl flex-col-reverse px-6 py-4">
+        <div class="mx-auto flex w-full max-w-5xl flex-col-reverse px-6 py-4">
             {{-- Streaming response --}}
             @if ($isStreaming)
                 <div class="mb-6">
