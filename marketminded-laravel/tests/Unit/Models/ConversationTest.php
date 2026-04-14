@@ -61,3 +61,49 @@ test('team has many conversations', function () {
 
     expect($team->conversations)->toHaveCount(1);
 });
+
+test('Conversation topic() returns linked topic', function () {
+    $user = \App\Models\User::factory()->create();
+    $team = $user->currentTeam;
+
+    $topic = \App\Models\Topic::create([
+        'team_id' => $team->id,
+        'title' => 'Zero Party Data',
+        'angle' => 'Privacy angle',
+        'status' => 'available',
+    ]);
+
+    $conversation = \App\Models\Conversation::create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'title' => 'Writer',
+        'type' => 'writer',
+        'topic_id' => $topic->id,
+        'writer_mode' => 'autopilot',
+    ]);
+
+    expect($conversation->topic)->not->toBeNull();
+    expect($conversation->topic->id)->toBe($topic->id);
+    expect($conversation->writer_mode)->toBe('autopilot');
+});
+
+test('Conversation contentPieces() returns linked pieces', function () {
+    $user = \App\Models\User::factory()->create();
+    $team = $user->currentTeam;
+
+    $conversation = \App\Models\Conversation::create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'title' => 'Writer',
+        'type' => 'writer',
+    ]);
+
+    \App\Models\ContentPiece::create([
+        'team_id' => $team->id,
+        'conversation_id' => $conversation->id,
+        'title' => 'Piece',
+        'body' => 'body',
+    ]);
+
+    expect($conversation->contentPieces)->toHaveCount(1);
+});
