@@ -367,11 +367,16 @@ new class extends Component
 }; ?>
 
 <div>
-    <flux:heading size="xl">{{ __('Brand Intelligence') }}</flux:heading>
-    <flux:subheading>{{ __('Your brand profile — company info, positioning, audience, and voice. Edit directly or build via AI chat.') }}</flux:subheading>
+    <div class="flex items-center justify-between px-6 py-3">
+        <div>
+            <flux:heading size="xl">{{ __('Brand Intelligence') }}</flux:heading>
+            <flux:subheading>{{ __('Your brand profile — company info, positioning, audience, and voice. Edit directly or build via AI chat.') }}</flux:subheading>
+        </div>
+    </div>
 
-    {{-- Section 1: Company --}}
-    <flux:separator variant="subtle" class="my-8" />
+    <div class="mx-auto max-w-5xl px-6 py-4">
+        {{-- Section 1: Company --}}
+        <flux:separator variant="subtle" class="my-8" />
 
     <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
         <div class="w-80">
@@ -658,4 +663,5 @@ new class extends Component
             </div>
         </flux:modal>
     @endif
+    </div>
 </div>
