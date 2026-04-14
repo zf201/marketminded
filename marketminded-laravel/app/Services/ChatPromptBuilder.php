@@ -239,7 +239,7 @@ PROMPT;
     }
 
     /**
-     * Returns [topicBlock, topicConversationBlock, contentPieceBlock] as strings.
+     * Returns [topicBlock, contentPieceBlock] as strings.
      */
     private static function writerContextBlocks(?Conversation $conversation): array
     {
@@ -260,37 +260,6 @@ Sources from brainstorm:{$sources}
 </topic>
 
 TOPIC;
-        }
-
-        $topicConversationBlock = '';
-        if ($topic && $topic->conversation_id) {
-            $brainstormMessages = $topic->conversation
-                ? $topic->conversation->messages()->orderBy('created_at')->take(10)->get()
-                : collect();
-
-            if ($brainstormMessages->isNotEmpty()) {
-                $lines = [];
-                foreach ($brainstormMessages as $m) {
-                    $preview = trim(mb_substr(preg_replace('/\s+/', ' ', (string) $m->content), 0, 240));
-                    if ($preview === '') {
-                        continue;
-                    }
-                    $lines[] = "[{$m->role}] {$preview}";
-                }
-                if (! empty($lines)) {
-                    $brainstorm = implode("\n", $lines);
-                    $topicConversationBlock = <<<TC
-
-## Brainstorm context (how the topic came up)
-<topic-conversation>
-{$brainstorm}
-</topic-conversation>
-
-Use this context to prime your research — what angle the user cared about, what evidence was already discussed.
-
-TC;
-                }
-            }
         }
 
         $contentPieceBlock = '';
@@ -316,12 +285,12 @@ PIECE;
             }
         }
 
-        return [$topicBlock, $topicConversationBlock, $contentPieceBlock];
+        return [$topicBlock, $contentPieceBlock];
     }
 
     private static function writerAutopilotPrompt(array $contextBlocks, string $profile): string
     {
-        [$topicBlock, $topicConversationBlock, $contentPieceBlock] = $contextBlocks;
+        [$topicBlock, $contentPieceBlock] = $contextBlocks;
 
         return <<<PROMPT
 You are a skilled blog writer producing cornerstone content. You work through **function tool calls** — NOT by writing your work in plain text. The harness only persists results from tool calls; anything you narrate outside a tool call is lost.
@@ -380,7 +349,7 @@ That response does NOT call `research_topic`. Nothing is saved. The content piec
 - Headlines like "Achieve X without Y", "Stop Z. Start W.", "Never X again" work well.
 - Match the brand voice from the brand profile below without copying it verbatim.
 - Write in the language of the brand profile (matching the topic's language).
-{$topicBlock}{$topicConversationBlock}{$contentPieceBlock}
+{$topicBlock}{$contentPieceBlock}
 ## Brand context (reference data — do not echo this back)
 <brand-profile>
 {$profile}
@@ -390,7 +359,7 @@ PROMPT;
 
     private static function writerCheckpointPrompt(array $contextBlocks, string $profile): string
     {
-        [$topicBlock, $topicConversationBlock, $contentPieceBlock] = $contextBlocks;
+        [$topicBlock, $contentPieceBlock] = $contextBlocks;
 
         return <<<PROMPT
 You are a skilled blog writer producing cornerstone content. You work through **function tool calls** — NOT by writing your work in plain text. The harness only persists results from tool calls; anything you narrate outside a tool call is lost.
@@ -451,7 +420,7 @@ OR: you write the outline out in a numbered list for approval, but never call `c
 - Headlines like "Achieve X without Y", "Stop Z. Start W.", "Never X again" work well.
 - Match the brand voice from the brand profile below without copying it verbatim.
 - Write in the language of the brand profile (matching the topic's language).
-{$topicBlock}{$topicConversationBlock}{$contentPieceBlock}
+{$topicBlock}{$contentPieceBlock}
 ## Brand context (reference data — do not echo this back)
 <brand-profile>
 {$profile}
