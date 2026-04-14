@@ -382,6 +382,7 @@ new class extends Component
 
         // Saved topic cards
         $html .= $this->savedTopicCards($completedTools);
+        $html .= $this->contentPieceCards($completedTools);
 
         $this->stream(to: 'streamed-response', content: $html, replace: true);
     }
@@ -428,6 +429,38 @@ new class extends Component
                 $html .= '<div class="mt-1 text-xs text-zinc-400">' . e($topic['angle'] ?? '') . '</div>';
                 $html .= '</div>';
             }
+        }
+        return $html;
+    }
+
+    private function contentPieceCards(array $completedTools): string
+    {
+        $html = '';
+        foreach ($completedTools as $tool) {
+            if (! in_array($tool->name, ['write_blog_post', 'update_blog_post'], true)) {
+                continue;
+            }
+            $result = json_decode($tool->result ?? '{}', true);
+            if (($result['status'] ?? '') !== 'ok') {
+                continue;
+            }
+            $piece = \App\Models\ContentPiece::where('team_id', $this->teamModel->id)
+                ->find($result['content_piece_id'] ?? 0);
+            if (! $piece) {
+                continue;
+            }
+            $url = route('content.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece->id]);
+            $preview = trim(mb_substr(strip_tags($piece->body), 0, 200));
+            $badge = $tool->name === 'write_blog_post' ? __('Draft created') : __('Revised');
+
+            $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
+            $html .= '<div class="flex items-center justify-between mb-1">';
+            $html .= '<span class="text-xs text-green-400">&#10003; ' . e($badge) . ' &middot; v' . e($piece->current_version) . '</span>';
+            $html .= '<a href="' . e($url) . '" class="text-xs text-indigo-400 hover:text-indigo-300">' . e(__('Open')) . ' &rarr;</a>';
+            $html .= '</div>';
+            $html .= '<div class="text-sm font-semibold text-zinc-200">' . e($piece->title) . '</div>';
+            $html .= '<div class="mt-1 text-xs text-zinc-400 line-clamp-3">' . e($preview) . '</div>';
+            $html .= '</div>';
         }
         return $html;
     }
@@ -537,6 +570,29 @@ new class extends Component
                                         <div class="mt-1 text-xs text-zinc-400">{{ $topic['angle'] ?? '' }}</div>
                                     </div>
                                 @endforeach
+                            @endif
+                        @endforeach
+
+                        {{-- Content piece cards from history --}}
+                        @foreach ($message['metadata']['tools'] ?? [] as $tool)
+                            @if ($tool['name'] === 'write_blog_post' || $tool['name'] === 'update_blog_post')
+                                @php
+                                    // Each writer conversation has at most one piece; history cards reflect its latest state.
+                                    $piece = \App\Models\ContentPiece::where('team_id', $teamModel->id)
+                                        ->where('conversation_id', $conversation->id)
+                                        ->first();
+                                    $badge = $tool['name'] === 'write_blog_post' ? __('Draft created') : __('Revised');
+                                @endphp
+                                @if ($piece)
+                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-xs text-green-400">&#10003; {{ $badge }} &middot; v{{ $piece->current_version }}</span>
+                                            <a href="{{ route('content.show', ['current_team' => $teamModel, 'contentPiece' => $piece->id]) }}" wire:navigate class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
+                                        </div>
+                                        <div class="text-sm font-semibold text-zinc-200">{{ $piece->title }}</div>
+                                        <div class="mt-1 text-xs text-zinc-400 line-clamp-3">{{ mb_substr(strip_tags($piece->body), 0, 200) }}</div>
+                                    </div>
+                                @endif
                             @endif
                         @endforeach
                     </div>
