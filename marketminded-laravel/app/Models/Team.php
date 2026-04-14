@@ -149,6 +149,16 @@ class Team extends Model
     }
 
     /**
+     * Get all content pieces for this team.
+     *
+     * @return HasMany<ContentPiece, $this>
+     */
+    public function contentPieces(): HasMany
+    {
+        return $this->hasMany(ContentPiece::class)->orderByDesc('updated_at');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

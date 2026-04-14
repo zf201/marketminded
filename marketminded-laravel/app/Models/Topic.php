@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['team_id', 'conversation_id', 'title', 'angle', 'sources', 'status', 'score'])]
 class Topic extends Model
@@ -35,5 +36,10 @@ class Topic extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);
+    }
+
+    public function contentPieces(): HasMany
+    {
+        return $this->hasMany(ContentPiece::class);
     }
 }
