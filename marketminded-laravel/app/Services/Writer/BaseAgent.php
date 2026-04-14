@@ -161,13 +161,25 @@ abstract class BaseAgent implements Agent
         // just acknowledge a system-only message without invoking a tool.
         // The system prompt tells them WHAT and HOW; this user message is
         // the "go" signal that triggers the required submit_* tool call.
+        // Constrain tool_choice to eliminate the "I'll do X..." prose failure
+        // mode. If the agent has server tools (web_search), we use "required"
+        // so the model can still call web_search before converging on the
+        // submit tool. Otherwise we force the specific submit function.
+        $submitToolName = $tools[0]['function']['name'] ?? 'submit';
+        $toolChoice = $useServerTools
+            ? 'required'
+            : [
+                'type' => 'function',
+                'function' => ['name' => $submitToolName],
+            ];
+
         $result = $client->chat(
             messages: [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling the submit tool with all required fields. Do not reply with prose.'],
+                ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields.'],
             ],
             tools: $tools,
-            toolChoice: null,
+            toolChoice: $toolChoice,
             temperature: $temperature,
             useServerTools: $useServerTools,
         );

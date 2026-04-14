@@ -27,7 +27,7 @@ class OpenRouterClient
         return $this->model;
     }
 
-    public function chat(array $messages, array $tools = [], ?string $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true): ChatResult
+    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true): ChatResult
     {
         $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;

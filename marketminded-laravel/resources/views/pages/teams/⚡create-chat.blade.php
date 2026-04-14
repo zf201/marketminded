@@ -501,8 +501,50 @@ new class extends Component
         // Saved topic cards
         $html .= $this->savedTopicCards($completedTools);
         $html .= $this->contentPieceCards($completedTools);
+        // Processing card for the currently-running sub-agent, if any
+        if ($activeTool !== null) {
+            $html .= $this->activeSubAgentCard($activeTool);
+        }
 
         $this->stream(to: 'streamed-response', content: $html, replace: true);
+    }
+
+    /**
+     * Render a full-width "working" card while a sub-agent tool is in flight.
+     * Gives the user a visible dedicated area per dispatched agent (rather
+     * than just the small pill), with a note that the agent's output will
+     * replace this card when it finishes.
+     */
+    private function activeSubAgentCard(ToolEvent $activeTool): string
+    {
+        $agentMap = [
+            'research_topic' => ['title' => 'Research sub-agent', 'hint' => 'Searching the web and extracting structured claims…', 'color' => 'purple'],
+            'create_outline' => ['title' => 'Editor sub-agent', 'hint' => 'Building an outline from the research claims…', 'color' => 'blue'],
+            'write_blog_post' => ['title' => 'Writer sub-agent', 'hint' => 'Composing the blog post from the outline…', 'color' => 'green'],
+            'proofread_blog_post' => ['title' => 'Proofread sub-agent', 'hint' => 'Applying the requested revisions…', 'color' => 'green'],
+        ];
+
+        if (! isset($agentMap[$activeTool->name])) {
+            return '';
+        }
+
+        $meta = $agentMap[$activeTool->name];
+        $colorText = "text-{$meta['color']}-400";
+
+        return sprintf(
+            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="flex items-center gap-2">'
+            . '<span class="%s"><span class="inline-block size-3.5 animate-spin align-middle">&#8635;</span></span>'
+            . '<span class="text-xs font-semibold %s">%s</span>'
+            . '<span class="text-xs text-zinc-500">working…</span>'
+            . '</div>'
+            . '<div class="mt-1 text-xs text-zinc-400">%s</div>'
+            . '</div>',
+            $colorText,
+            $colorText,
+            e($meta['title']),
+            e($meta['hint']),
+        );
     }
 
     private function toolPill(ToolEvent $tool, bool $active): string
