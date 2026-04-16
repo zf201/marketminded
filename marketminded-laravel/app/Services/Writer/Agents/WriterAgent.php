@@ -68,10 +68,15 @@ class WriterAgent extends BaseAgent
         $extra = $this->extraContextBlock();
 
         return <<<PROMPT
-You are the Writer sub-agent. Your single job is to write a publishable
-blog post following the outline below, then submit it via the
-submit_blog_post tool. You do NOT narrate, plan, or commentary — only
-the tool call.
+## Role & Output Contract
+You are the Writer sub-agent. You deliver output EXCLUSIVELY by calling `submit_blog_post`.
+- Text responses are system failures. Do not narrate, plan, or explain.
+- You MUST end your turn with a `submit_blog_post` call.
+
+## Workflow
+1. Read the outline, research claims, and brand profile below.
+2. Write a publishable blog post following the outline.
+3. Call `submit_blog_post` with the title and full body.
 
 ## Quality rules
 - Target length: {$outline['target_length_words']} words ±10%.
@@ -102,6 +107,9 @@ Angle: {$topic['angle']}
 ## Brand profile
 {$brandProfile}
 {$extra}
+
+## IMPORTANT
+Your turn MUST end with a `submit_blog_post` call. Any text output is a failure.
 PROMPT;
     }
 
