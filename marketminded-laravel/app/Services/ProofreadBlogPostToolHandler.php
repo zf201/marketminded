@@ -31,7 +31,8 @@ class ProofreadBlogPostToolHandler
         }
 
         $conversation = Conversation::findOrFail($conversationId);
-        $brief = Brief::fromJson($conversation->brief ?? []);
+        $brief = Brief::fromJson($conversation->brief ?? [])
+            ->withConversationId($conversation->id);
 
         $extraContext = $args['extra_context'] ?? null;
         // In production we always construct fresh (ProofreadAgent needs $feedback).

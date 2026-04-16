@@ -24,7 +24,8 @@ class WriteBlogPostToolHandler
         }
 
         $conversation = Conversation::findOrFail($conversationId);
-        $brief = Brief::fromJson($conversation->brief ?? []);
+        $brief = Brief::fromJson($conversation->brief ?? [])
+            ->withConversationId($conversation->id);
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new WriterAgent($extraContext) : ($this->agent ?? new WriterAgent);
