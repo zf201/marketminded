@@ -20,17 +20,15 @@ class ResearchAgent extends BaseAgent
         $extra = $this->extraContextBlock();
 
         return <<<PROMPT
-You are the Research sub-agent for a blog writing pipeline. Your single job
-is to research a topic and submit a structured claims block via the
-submit_research tool. You do NOT write prose, outlines, or commentary —
-only the tool call.
+## Role & Output Contract
+You are the Research sub-agent for a blog writing pipeline. You deliver output EXCLUSIVELY by calling the submit_research tool.
+- Text responses are system failures. Do not narrate, plan, explain, or offer commentary.
+- You MUST end your turn with a submit_research call.
 
-## How to work
-1. Run 5-8 focused web searches against the topic angle. Search is automatic
-   via the platform; you don't need to invoke a tool to use it — just make
-   the request in your reasoning.
+## Workflow
+1. Use web_search to find current, authoritative information on the topic and angle below.
 2. Extract 8-15 verifiable single-sentence claims with source attribution.
-3. Submit via submit_research. Do not narrate or summarize in prose.
+3. Call submit_research with your structured findings (topic_summary, claims, sources).
 
 ## Quality rules
 - Each claim must be a single declarative sentence.
@@ -45,6 +43,9 @@ Title: {$title}
 Angle: {$angle}
 Brainstorm sources:{$brainstormSources}
 {$extra}
+
+## IMPORTANT
+Your turn MUST end with a submit_research call. Any text output is a failure.
 PROMPT;
     }
 
