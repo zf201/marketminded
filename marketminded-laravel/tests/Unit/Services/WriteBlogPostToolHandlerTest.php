@@ -67,6 +67,7 @@ test('handler returns ok, persists brief, patches conversation_id onto piece', f
 
     $decoded = json_decode($result, true);
     expect($decoded['status'])->toBe('ok');
+    expect($decoded['piece_id'])->toBe($piece->id);
 
     $piece->refresh();
     expect($piece->conversation_id)->toBe($conversation->id);
@@ -75,18 +76,36 @@ test('handler returns ok, persists brief, patches conversation_id onto piece', f
     expect(Brief::fromJson($conversation->brief)->contentPieceId())->toBe($piece->id);
 });
 
-test('handler refuses second call (retry guard)', function () {
-    [$team, $conversation] = writerConvWithFullBrief();
+test('handler returns existing piece card on duplicate in-turn call (idempotent)', function () {
+    [$team, $conversation, $topic] = writerConvWithFullBrief();
+
+    $piece = ContentPiece::create([
+        'team_id' => $team->id,
+        'conversation_id' => $conversation->id,
+        'topic_id' => $topic->id,
+        'title' => 'Prior', 'body' => str_repeat('w ', 850),
+        'current_version' => 1,
+    ]);
+    $conversation->update(['brief' => array_merge(
+        $conversation->brief,
+        ['content_piece_id' => $piece->id],
+    )]);
 
     $agent = new FakeWriterAgent;
-    $agent->stubResult = AgentResult::error('should not be called');
+    $agent->stubResult = AgentResult::error('agent should not be called on idempotent retry');
 
     $handler = new WriteBlogPostToolHandler($agent);
-    $result = $handler->execute($team, $conversation->id, [], [['name' => 'write_blog_post', 'args' => []]]);
+    $result = $handler->execute(
+        $team,
+        $conversation->id,
+        [],
+        [['name' => 'write_blog_post', 'args' => []]],
+    );
     $decoded = json_decode($result, true);
 
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('Already retried');
+    expect($decoded['status'])->toBe('ok');
+    expect($decoded['piece_id'])->toBe($piece->id);
+    expect($decoded['card']['title'])->toBe('Prior');
 });
 
 test('handler propagates agent gate error', function () {

@@ -15,15 +15,35 @@ class WriteBlogPostToolHandler
 
     public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
     {
+        $conversation = Conversation::findOrFail($conversationId);
+
+        // Idempotent path: if this turn already tried write_blog_post successfully,
+        // return the existing piece's card instead of erroring out.
         $callsSoFar = collect($priorTurnTools)->where('name', 'write_blog_post')->count();
         if ($callsSoFar >= 1) {
-            return json_encode([
-                'status' => 'error',
-                'message' => 'Already retried write_blog_post this turn. Get help from the user.',
-            ]);
+            $brief = Brief::fromJson($conversation->brief ?? []);
+            if ($brief->hasContentPiece()) {
+                $piece = ContentPiece::where('id', $brief->contentPieceId())
+                    ->where('team_id', $team->id)
+                    ->first();
+                if ($piece !== null) {
+                    return json_encode([
+                        'status' => 'ok',
+                        'summary' => 'Draft already exists · v' . $piece->current_version,
+                        'card' => [
+                            'kind' => 'content_piece',
+                            'summary' => 'Draft already exists · v' . $piece->current_version,
+                            'title' => $piece->title,
+                            'preview' => mb_substr(strip_tags($piece->body), 0, 200),
+                            'word_count' => str_word_count(strip_tags($piece->body)),
+                        ],
+                        'piece_id' => $piece->id,
+                    ]);
+                }
+            }
+            // Prior call claimed to have run but we can't find the piece — fall through.
         }
 
-        $conversation = Conversation::findOrFail($conversationId);
         $brief = Brief::fromJson($conversation->brief ?? [])
             ->withConversationId($conversation->id);
 
@@ -40,8 +60,8 @@ class WriteBlogPostToolHandler
             return json_encode(['status' => 'error', 'message' => $result->errorMessage]);
         }
 
-        // Patch conversation_id onto the piece (the agent didn't know it).
-        if ($pieceId = $result->brief->contentPieceId()) {
+        $pieceId = $result->brief->contentPieceId();
+        if ($pieceId !== null) {
             ContentPiece::where('id', $pieceId)->update(['conversation_id' => $conversation->id]);
         }
 
@@ -51,6 +71,7 @@ class WriteBlogPostToolHandler
             'status' => 'ok',
             'summary' => $result->summary,
             'card' => $result->cardPayload,
+            'piece_id' => $pieceId,
         ]);
     }
 

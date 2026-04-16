@@ -14,12 +14,30 @@ class ProofreadBlogPostToolHandler
 
     public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
     {
+        $conversation = Conversation::findOrFail($conversationId);
+
         $callsSoFar = collect($priorTurnTools)->where('name', 'proofread_blog_post')->count();
         if ($callsSoFar >= 1) {
-            return json_encode([
-                'status' => 'error',
-                'message' => 'Already retried proofread_blog_post this turn. Get help from the user.',
-            ]);
+            $brief = Brief::fromJson($conversation->brief ?? []);
+            if ($brief->hasContentPiece()) {
+                $piece = \App\Models\ContentPiece::where('id', $brief->contentPieceId())
+                    ->where('team_id', $team->id)
+                    ->first();
+                if ($piece !== null) {
+                    return json_encode([
+                        'status' => 'ok',
+                        'summary' => 'Revision already applied · v' . $piece->current_version,
+                        'card' => [
+                            'kind' => 'content_piece',
+                            'summary' => 'Revision already applied · v' . $piece->current_version,
+                            'title' => $piece->title,
+                            'preview' => mb_substr(strip_tags($piece->body), 0, 200),
+                            'change_description' => 'already applied this turn',
+                        ],
+                        'piece_id' => $piece->id,
+                    ]);
+                }
+            }
         }
 
         $feedback = trim($args['feedback'] ?? '');
@@ -30,13 +48,10 @@ class ProofreadBlogPostToolHandler
             ]);
         }
 
-        $conversation = Conversation::findOrFail($conversationId);
         $brief = Brief::fromJson($conversation->brief ?? [])
             ->withConversationId($conversation->id);
 
         $extraContext = $args['extra_context'] ?? null;
-        // In production we always construct fresh (ProofreadAgent needs $feedback).
-        // Tests may inject a fake via constructor — keep that path for them.
         $agent = $this->agent ?? new ProofreadAgent($feedback, $extraContext);
 
         try {
@@ -55,6 +70,7 @@ class ProofreadBlogPostToolHandler
             'status' => 'ok',
             'summary' => $result->summary,
             'card' => $result->cardPayload,
+            'piece_id' => $result->brief->contentPieceId(),
         ]);
     }
 

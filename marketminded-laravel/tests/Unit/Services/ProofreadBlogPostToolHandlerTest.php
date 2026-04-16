@@ -61,20 +61,30 @@ test('handler returns ok and persists brief on success', function () {
     $decoded = json_decode($result, true);
     expect($decoded['status'])->toBe('ok');
     expect($decoded['summary'])->toContain('Revised');
+    expect($decoded['piece_id'])->toBe($piece->id);
 });
 
-test('handler refuses second call (retry guard)', function () {
-    [$team, $conversation] = writerConvWithPiece();
+test('proofread handler returns existing piece card on duplicate in-turn call', function () {
+    [$team, $conversation, $piece] = writerConvWithPiece();
+
+    // Ensure piece has conversation_id and a version > 1 to simulate prior proofread
+    $piece->update(['conversation_id' => $conversation->id, 'current_version' => 2]);
 
     $agent = new FakeProofreadAgent;
-    $agent->stubResult = AgentResult::error('should not be called');
+    $agent->stubResult = AgentResult::error('agent should not be called on idempotent retry');
 
     $handler = new ProofreadBlogPostToolHandler($agent);
-    $result = $handler->execute($team, $conversation->id, ['feedback' => 'x'], [['name' => 'proofread_blog_post', 'args' => []]]);
+    $result = $handler->execute(
+        $team,
+        $conversation->id,
+        ['feedback' => 'x'],
+        [['name' => 'proofread_blog_post', 'args' => []]],
+    );
     $decoded = json_decode($result, true);
 
-    expect($decoded['status'])->toBe('error');
-    expect($decoded['message'])->toContain('Already retried');
+    expect($decoded['status'])->toBe('ok');
+    expect($decoded['piece_id'])->toBe($piece->id);
+    expect($decoded['card']['title'])->toBe('T');
 });
 
 test('handler returns error when feedback is missing', function () {
