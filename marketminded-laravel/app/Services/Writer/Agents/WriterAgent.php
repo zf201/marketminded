@@ -19,11 +19,22 @@ class WriterAgent extends BaseAgent
         if (! $brief->hasOutline()) {
             return AgentResult::error('Cannot write without an outline. Run create_outline first.');
         }
-        // Guard against duplicate pieces on this conversation. The orchestrator
-        // might call write_blog_post again after a (possibly interrupted) prior
-        // success — redirect to proofread instead of creating a second draft.
+        if ($brief->conversationId() === null) {
+            return AgentResult::error('Writer requires conversation_id on the brief.');
+        }
+
         if ($brief->hasContentPiece()) {
-            return AgentResult::error('A blog post already exists for this conversation. Use proofread_blog_post with the user\'s feedback to revise it.');
+            $existing = ContentPiece::where('id', $brief->contentPieceId())
+                ->where('team_id', $team->id)
+                ->first();
+
+            if ($existing !== null && $existing->current_version >= 1) {
+                return AgentResult::ok(
+                    brief: $brief,
+                    cardPayload: $this->buildCardFromPiece($existing),
+                    summary: 'Draft already exists · v' . $existing->current_version,
+                );
+            }
         }
 
         return parent::execute($brief, $team);
@@ -165,19 +176,23 @@ PROMPT;
     {
         $topic = $brief->topic();
 
-        $piece = ContentPiece::create([
-            'team_id' => $team->id,
-            'conversation_id' => null,    // Tool handler patches this in later
-            'topic_id' => $topic['id'] ?? null,
-            'title' => '',
-            'body' => '',
-            'status' => 'draft',
-            'platform' => 'blog',
-            'format' => 'pillar',
-            'current_version' => 0,
-        ]);
+        $piece = ContentPiece::firstOrCreate(
+            ['conversation_id' => $brief->conversationId()],
+            [
+                'team_id' => $team->id,
+                'topic_id' => $topic['id'] ?? null,
+                'title' => '',
+                'body' => '',
+                'status' => 'draft',
+                'platform' => 'blog',
+                'format' => 'pillar',
+                'current_version' => 0,
+            ],
+        );
 
-        $piece->saveSnapshot($payload['title'], $payload['body'], 'Initial draft');
+        if ($piece->current_version === 0) {
+            $piece->saveSnapshot($payload['title'], $payload['body'], 'Initial draft');
+        }
 
         if (! empty($topic['id'])) {
             Topic::where('id', $topic['id'])->update(['status' => 'used']);
@@ -201,6 +216,20 @@ PROMPT;
     protected function buildSummary(array $payload): string
     {
         return 'Draft created · v1 · ' . str_word_count(strip_tags($payload['body'])) . ' words';
+    }
+
+    protected function buildCardFromPiece(ContentPiece $piece): array
+    {
+        return [
+            'kind' => 'content_piece',
+            'summary' => 'Draft already exists · v' . $piece->current_version,
+            'title' => $piece->title,
+            'preview' => mb_substr(strip_tags($piece->body), 0, 200),
+            'word_count' => str_word_count(strip_tags($piece->body)),
+            'cost' => 0.0,
+            'input_tokens' => 0,
+            'output_tokens' => 0,
+        ];
     }
 
     protected function brandProfileBlock(Team $team): string

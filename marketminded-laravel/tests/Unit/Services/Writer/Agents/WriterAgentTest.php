@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\ContentPiece;
+use App\Models\Conversation;
 use App\Models\Team;
 use App\Models\Topic;
 use App\Models\User;
@@ -29,6 +30,13 @@ function fullBriefForWriter(Team $team): array
         'status' => 'available',
     ]);
 
+    $conversation = Conversation::create([
+        'team_id' => $team->id,
+        'user_id' => $team->members->first()->id,
+        'title' => 'test',
+        'type' => 'writer',
+    ]);
+
     return [
         'brief' => Brief::fromJson([
             'topic' => ['id' => $topic->id, 'title' => 'Zero Party Data', 'angle' => 'Privacy', 'sources' => []],
@@ -45,8 +53,9 @@ function fullBriefForWriter(Team $team): array
                     ['heading' => 'Body', 'purpose' => 'evidence', 'claim_ids' => ['c1']],
                 ],
             ],
-        ]),
+        ])->withConversationId($conversation->id),
         'topic' => $topic,
+        'conversation' => $conversation,
     ];
 }
 
@@ -111,20 +120,31 @@ test('WriterAgent gate: refuses when outline is missing', function () {
     expect($result->errorMessage)->toContain('outline');
 });
 
-test('WriterAgent refuses to create a second piece when one already exists', function () {
+test('WriterAgent short-circuits with idempotent success when piece already exists', function () {
     $user = User::factory()->create();
     $team = $user->currentTeam;
     $ctx = fullBriefForWriter($team);
 
-    // Seed the brief with an existing content_piece_id
-    $briefWithPiece = $ctx['brief']->withContentPieceId(42);
+    $piece = ContentPiece::create([
+        'team_id' => $team->id,
+        'conversation_id' => null,
+        'title' => 'Existing', 'body' => str_repeat('w ', 850),
+        'current_version' => 1,
+    ]);
 
-    $agent = new StubbedWriterAgent(['title' => 'T', 'body' => str_repeat('w ', 850)]);
+    $briefWithPiece = $ctx['brief']
+        ->withConversationId(999)
+        ->withContentPieceId($piece->id);
+
+    $agent = new StubbedWriterAgent(['title' => 'New', 'body' => str_repeat('w ', 850)]);
     $result = $agent->execute($briefWithPiece, $team);
 
-    expect($result->isOk())->toBeFalse();
-    expect($result->errorMessage)->toContain('already exists');
-    expect($result->errorMessage)->toContain('proofread_blog_post');
+    expect($result->isOk())->toBeTrue();
+    expect($result->brief->contentPieceId())->toBe($piece->id);
+    expect($result->cardPayload['title'])->toBe('Existing');
+    expect($result->summary)->toContain('v1');
+    expect(ContentPiece::count())->toBe(1);
+    expect($piece->refresh()->current_version)->toBe(1);
 });
 
 test('WriterAgent rejects body shorter than 800 words', function () {
