@@ -74,6 +74,7 @@ class OpenRouterClient
                     outputTokens: $totalOutputTokens,
                     cost: $totalCost,
                     iterations: $iteration,
+                    messages: $messages,
                 );
             }
 
@@ -88,6 +89,7 @@ class OpenRouterClient
                         outputTokens: $totalOutputTokens,
                         cost: $totalCost,
                         iterations: $iteration,
+                        messages: $messages,
                     );
                 }
 

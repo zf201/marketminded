@@ -10,6 +10,7 @@ class ChatResult
         public readonly int $outputTokens = 0,
         public readonly float $cost = 0,
         public readonly int $iterations = 0,
+        public readonly array $messages = [],
     ) {}
 
     public function usage(): array

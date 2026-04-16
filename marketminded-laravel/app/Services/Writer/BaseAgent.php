@@ -197,7 +197,7 @@ abstract class BaseAgent implements Agent
         $result = $client->chat(
             messages: [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields.'],
+                ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields. Do not respond with text.'],
             ],
             tools: $tools,
             toolChoice: $toolChoice,
@@ -213,6 +213,38 @@ abstract class BaseAgent implements Agent
         if (is_array($result->data)) {
             $this->lastTextResponse = null;
             return $result->data;
+        }
+
+        // The model returned text instead of calling the submit tool. This
+        // happens with server-tool agents (tool_choice='required') when the
+        // model does web searches but then narrates instead of submitting.
+        // Retry once with the full conversation history (including any web
+        // search results the model gathered) and force the specific submit
+        // function so the model has no choice but to call it.
+        if ($useServerTools && ! empty($result->messages)) {
+            $retryMessages = $result->messages;
+            $retryMessages[] = [
+                'role' => 'user',
+                'content' => 'You responded with text instead of calling ' . $submitToolName . '. You MUST call ' . $submitToolName . ' now with all required fields. Use the information you already gathered.',
+            ];
+
+            $retry = $client->chat(
+                messages: $retryMessages,
+                tools: $tools,
+                toolChoice: ['type' => 'function', 'function' => ['name' => $submitToolName]],
+                temperature: $temperature,
+                useServerTools: false,
+                timeout: $timeout,
+            );
+
+            $this->lastInputTokens += $retry->inputTokens;
+            $this->lastOutputTokens += $retry->outputTokens;
+            $this->lastCost += $retry->cost;
+
+            if (is_array($retry->data)) {
+                $this->lastTextResponse = null;
+                return $retry->data;
+            }
         }
 
         $this->lastTextResponse = is_string($result->data) ? $result->data : null;
