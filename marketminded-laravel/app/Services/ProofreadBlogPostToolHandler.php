@@ -16,7 +16,7 @@ class ProofreadBlogPostToolHandler
     {
         $conversation = Conversation::findOrFail($conversationId);
 
-        $callsSoFar = collect($priorTurnTools)->where('name', 'proofread_blog_post')->count();
+        $callsSoFar = collect($priorTurnTools)->where('name', 'proofread_blog_post')->where('status', 'ok')->count();
         if ($callsSoFar >= 1) {
             $brief = Brief::fromJson($conversation->brief ?? []);
             if ($brief->hasContentPiece()) {

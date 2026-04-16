@@ -224,22 +224,22 @@ new class extends Component
             }
             if ($name === 'research_topic') {
                 $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'create_outline') {
                 $result = $outlineHandler->execute($team, $conversation->id, $args, $priorTurnTools);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'write_blog_post') {
                 $result = $writeHandler->execute($team, $conversation->id, $args, $priorTurnTools);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'proofread_blog_post') {
                 $result = $proofreadHandler->execute($team, $conversation->id, $args, $priorTurnTools);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args];
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             return "Unknown tool: {$name}";

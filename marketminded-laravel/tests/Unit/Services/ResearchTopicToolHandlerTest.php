@@ -93,7 +93,7 @@ test('handler refuses second call (retry guard) when prior turn already had rese
     $agent->stubResult = AgentResult::error('should not be called');
 
     $handler = new ResearchTopicToolHandler($agent);
-    $priorTurnTools = [['name' => 'research_topic', 'args' => []]];
+    $priorTurnTools = [['name' => 'research_topic', 'args' => [], 'status' => 'ok']];
 
     $result = $handler->execute($team, $conversation->id, [], $priorTurnTools);
     $decoded = json_decode($result, true);

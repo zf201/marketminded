@@ -13,7 +13,7 @@ class ResearchTopicToolHandler
 
     public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
     {
-        $callsSoFar = collect($priorTurnTools)->where('name', 'research_topic')->count();
+        $callsSoFar = collect($priorTurnTools)->where('name', 'research_topic')->where('status', 'ok')->count();
         if ($callsSoFar >= 1) {
             return json_encode([
                 'status' => 'error',

@@ -99,7 +99,7 @@ test('handler returns existing piece card on duplicate in-turn call (idempotent)
         $team,
         $conversation->id,
         [],
-        [['name' => 'write_blog_post', 'args' => []]],
+        [['name' => 'write_blog_post', 'args' => [], 'status' => 'ok']],
     );
     $decoded = json_decode($result, true);
 

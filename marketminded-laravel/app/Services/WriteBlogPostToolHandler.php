@@ -19,7 +19,7 @@ class WriteBlogPostToolHandler
 
         // Idempotent path: if this turn already tried write_blog_post successfully,
         // return the existing piece's card instead of erroring out.
-        $callsSoFar = collect($priorTurnTools)->where('name', 'write_blog_post')->count();
+        $callsSoFar = collect($priorTurnTools)->where('name', 'write_blog_post')->where('status', 'ok')->count();
         if ($callsSoFar >= 1) {
             $brief = Brief::fromJson($conversation->brief ?? []);
             if ($brief->hasContentPiece()) {

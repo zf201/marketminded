@@ -68,7 +68,7 @@ test('handler refuses second call (retry guard)', function () {
     $agent->stubResult = AgentResult::error('should not be called');
 
     $handler = new CreateOutlineToolHandler($agent);
-    $priorTurnTools = [['name' => 'create_outline', 'args' => []]];
+    $priorTurnTools = [['name' => 'create_outline', 'args' => [], 'status' => 'ok']];
 
     $result = $handler->execute($team, $conversation->id, [], $priorTurnTools);
     $decoded = json_decode($result, true);

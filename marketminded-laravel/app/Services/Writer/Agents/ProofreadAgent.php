@@ -101,6 +101,11 @@ PROMPT;
         return 0.4;
     }
 
+    protected function timeout(): int
+    {
+        return 180;
+    }
+
     protected function validate(array $payload): ?string
     {
         if (trim($payload['title'] ?? '') === '') {

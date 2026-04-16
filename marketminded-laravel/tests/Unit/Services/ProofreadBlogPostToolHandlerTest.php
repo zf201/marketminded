@@ -78,7 +78,7 @@ test('proofread handler returns existing piece card on duplicate in-turn call', 
         $team,
         $conversation->id,
         ['feedback' => 'x'],
-        [['name' => 'proofread_blog_post', 'args' => []]],
+        [['name' => 'proofread_blog_post', 'args' => [], 'status' => 'ok']],
     );
     $decoded = json_decode($result, true);
 

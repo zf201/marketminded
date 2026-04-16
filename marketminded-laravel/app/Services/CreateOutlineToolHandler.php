@@ -14,7 +14,7 @@ class CreateOutlineToolHandler
 
     public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
     {
-        $callsSoFar = collect($priorTurnTools)->where('name', 'create_outline')->count();
+        $callsSoFar = collect($priorTurnTools)->where('name', 'create_outline')->where('status', 'ok')->count();
         if ($callsSoFar >= 1) {
             return json_encode([
                 'status' => 'error',
