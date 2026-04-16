@@ -43,6 +43,12 @@ final class Brief
         return $id === null ? null : (int) $id;
     }
 
+    public function conversationId(): ?int
+    {
+        $id = $this->data['conversation_id'] ?? null;
+        return $id === null ? null : (int) $id;
+    }
+
     public function hasTopic(): bool
     {
         return $this->topic() !== null;
@@ -84,6 +90,11 @@ final class Brief
     public function withContentPieceId(int $id): self
     {
         return $this->with('content_piece_id', $id);
+    }
+
+    public function withConversationId(int $id): self
+    {
+        return $this->with('conversation_id', $id);
     }
 
     public function statusSummary(): string
