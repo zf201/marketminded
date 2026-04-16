@@ -252,16 +252,6 @@ new class extends Component
 
         try {
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
-                // If the user clicked Stop, the browser has closed the stream
-                // connection. We set ignore_user_abort(true) at the top so
-                // PHP keeps running — which means we can stop requesting more
-                // tokens from OpenRouter right here, then fall through to the
-                // finally block to persist the message and write the log.
-                if (connection_aborted()) {
-                    $interrupted = true;
-                    break;
-                }
-
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'completed') {
                         $completedTools[] = $item;
@@ -273,6 +263,11 @@ new class extends Component
                 } else {
                     $fullContent .= $item;
                     $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
+                }
+
+                if (connection_aborted()) {
+                    $interrupted = true;
+                    break;
                 }
             }
         } catch (\Throwable $e) {
@@ -299,6 +294,12 @@ new class extends Component
                     $result = json_decode($t->result ?? '{}', true);
                     if (isset($result['card'])) {
                         $entry['card'] = $result['card'];
+                    }
+                    if (isset($result['piece_id'])) {
+                        $entry['piece_id'] = $result['piece_id'];
+                    }
+                    if (isset($result['status'])) {
+                        $entry['status'] = $result['status'];
                     }
                     return $entry;
                 })->toArray();
@@ -642,6 +643,8 @@ new class extends Component
     private function contentPieceCards(array $completedTools): string
     {
         $html = '';
+        $seenPieceIds = [];
+
         foreach ($completedTools as $tool) {
             $result = json_decode($tool->result ?? '{}', true);
             if (($result['status'] ?? '') !== 'ok') {
@@ -656,8 +659,14 @@ new class extends Component
             } elseif ($tool->name === 'create_outline' && $kind === 'outline') {
                 $html .= $this->renderOutlineCard($card);
             } elseif (in_array($tool->name, ['write_blog_post', 'proofread_blog_post'], true)) {
-                $piece = \App\Models\ContentPiece::where('team_id', $this->teamModel->id)
-                    ->where('conversation_id', $this->conversation->id)
+                $pieceId = $result['piece_id'] ?? null;
+                if ($pieceId === null || isset($seenPieceIds[$pieceId])) {
+                    continue;
+                }
+                $seenPieceIds[$pieceId] = true;
+
+                $piece = \App\Models\ContentPiece::where('id', $pieceId)
+                    ->where('team_id', $this->teamModel->id)
                     ->first();
                 if ($piece) {
                     $html .= $this->renderContentPieceCard($piece, $tool->name, $card ?? []);
@@ -840,8 +849,16 @@ new class extends Component
                         @endforeach
 
                         {{-- Sub-agent cards from history --}}
+                        @php
+                            $seenHistoryPieceIds = [];
+                        @endphp
                         @foreach ($message['metadata']['tools'] ?? [] as $tool)
                             @php
+                                $status = $tool['status'] ?? 'ok';
+                                if ($status !== 'ok') {
+                                    continue;
+                                }
+
                                 $card = $tool['card'] ?? null;
                                 $kind = $card['kind'] ?? null;
                                 $metricsParts = [];
@@ -881,9 +898,15 @@ new class extends Component
                                 </div>
                             @elseif (in_array($tool['name'], ['write_blog_post', 'proofread_blog_post'], true))
                                 @php
-                                    $piece = \App\Models\ContentPiece::where('team_id', $teamModel->id)
-                                        ->where('conversation_id', $conversation->id)
-                                        ->first();
+                                    $pieceId = $tool['piece_id'] ?? null;
+                                    if ($pieceId === null || isset($seenHistoryPieceIds[$pieceId])) {
+                                        $piece = null;
+                                    } else {
+                                        $seenHistoryPieceIds[$pieceId] = true;
+                                        $piece = \App\Models\ContentPiece::where('id', $pieceId)
+                                            ->where('team_id', $teamModel->id)
+                                            ->first();
+                                    }
                                     $badge = $tool['name'] === 'write_blog_post' ? __('Draft created') : __('Revised');
                                 @endphp
                                 @if ($piece)
