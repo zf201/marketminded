@@ -470,14 +470,13 @@ new class extends Component
             $html .= '<div class="whitespace-pre-wrap">' . e($content) . '</div>';
         }
 
-        // Writer sub-agents have dedicated cards (research/outline/write/proofread).
-        // When one is active, suppress its active pill — the card is the full-width
-        // progress indicator. Non-writer tools (fetch_url, save_topics, brand
-        // updates) still use the pill.
+        // Writer sub-agents get dedicated full-width cards instead of small pills.
+        // Suppress the pill spinner for them but keep $activeTool intact so the
+        // activeSubAgentCard() at the bottom still renders.
         $writerTools = ['research_topic', 'create_outline', 'write_blog_post', 'proofread_blog_post'];
-        $activeTool = $activeTool && in_array($activeTool->name, $writerTools, true) ? null : $activeTool;
+        $isWriterTool = $activeTool && in_array($activeTool->name, $writerTools, true);
 
-        if ($activeTool) {
+        if ($activeTool && ! $isWriterTool) {
             $label = match ($activeTool->name) {
                 'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
                 'update_brand_intelligence' => 'Updating brand profile',
