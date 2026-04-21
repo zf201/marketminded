@@ -155,6 +155,21 @@ test('AudiencePickerAgent rejects empty guidance_for_writer', function () {
     expect($result->errorMessage)->toContain('guidance_for_writer');
 });
 
+test('AudiencePickerAgent returns error when persona_id not found for team', function () {
+    [$team] = teamWithPersonas();
+
+    $agent = new StubbedAudiencePickerAgent([
+        'mode' => 'persona',
+        'persona_id' => 99999, // non-existent
+        'reasoning' => 'r',
+        'guidance_for_writer' => 'g',
+    ]);
+    $result = $agent->execute(briefWithResearchForAudience(), $team);
+
+    expect($result->isOk())->toBeFalse();
+    expect($result->errorMessage)->toContain('99999');
+});
+
 test('AudiencePickerAgent returns error when brief has no research', function () {
     [$team] = teamWithPersonas();
     $brief = Brief::fromJson(['topic' => ['id' => 1, 'title' => 'X', 'angle' => 'a', 'sources' => []]]);

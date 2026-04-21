@@ -16,7 +16,11 @@ class AudiencePickerAgent extends BaseAgent
             return AgentResult::error('Cannot pick audience without research. Run research_topic first.');
         }
 
-        return parent::execute($brief, $team);
+        try {
+            return parent::execute($brief, $team);
+        } catch (\RuntimeException $e) {
+            return AgentResult::error($e->getMessage());
+        }
     }
 
     protected function systemPrompt(Brief $brief, Team $team): string
@@ -109,11 +113,11 @@ PROMPT;
             return 'mode must be one of: persona, educational, commentary.';
         }
 
-        if ($mode === 'persona' && empty($payload['persona_id'])) {
+        if ($mode === 'persona' && ! isset($payload['persona_id'])) {
             return 'persona_id is required when mode=persona.';
         }
 
-        if ($mode !== 'persona' && isset($payload['persona_id'])) {
+        if ($mode !== 'persona' && array_key_exists('persona_id', $payload)) {
             return "persona_id must not be set when mode={$mode}.";
         }
 
@@ -138,11 +142,13 @@ PROMPT;
                 ->where('team_id', $team->id)
                 ->first();
 
-            if ($persona !== null) {
-                $audience['persona_id'] = $personaId;
-                $audience['persona_label'] = $persona->label;
-                $audience['persona_summary'] = $this->buildPersonaSummary($persona);
+            if ($persona === null) {
+                throw new \RuntimeException("persona_id {$personaId} not found for this team");
             }
+
+            $audience['persona_id'] = $personaId;
+            $audience['persona_label'] = $persona->label;
+            $audience['persona_summary'] = $this->buildPersonaSummary($persona);
         }
 
         return $brief->withAudience($audience);
@@ -179,8 +185,7 @@ PROMPT;
         return implode('. ', $parts);
     }
 
-    /** @param \Illuminate\Database\Eloquent\Collection<int, AudiencePersona> $personas */
-    private function formatPersonasBlock($personas): string
+    private function formatPersonasBlock(\Illuminate\Database\Eloquent\Collection $personas): string
     {
         if ($personas->isEmpty()) {
             return '(none)';
