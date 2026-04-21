@@ -100,7 +100,7 @@ PROMPT;
 
     protected function useServerTools(): bool
     {
-        return false;
+        return true;
     }
 
     protected function model(Team $team): string
@@ -131,12 +131,20 @@ PROMPT;
             if (trim($ex['url'] ?? '') === '') {
                 return "Example[{$i}] missing url.";
             }
+            if (! filter_var($ex['url'], FILTER_VALIDATE_URL)) {
+                return "Example[{$i}] url is not a valid URL: {$ex['url']}.";
+            }
             if (trim($ex['title'] ?? '') === '') {
                 return "Example[{$i}] missing title.";
             }
             if (trim($ex['why_chosen'] ?? '') === '') {
                 return "Example[{$i}] missing why_chosen.";
             }
+        }
+
+        $urls = array_column($examples, 'url');
+        if (count(array_unique($urls)) !== count($urls)) {
+            return 'style_reference examples must have unique URLs.';
         }
 
         return null;
