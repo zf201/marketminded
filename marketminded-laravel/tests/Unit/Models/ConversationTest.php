@@ -79,12 +79,10 @@ test('Conversation topic() returns linked topic', function () {
         'title' => 'Writer',
         'type' => 'writer',
         'topic_id' => $topic->id,
-        'writer_mode' => 'autopilot',
     ]);
 
     expect($conversation->topic)->not->toBeNull();
     expect($conversation->topic->id)->toBe($topic->id);
-    expect($conversation->writer_mode)->toBe('autopilot');
 });
 
 test('Conversation contentPieces() returns linked pieces', function () {

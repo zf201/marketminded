@@ -6,7 +6,9 @@ use App\Models\Team;
 use App\Services\BrandIntelligenceToolHandler;
 use App\Services\ChatPromptBuilder;
 use App\Services\CreateOutlineToolHandler;
+use App\Services\FetchStyleReferenceToolHandler;
 use App\Services\OpenRouterClient;
+use App\Services\PickAudienceToolHandler;
 use App\Services\ResearchTopicToolHandler;
 use App\Services\StreamResult;
 use App\Services\ToolEvent;
@@ -31,8 +33,6 @@ new class extends Component
 
     public ?int $topicId = null;
 
-    public ?string $writerMode = null;
-
     public array $messages = [];
 
     public function mount(Team $current_team, Conversation $conversation): void
@@ -41,7 +41,6 @@ new class extends Component
         $this->conversation = $conversation;
         $this->loadMessages();
         $this->topicId = $this->conversation->topic_id;
-        $this->writerMode = $this->conversation->writer_mode;
     }
 
     public function selectType(string $type): void
@@ -71,57 +70,12 @@ new class extends Component
         $this->topicId = $topic->id;
     }
 
-    public function selectWriterMode(string $mode): void
-    {
-        if (! in_array($mode, ['autopilot', 'checkpoint'], true)) {
-            return;
-        }
-
-        $this->conversation->update(['writer_mode' => $mode]);
-        $this->conversation->refresh();
-        $this->writerMode = $mode;
-
-        $topic = $this->conversation->topic;
-        if ($topic) {
-            $this->prompt = __('Let\'s write a blog post about: :title', ['title' => $topic->title]);
-        }
-    }
-
     public function submitPrompt(): void
     {
         $content = trim($this->prompt);
 
         if ($content === '' || $this->isStreaming || ! $this->conversation->type) {
             return;
-        }
-
-        // Writer mode commands intercept
-        if ($this->conversation->type === 'writer') {
-            $lower = strtolower($content);
-            if ($lower === '!autopilot' || $lower === '!checkpoint') {
-                $mode = ltrim($lower, '!');
-                $this->conversation->update(['writer_mode' => $mode]);
-                $this->conversation->refresh();
-                $this->writerMode = $mode;
-
-                $notice = $mode === 'autopilot'
-                    ? __('Switched to autopilot mode. I\'ll run research, outline, and write in sequence.')
-                    : __('Switched to checkpoint mode. I\'ll pause after research and after the outline for your approval.');
-
-                Message::create([
-                    'conversation_id' => $this->conversation->id,
-                    'role' => 'assistant',
-                    'content' => $notice,
-                    'metadata' => ['command_result' => true],
-                ]);
-                $this->messages[] = [
-                    'role' => 'assistant',
-                    'content' => $notice,
-                    'metadata' => ['command_result' => true],
-                ];
-                $this->prompt = '';
-                return;
-            }
         }
 
         if (! $this->teamModel->openrouter_api_key) {
@@ -197,7 +151,9 @@ new class extends Component
         $brandHandler = new BrandIntelligenceToolHandler;
         $topicHandler = new TopicToolHandler;
         $researchHandler = new ResearchTopicToolHandler;
+        $audienceHandler = new PickAudienceToolHandler;
         $outlineHandler = new CreateOutlineToolHandler;
+        $styleRefHandler = new FetchStyleReferenceToolHandler;
         $writeHandler = new WriteBlogPostToolHandler;
         $proofreadHandler = new ProofreadBlogPostToolHandler;
         $team = $this->teamModel;
@@ -210,8 +166,8 @@ new class extends Component
         $priorTurnTools = [];
 
         $toolExecutor = function (string $name, array $args) use (
-            $brandHandler, $topicHandler, $researchHandler, $outlineHandler,
-            $writeHandler, $proofreadHandler, $team, $conversation, &$priorTurnTools
+            $brandHandler, $topicHandler, $researchHandler, $audienceHandler, $outlineHandler,
+            $styleRefHandler, $writeHandler, $proofreadHandler, $team, $conversation, &$priorTurnTools
         ): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
@@ -227,8 +183,18 @@ new class extends Component
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
+            if ($name === 'pick_audience') {
+                $result = $audienceHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
+                return $result;
+            }
             if ($name === 'create_outline') {
                 $result = $outlineHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
+                return $result;
+            }
+            if ($name === 'fetch_style_reference') {
+                $result = $styleRefHandler->execute($team, $conversation->id, $args, $priorTurnTools);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
@@ -368,7 +334,6 @@ new class extends Component
             'ts' => now()->toIso8601String(),
             'conversation_id' => $this->conversation->id,
             'type' => $this->conversation->type,
-            'writer_mode' => $this->conversation->writer_mode,
             'topic_id' => $this->conversation->topic_id,
             'team_id' => $this->teamModel->id,
             'model' => $this->teamModel->fast_model,
@@ -473,7 +438,7 @@ new class extends Component
         // Writer sub-agents get dedicated full-width cards instead of small pills.
         // Suppress the pill spinner for them but keep $activeTool intact so the
         // activeSubAgentCard() at the bottom still renders.
-        $writerTools = ['research_topic', 'create_outline', 'write_blog_post', 'proofread_blog_post'];
+        $writerTools = ['research_topic', 'pick_audience', 'create_outline', 'fetch_style_reference', 'write_blog_post', 'proofread_blog_post'];
         $isWriterTool = $activeTool && in_array($activeTool->name, $writerTools, true);
 
         if ($activeTool && ! $isWriterTool) {
@@ -524,7 +489,9 @@ new class extends Component
     {
         $agentMap = [
             'research_topic' => ['title' => 'Research sub-agent', 'hint' => 'Searching the web and extracting structured claims…', 'color' => 'purple'],
+            'pick_audience' => ['title' => 'Audience sub-agent', 'hint' => 'Selecting the best audience persona…', 'color' => 'amber'],
             'create_outline' => ['title' => 'Editor sub-agent', 'hint' => 'Building an outline from the research claims…', 'color' => 'blue'],
+            'fetch_style_reference' => ['title' => 'Style sub-agent', 'hint' => 'Finding style reference posts…', 'color' => 'violet'],
             'write_blog_post' => ['title' => 'Writer sub-agent', 'hint' => 'Composing the blog post from the outline…', 'color' => 'green'],
             'proofread_blog_post' => ['title' => 'Proofread sub-agent', 'hint' => 'Applying the requested revisions…', 'color' => 'green'],
         ];
@@ -655,8 +622,12 @@ new class extends Component
 
             if ($tool->name === 'research_topic' && $kind === 'research') {
                 $html .= $this->renderResearchCard($card);
+            } elseif ($tool->name === 'pick_audience' && $kind === 'audience') {
+                $html .= $this->renderAudienceCard($card);
             } elseif ($tool->name === 'create_outline' && $kind === 'outline') {
                 $html .= $this->renderOutlineCard($card);
+            } elseif ($tool->name === 'fetch_style_reference' && $kind === 'style_reference') {
+                $html .= $this->renderStyleReferenceCard($card);
             } elseif (in_array($tool->name, ['write_blog_post', 'proofread_blog_post'], true)) {
                 $pieceId = $result['piece_id'] ?? null;
                 if ($pieceId === null || isset($seenPieceIds[$pieceId])) {
@@ -708,6 +679,34 @@ new class extends Component
             . '</div>';
     }
 
+    private function renderAudienceCard(array $card): string
+    {
+        $guidance = e($card['guidance_for_writer'] ?? '');
+        $summary = e($card['summary'] ?? 'Audience selected');
+
+        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="text-xs text-amber-400">&#10003; ' . $summary . '</div>'
+            . '<div class="mt-1 text-xs text-zinc-400">' . $guidance . '</div>'
+            . $this->cardMetricsFooter($card)
+            . '</div>';
+    }
+
+    private function renderStyleReferenceCard(array $card): string
+    {
+        $summary = e($card['summary'] ?? 'Style reference ready');
+        $examples = $card['examples'] ?? [];
+        $items = '';
+        foreach ($examples as $ex) {
+            $items .= '<li class="text-xs text-zinc-400">· ' . e($ex['title'] ?? '') . '</li>';
+        }
+
+        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            . '<div class="text-xs text-violet-400">&#10003; ' . $summary . '</div>'
+            . '<ul class="mt-1 list-none">' . $items . '</ul>'
+            . $this->cardMetricsFooter($card)
+            . '</div>';
+    }
+
     private function renderContentPieceCard(\App\Models\ContentPiece $piece, string $toolName, array $card = []): string
     {
         $url = route('content.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece->id]);
@@ -751,11 +750,6 @@ new class extends Component
                     default => $conversation->type,
                 } }}</flux:badge>
             @endif
-                @if ($conversation->type === 'writer' && $writerMode)
-                    <flux:badge variant="pill" size="sm" color="{{ $writerMode === 'autopilot' ? 'indigo' : 'amber' }}">
-                        {{ $writerMode === 'autopilot' ? __('Autopilot') : __('Checkpoint') }}
-                    </flux:badge>
-                @endif
         </div>
         @if ($this->conversationStats['context'] > 0)
             <flux:tooltip content="{{ __('Current context size. Longer chats send more tokens per message -- start a new conversation for a new task to keep costs low.') }}" position="bottom">
@@ -885,12 +879,28 @@ new class extends Component
                                     @endif
                                     {!! $metricsFooter !!}
                                 </div>
+                            @elseif ($tool['name'] === 'pick_audience' && $kind === 'audience')
+                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                    <div class="text-xs text-amber-400">&#10003; {{ $card['summary'] ?? 'Audience selected' }}</div>
+                                    <div class="mt-1 text-xs text-zinc-400">{{ $card['guidance_for_writer'] ?? '' }}</div>
+                                    {!! $metricsFooter !!}
+                                </div>
                             @elseif ($tool['name'] === 'create_outline' && $kind === 'outline')
                                 <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
                                     <div class="text-xs text-blue-400">&#10003; {{ $card['summary'] ?? 'Outline ready' }}</div>
                                     <ul class="mt-1 list-disc pl-5">
                                         @foreach ($card['sections'] ?? [] as $s)
                                             <li class="text-xs text-zinc-400">{{ $s['heading'] }}</li>
+                                        @endforeach
+                                    </ul>
+                                    {!! $metricsFooter !!}
+                                </div>
+                            @elseif ($tool['name'] === 'fetch_style_reference' && $kind === 'style_reference')
+                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                    <div class="text-xs text-violet-400">&#10003; {{ $card['summary'] ?? 'Style reference ready' }}</div>
+                                    <ul class="mt-1 list-none">
+                                        @foreach ($card['examples'] ?? [] as $ex)
+                                            <li class="text-xs text-zinc-400">· {{ $ex['title'] ?? '' }}</li>
                                         @endforeach
                                     </ul>
                                     {!! $metricsFooter !!}
@@ -1012,34 +1022,13 @@ new class extends Component
                 </div>
             @endif
 
-            {{-- Writer: Mode sub-cards (after topic, before first message) --}}
-            @if ($conversation->type === 'writer' && $topicId && !$writerMode && empty($messages))
-                <div class="flex flex-col items-center justify-center py-16">
-                    <flux:heading size="xl" class="mb-2">{{ __('How should the writer work?') }}</flux:heading>
-                    <flux:subheading class="mb-8">{{ __('You can switch modes later with !autopilot or !checkpoint.') }}</flux:subheading>
-
-                    <div class="grid w-full max-w-xl gap-3 sm:grid-cols-2">
-                        <button wire:click="selectWriterMode('autopilot')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                            <flux:icon name="bolt" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
-                            <flux:heading size="sm">{{ __('Autopilot') }}</flux:heading>
-                            <flux:text class="mt-1 text-xs">{{ __('Research, outline, and write in one go') }}</flux:text>
-                        </button>
-
-                        <button wire:click="selectWriterMode('checkpoint')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                            <flux:icon name="check-circle" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
-                            <flux:heading size="sm">{{ __('Checkpoint mode') }}</flux:heading>
-                            <flux:text class="mt-1 text-xs">{{ __('Pause after research and after the outline so you can approve') }}</flux:text>
-                        </button>
-                    </div>
-                </div>
-            @endif
         </div>
     </div>
 
     {{-- Input (only shown after type is selected) --}}
     @if ($conversation->type
         && !($conversation->type === 'topics' && !$topicsMode && empty($messages))
-        && !($conversation->type === 'writer' && (!$topicId || !$writerMode) && empty($messages)))
+        && !($conversation->type === 'writer' && !$topicId && empty($messages)))
         <div class="mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
             @if ($isStreaming)
                 <div class="flex justify-center">
