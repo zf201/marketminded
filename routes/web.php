@@ -11,10 +11,11 @@ Route::view('/', 'welcome', [
 Route::prefix('{current_team}')
     ->middleware(['auth', 'verified', EnsureTeamMembership::class])
     ->group(function () {
-        Route::view('dashboard', 'dashboard')->name('dashboard');
+        Route::livewire('dashboard', 'pages::teams.dashboard')->name('dashboard');
         Route::livewire('intelligence', 'pages::teams.brand-intelligence')->name('brand.intelligence');
         Route::livewire('ai-log', 'pages::teams.ai-log')->name('ai.log');
         Route::livewire('create', 'pages::teams.create')->name('create');
+        Route::livewire('create/start', 'pages::teams.create-start')->name('create.start');
         Route::livewire('create/{conversation}', 'pages::teams.create-chat')->name('create.chat');
         Route::livewire('topics', 'pages::teams.topics')->name('topics');
         Route::livewire('content', 'pages::teams.content')->name('content.index');

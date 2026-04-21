@@ -13,24 +13,24 @@
             <livewire:team-switcher />
 
             <flux:sidebar.nav>
-                <flux:sidebar.group :heading="__('Platform')" class="grid">
+                <flux:sidebar.group class="grid">
                     <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="sparkles" :href="route('brand.intelligence')" :current="request()->routeIs('brand.intelligence')" wire:navigate>
-                        {{ __('Brand Intelligence') }}
+                    <flux:sidebar.item icon="pencil-square" :href="route('create.start')" wire:navigate>
+                        {{ __('Start Creating') }}
                     </flux:sidebar.item>
+                </flux:sidebar.group>
+
+                <flux:sidebar.group :heading="__('Platform')" class="grid">
                     <flux:sidebar.item icon="light-bulb" :href="route('topics')" :current="request()->routeIs('topics')" wire:navigate>
                         {{ __('Topics') }}
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="document-text" :href="route('content.index')" :current="request()->routeIs('content.*')" wire:navigate>
                         {{ __('Content') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="chart-bar" :href="route('ai.log')" :current="request()->routeIs('ai.log')" wire:navigate>
-                        {{ __('AI Log') }}
-                    </flux:sidebar.item>
                     <flux:sidebar.item icon="chat-bubble-left-right" :href="route('create')" :current="request()->routeIs('create')" wire:navigate>
-                        {{ __('Create') }}
+                        {{ __('History') }}
                     </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
@@ -38,11 +38,17 @@
             <flux:spacer />
 
             <flux:sidebar.nav>
+                <flux:sidebar.item icon="sparkles" :href="route('brand.intelligence')" :current="request()->routeIs('brand.intelligence')" wire:navigate>
+                    {{ __('Brand Intelligence') }}
+                </flux:sidebar.item>
                 @if (auth()->user()->currentTeam)
                     <flux:sidebar.item icon="cog-6-tooth" :href="route('teams.edit', auth()->user()->currentTeam)" :current="request()->routeIs('teams.edit')" wire:navigate>
                         {{ __('Team Settings') }}
                     </flux:sidebar.item>
                 @endif
+                <flux:sidebar.item icon="chart-bar" :href="route('ai.log')" :current="request()->routeIs('ai.log')" wire:navigate>
+                    {{ __('AI Log') }}
+                </flux:sidebar.item>
             </flux:sidebar.nav>
 
             <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
