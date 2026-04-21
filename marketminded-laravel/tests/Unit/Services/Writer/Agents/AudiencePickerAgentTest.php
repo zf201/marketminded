@@ -112,19 +112,18 @@ test('AudiencePickerAgent ok path mode=commentary: no persona_id in brief', func
     expect($result->summary)->toContain('commentary');
 });
 
-test('AudiencePickerAgent rejects persona_id on educational mode', function () {
+test('AudiencePickerAgent accepts persona_id=0 on educational mode', function () {
     [$team] = teamWithPersonas();
 
     $agent = new StubbedAudiencePickerAgent([
         'mode' => 'educational',
-        'persona_id' => 1,
+        'persona_id' => 0,
         'reasoning' => 'r',
         'guidance_for_writer' => 'g',
     ]);
     $result = $agent->execute(briefWithResearchForAudience(), $team);
 
-    expect($result->isOk())->toBeFalse();
-    expect($result->errorMessage)->toContain('persona_id');
+    expect($result->isOk())->toBeTrue();
 });
 
 test('AudiencePickerAgent rejects missing persona_id on persona mode', function () {

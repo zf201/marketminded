@@ -40,9 +40,9 @@ You are the AudiencePicker sub-agent. You deliver output EXCLUSIVELY by calling 
 Read the topic, research summary, and available personas. Select the persona this post should address, or pick a mode if no persona fits.
 
 ## Modes
-- `persona` — the post targets a specific persona. Set `persona_id` to the persona's id.
-- `educational` — no persona fits; write for a curious learner.
-- `commentary` — no persona fits; write for an informed reader of this space.
+- `persona` — the post targets a specific persona. You MUST set `persona_id` to the persona's integer id from the list below.
+- `educational` — no persona fits; write for a curious learner. Set `persona_id` to 0.
+- `commentary` — no persona fits; write for an informed reader of this space. Set `persona_id` to 0.
 
 ## Quality rules
 - Choose `persona` only if the topic + angle clearly matches that persona's needs or pain points.
@@ -73,10 +73,10 @@ PROMPT;
                 'description' => 'Submit the audience selection. This is your ONLY way to deliver output.',
                 'parameters' => [
                     'type' => 'object',
-                    'required' => ['mode', 'reasoning', 'guidance_for_writer'],
+                    'required' => ['mode', 'persona_id', 'reasoning', 'guidance_for_writer'],
                     'properties' => [
                         'mode' => ['type' => 'string', 'enum' => ['persona', 'educational', 'commentary']],
-                        'persona_id' => ['type' => 'integer'],
+                        'persona_id' => ['type' => 'integer', 'description' => 'ID of the selected persona when mode=persona. Set to 0 when mode is educational or commentary.'],
                         'reasoning' => ['type' => 'string'],
                         'guidance_for_writer' => ['type' => 'string'],
                     ],
@@ -113,12 +113,8 @@ PROMPT;
             return 'mode must be one of: persona, educational, commentary.';
         }
 
-        if ($mode === 'persona' && ! isset($payload['persona_id'])) {
-            return 'persona_id is required when mode=persona.';
-        }
-
-        if ($mode !== 'persona' && array_key_exists('persona_id', $payload)) {
-            return "persona_id must not be set when mode={$mode}.";
+        if ($mode === 'persona' && empty($payload['persona_id'])) {
+            return 'persona_id is required and must be > 0 when mode=persona.';
         }
 
         if (trim($payload['guidance_for_writer'] ?? '') === '') {

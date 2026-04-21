@@ -68,6 +68,7 @@ new class extends Component
         $this->conversation->update(['topic_id' => $topic->id]);
         $this->conversation->refresh();
         $this->topicId = $topic->id;
+        $this->prompt = __("Let's write a blog post about: :title", ['title' => $topic->title]);
     }
 
     public function submitPrompt(): void
@@ -611,9 +612,18 @@ new class extends Component
         $html = '';
         $seenPieceIds = [];
 
+        $skippable = ['pick_audience', 'fetch_style_reference'];
+
         foreach ($completedTools as $tool) {
             $result = json_decode($tool->result ?? '{}', true);
-            if (($result['status'] ?? '') !== 'ok') {
+            $status = $result['status'] ?? '';
+
+            if ($status === 'skipped' && in_array($tool->name, $skippable, true)) {
+                $html .= $this->renderSkippedCard($tool->name, $result['reason'] ?? '');
+                continue;
+            }
+
+            if ($status !== 'ok') {
                 continue;
             }
 
@@ -704,6 +714,24 @@ new class extends Component
             . '<div class="text-xs text-violet-400">&#10003; ' . $summary . '</div>'
             . '<ul class="mt-1 list-none">' . $items . '</ul>'
             . $this->cardMetricsFooter($card)
+            . '</div>';
+    }
+
+    private function renderSkippedCard(string $toolName, string $reason): string
+    {
+        $label = match ($toolName) {
+            'pick_audience' => 'Audience step skipped',
+            'fetch_style_reference' => 'Style reference skipped',
+            default => ucfirst(str_replace('_', ' ', $toolName)) . ' skipped',
+        };
+        $note = $reason ?: match ($toolName) {
+            'pick_audience' => 'No audience personas configured.',
+            'fetch_style_reference' => 'No blog URL configured.',
+            default => '',
+        };
+
+        return '<div class="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">'
+            . '<div class="text-xs text-zinc-500">&#8212; ' . e($label) . ($note ? ' &middot; ' . e($note) : '') . '</div>'
             . '</div>';
     }
 
@@ -848,6 +876,11 @@ new class extends Component
                         @foreach ($message['metadata']['tools'] ?? [] as $tool)
                             @php
                                 $status = $tool['status'] ?? 'ok';
+                                $skippableHistoryTools = ['pick_audience', 'fetch_style_reference'];
+                                if ($status === 'skipped' && in_array($tool['name'], $skippableHistoryTools, true)) {
+                                    echo $this->renderSkippedCard($tool['name'], '');
+                                    continue;
+                                }
                                 if ($status !== 'ok') {
                                     continue;
                                 }
@@ -1029,6 +1062,15 @@ new class extends Component
     @if ($conversation->type
         && !($conversation->type === 'topics' && !$topicsMode && empty($messages))
         && !($conversation->type === 'writer' && !$topicId && empty($messages)))
+        @if ($conversation->type === 'writer' && $topicId && $conversation->topic)
+            <div class="mx-auto w-full max-w-5xl px-6 pb-1">
+                <p class="text-xs text-zinc-400 dark:text-zinc-500">
+                    <flux:icon name="document-text" class="inline size-3.5 -mt-0.5 mr-0.5" />
+                    {{ __('Writing about: :title', ['title' => $conversation->topic->title]) }}
+                </p>
+            </div>
+        @endif
+
         <div class="mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
             @if ($isStreaming)
                 <div class="flex justify-center">
