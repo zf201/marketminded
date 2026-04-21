@@ -37,6 +37,18 @@ final class Brief
         return $this->data['outline'] ?? null;
     }
 
+    /** @return array<string, mixed>|null */
+    public function audience(): ?array
+    {
+        return $this->data['audience'] ?? null;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function styleReference(): ?array
+    {
+        return $this->data['style_reference'] ?? null;
+    }
+
     public function contentPieceId(): ?int
     {
         $id = $this->data['content_piece_id'] ?? null;
@@ -64,6 +76,16 @@ final class Brief
         return $this->outline() !== null;
     }
 
+    public function hasAudience(): bool
+    {
+        return $this->audience() !== null;
+    }
+
+    public function hasStyleReference(): bool
+    {
+        return $this->styleReference() !== null;
+    }
+
     public function hasContentPiece(): bool
     {
         return $this->contentPieceId() !== null;
@@ -85,6 +107,18 @@ final class Brief
     public function withOutline(array $outline): self
     {
         return $this->with('outline', $outline);
+    }
+
+    /** @param array<string, mixed> $audience */
+    public function withAudience(array $audience): self
+    {
+        return $this->with('audience', $audience);
+    }
+
+    /** @param array<string, mixed> $ref */
+    public function withStyleReference(array $ref): self
+    {
+        return $this->with('style_reference', $ref);
     }
 
     public function withContentPieceId(int $id): self
@@ -127,6 +161,20 @@ final class Brief
             $lines[] = 'content_piece: ✓ (id=' . $this->contentPieceId() . ')';
         } else {
             $lines[] = 'content_piece: ✗';
+        }
+
+        if ($this->hasAudience()) {
+            $mode = $this->audience()['mode'] ?? '?';
+            $lines[] = "audience: ✓ (mode={$mode})";
+        } else {
+            $lines[] = 'audience: ✗';
+        }
+
+        if ($this->hasStyleReference()) {
+            $n = count($this->styleReference()['examples'] ?? []);
+            $lines[] = "style_reference: ✓ ({$n} examples)";
+        } else {
+            $lines[] = 'style_reference: ✗';
         }
 
         return implode("\n", $lines);

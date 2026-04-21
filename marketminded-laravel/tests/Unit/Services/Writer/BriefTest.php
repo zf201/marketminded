@@ -75,3 +75,48 @@ test('statusSummary shows checkmarks and counts for filled slots', function () {
     expect($summary)->toContain('outline: ✗');
     expect($summary)->toContain('content_piece: ✗');
 });
+
+test('withAudience and withStyleReference set their slots immutably', function () {
+    $original = Brief::fromJson([]);
+
+    $withAudience = $original->withAudience([
+        'mode' => 'persona',
+        'persona_id' => 3,
+        'persona_label' => 'Pro Chef',
+        'persona_summary' => 'Daily professional user.',
+        'reasoning' => 'Topic targets chefs.',
+        'guidance_for_writer' => 'Assume deep knife knowledge.',
+    ]);
+
+    expect($original->hasAudience())->toBeFalse();
+    expect($withAudience->hasAudience())->toBeTrue();
+    expect($withAudience->audience()['mode'])->toBe('persona');
+    expect($withAudience->audience()['persona_label'])->toBe('Pro Chef');
+
+    $withRef = $original->withStyleReference([
+        'examples' => [
+            ['url' => 'https://x.com/1', 'title' => 'Post 1', 'why_chosen' => 'Good rhythm', 'body' => 'text...'],
+            ['url' => 'https://x.com/2', 'title' => 'Post 2', 'why_chosen' => 'Short paragraphs', 'body' => 'text...'],
+        ],
+        'reasoning' => 'Best voice examples.',
+    ]);
+
+    expect($original->hasStyleReference())->toBeFalse();
+    expect($withRef->hasStyleReference())->toBeTrue();
+    expect($withRef->styleReference()['examples'])->toHaveCount(2);
+});
+
+test('statusSummary includes audience and style_reference lines', function () {
+    $brief = Brief::fromJson([])
+        ->withTopic(['id' => 1, 'title' => 'X', 'angle' => 'a', 'sources' => []])
+        ->withAudience(['mode' => 'educational', 'reasoning' => 'r', 'guidance_for_writer' => 'g'])
+        ->withStyleReference(['examples' => [
+            ['url' => 'u', 'title' => 't', 'why_chosen' => 'w', 'body' => 'b'],
+            ['url' => 'u2', 'title' => 't2', 'why_chosen' => 'w2', 'body' => 'b2'],
+        ], 'reasoning' => 'r']);
+
+    $summary = $brief->statusSummary();
+
+    expect($summary)->toContain('audience: ✓');
+    expect($summary)->toContain('style_reference: ✓');
+});
