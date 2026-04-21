@@ -32,6 +32,7 @@ class EditorAgent extends BaseAgent
             ->map(fn ($c) => "- {$c['id']} ({$c['type']}): {$c['text']}")
             ->implode("\n");
 
+        $audienceBlock = $this->audienceBlock($brief);
         $extra = $this->extraContextBlock();
 
         return <<<PROMPT
@@ -58,6 +59,7 @@ Angle: {$topic['angle']}
 
 ## Research claims
 {$claimsBlock}
+{$audienceBlock}
 {$extra}
 
 ## IMPORTANT
@@ -168,5 +170,25 @@ PROMPT;
         $sections = count($payload['sections']);
         $words = $payload['target_length_words'];
         return "Outline ready · {$sections} sections · ~{$words} words";
+    }
+
+    private function audienceBlock(Brief $brief): string
+    {
+        if (! $brief->hasAudience()) {
+            return '';
+        }
+
+        $audience = $brief->audience();
+        $lines = ["\n## Audience target"];
+        $lines[] = 'Mode: ' . ($audience['mode'] ?? 'unknown');
+
+        if (($audience['mode'] ?? '') === 'persona' && ! empty($audience['persona_label'])) {
+            $summary = $audience['persona_summary'] ?? '';
+            $lines[] = 'Persona: ' . $audience['persona_label'] . ($summary ? ' — ' . $summary : '');
+        }
+
+        $lines[] = 'Writer guidance: ' . ($audience['guidance_for_writer'] ?? '');
+
+        return implode("\n", $lines);
     }
 }

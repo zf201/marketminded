@@ -65,6 +65,8 @@ class WriterAgent extends BaseAgent
                 ->implode("\n");
 
         $brandProfile = $this->brandProfileBlock($team);
+        $audienceBlock = $this->audienceBlock($brief);
+        $styleRefBlock = $this->styleReferenceBlock($brief);
         $extra = $this->extraContextBlock();
 
         return <<<PROMPT
@@ -106,6 +108,8 @@ Angle: {$topic['angle']}
 
 ## Brand profile
 {$brandProfile}
+{$audienceBlock}
+{$styleRefBlock}
 {$extra}
 
 ## IMPORTANT
@@ -238,6 +242,45 @@ PROMPT;
             'input_tokens' => 0,
             'output_tokens' => 0,
         ];
+    }
+
+    private function audienceBlock(Brief $brief): string
+    {
+        if (! $brief->hasAudience()) {
+            return '';
+        }
+
+        $audience = $brief->audience();
+        $lines = ["\n## Audience target"];
+        $lines[] = 'Mode: ' . ($audience['mode'] ?? 'unknown');
+
+        if (($audience['mode'] ?? '') === 'persona' && ! empty($audience['persona_label'])) {
+            $summary = $audience['persona_summary'] ?? '';
+            $lines[] = 'Persona: ' . $audience['persona_label'] . ($summary ? ' — ' . $summary : '');
+        }
+
+        $lines[] = 'Writer guidance: ' . ($audience['guidance_for_writer'] ?? '');
+
+        return implode("\n", $lines);
+    }
+
+    private function styleReferenceBlock(Brief $brief): string
+    {
+        if (! $brief->hasStyleReference()) {
+            return '';
+        }
+
+        $ref = $brief->styleReference();
+        $lines = ["\n## Style reference — match this voice"];
+        $lines[] = "The following are real posts from this brand's blog. Match their rhythm, sentence length, opener patterns, register, and feel. Do NOT copy sentences or facts — the new post's content comes from the claims block.";
+
+        foreach ($ref['examples'] as $i => $ex) {
+            $lines[] = '';
+            $lines[] = '### Example ' . ($i + 1) . ': ' . ($ex['title'] ?? '');
+            $lines[] = $ex['body'] ?? '';
+        }
+
+        return implode("\n", $lines);
     }
 
     protected function brandProfileBlock(Team $team): string
