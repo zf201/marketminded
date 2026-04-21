@@ -19,26 +19,26 @@ function writerCtx(): array
         'title' => 'Writer',
         'type' => 'writer',
         'topic_id' => $topic->id,
-        'writer_mode' => 'autopilot',
         'brief' => ['topic' => ['id' => $topic->id, 'title' => 'Zero Party Data', 'angle' => 'Privacy-first', 'sources' => ['Source A']]],
     ]);
 
     return [$team, $conversation, $topic];
 }
 
-test('writer prompt includes tool list, brief-status block, and mode', function () {
+test('writer prompt includes tool list and brief-status block', function () {
     [$team, $conversation] = writerCtx();
 
     $prompt = ChatPromptBuilder::build('writer', $team, $conversation);
 
     expect($prompt)->toContain('research_topic');
+    expect($prompt)->toContain('pick_audience');
     expect($prompt)->toContain('create_outline');
+    expect($prompt)->toContain('fetch_style_reference');
     expect($prompt)->toContain('write_blog_post');
     expect($prompt)->toContain('proofread_blog_post');
     expect($prompt)->toContain('<brief-status>');
     expect($prompt)->toContain('topic: ✓');
     expect($prompt)->toContain('research: ✗');
-    expect($prompt)->toContain('<mode>autopilot</mode>');
 });
 
 test('writer prompt is dramatically shorter than the old one', function () {
@@ -50,14 +50,16 @@ test('writer prompt is dramatically shorter than the old one', function () {
     expect(strlen($prompt))->toBeLessThan(5000);
 });
 
-test('writer prompt embeds checkpoint mode rhythm', function () {
+test('writer prompt always autoruns the full pipeline', function () {
     [$team, $conversation] = writerCtx();
-    $conversation->update(['writer_mode' => 'checkpoint']);
 
-    $prompt = ChatPromptBuilder::build('writer', $team, $conversation->refresh());
+    $prompt = ChatPromptBuilder::build('writer', $team, $conversation);
 
-    expect($prompt)->toContain('<mode>checkpoint</mode>');
-    expect($prompt)->toContain('Pause');
+    expect($prompt)->toContain('Pipeline order');
+    expect($prompt)->toContain('pick_audience');
+    expect($prompt)->toContain('fetch_style_reference');
+    expect($prompt)->not->toContain('checkpoint');
+    expect($prompt)->not->toContain('Pause');
 });
 
 test('writer prompt brief-status reflects research and outline when present', function () {
@@ -76,13 +78,15 @@ test('writer prompt brief-status reflects research and outline when present', fu
     expect($prompt)->toContain('outline: ✓');
 });
 
-test('tools(writer) returns 4 sub-agent tools', function () {
+test('tools(writer) returns all 7 sub-agent tools', function () {
     $tools = ChatPromptBuilder::tools('writer');
     $names = collect($tools)->pluck('function.name')->all();
 
     expect($names)->toContain('research_topic');
+    expect($names)->toContain('pick_audience');
     expect($names)->toContain('create_outline');
+    expect($names)->toContain('fetch_style_reference');
     expect($names)->toContain('write_blog_post');
     expect($names)->toContain('proofread_blog_post');
-    expect($names)->not->toContain('update_blog_post');  // renamed
+    expect($names)->not->toContain('update_blog_post');
 });

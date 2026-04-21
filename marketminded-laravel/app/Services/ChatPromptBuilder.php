@@ -6,6 +6,8 @@ use App\Models\Conversation;
 use App\Models\Team;
 use App\Models\Topic;
 use App\Services\Writer\Brief;
+use App\Services\FetchStyleReferenceToolHandler;
+use App\Services\PickAudienceToolHandler;
 
 class ChatPromptBuilder
 {
@@ -35,7 +37,9 @@ class ChatPromptBuilder
             ],
             'writer' => [
                 ResearchTopicToolHandler::toolSchema(),
+                PickAudienceToolHandler::toolSchema(),
                 CreateOutlineToolHandler::toolSchema(),
+                FetchStyleReferenceToolHandler::toolSchema(),
                 WriteBlogPostToolHandler::toolSchema(),
                 ProofreadBlogPostToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
@@ -225,73 +229,52 @@ PROMPT;
     private static function writerPrompt(string $profile, bool $hasProfile, ?Conversation $conversation): string
     {
         $brief = Brief::fromJson($conversation?->brief ?? []);
-        $mode = $conversation?->writer_mode ?? 'autopilot';
-
-        return $mode === 'checkpoint'
-            ? self::orchestratorPrompt($profile, $hasProfile, $brief, 'checkpoint')
-            : self::orchestratorPrompt($profile, $hasProfile, $brief, 'autopilot');
+        return self::orchestratorPrompt($profile, $hasProfile, $brief);
     }
 
-    private static function orchestratorPrompt(string $profile, bool $hasProfile, Brief $brief, string $mode): string
+    private static function orchestratorPrompt(string $profile, bool $hasProfile, Brief $brief): string
     {
-        $modeBlock = $mode === 'checkpoint'
-            ? <<<'CK'
-## Mode: Checkpoint
-
-<mode>checkpoint</mode>
-
-You Pause for user approval between stages.
-
-1. Call research_topic. When it returns, summarize the result in 2-3 plain-text lines and ask the user to approve before continuing. WAIT.
-2. Once approved, call create_outline. Summarize. Ask. WAIT.
-3. Once approved, call write_blog_post. Report the result and invite review.
-4. For revisions, call proofread_blog_post with the user's feedback distilled into one sentence.
-
-Do NOT call two tools in the same turn.
-CK
-            : <<<'AP'
-## Mode: Autopilot
-
-<mode>autopilot</mode>
-
-You run the chain back-to-back without asking for approval.
-
-1. Call research_topic.
-2. When it returns ok, call create_outline.
-3. When it returns ok, call write_blog_post.
-4. After write_blog_post, send a short plain-text summary inviting review.
-5. For revisions, call proofread_blog_post with the user's feedback distilled.
-
-Brief plain-text status lines between calls are fine ("Researching…", "Outlining…").
-AP;
-
         $statusBlock = $brief->statusSummary();
 
         return <<<PROMPT
 You orchestrate a blog writing pipeline. You DO NOT do research, write outlines, or write blog posts yourself. You call sub-agent tools. They do the work.
 
-## Your tools (you call these; sub-agents fulfill them)
+## Your tools (call these in order — each fills a brief slot)
 - research_topic — runs the Research sub-agent. Fills brief.research.
+- pick_audience — runs the AudiencePicker sub-agent. Fills brief.audience. Requires brief.research. Returns status=skipped if no personas are configured — treat skipped as success and continue.
 - create_outline — runs the Editor sub-agent. Fills brief.outline. Requires brief.research.
-- write_blog_post — runs the Writer sub-agent. Creates a ContentPiece and fills brief.content_piece_id. Requires brief.research and brief.outline.
-- proofread_blog_post(feedback) — runs the Proofread sub-agent on the existing piece. Requires brief.content_piece_id.
+- fetch_style_reference — runs the StyleReference sub-agent. Fills brief.style_reference. Requires brief.outline. Returns status=skipped if no blog URL is configured — treat skipped as success and continue.
+- write_blog_post — runs the Writer sub-agent. Creates a ContentPiece. Requires brief.research and brief.outline.
+- proofread_blog_post(feedback) — runs the Proofread sub-agent on the existing piece. Call only when the user asks for revisions. Requires brief.content_piece_id.
+
+## Pipeline order
+Run tools back-to-back without pausing for approval:
+1. research_topic
+2. pick_audience
+3. create_outline
+4. fetch_style_reference
+5. write_blog_post
+6. After write_blog_post completes, send a short plain-text summary and invite the user to review.
+
+Brief plain-text status lines between calls are fine ("Researching…", "Outlining…"). Do NOT narrate the content of tool results.
 
 ## CRITICAL: function calling
-You only do work through tool calls. Never narrate research, outlines, or prose in plain text. Brief plain-text status updates between tool calls are fine.
+You only do work through tool calls. Never narrate research, outlines, or prose in plain text.
+
+## Handling skipped tools
+When a tool returns {status: skipped}, log it briefly ("Audience step skipped — no personas configured.") and immediately call the next tool in the pipeline.
 
 ## Brief status (current state)
 <brief-status>
 {$statusBlock}
 </brief-status>
 
-{$modeBlock}
-
 ## Retry policy
-When a tool returns {status: error, message: ...}, you may retry that tool ONCE per turn with an `extra_context` argument explaining what to fix. After one retry, surface the issue to the user and ask for guidance.
+When a tool returns {status: error, message: ...}, retry that tool ONCE per turn with an `extra_context` argument explaining what to fix. After one retry, surface the issue to the user and ask for guidance.
 
 ## Good / bad examples
 GOOD: tool call → wait → tool call → wait → tool call → narrate result.
-BAD: narrate "I researched the topic and found c1: …" without ever calling research_topic. Nothing is saved. Always wrap work in tool calls.
+BAD: narrate "I researched the topic and found c1: …" without calling research_topic. Nothing is saved.
 
 ## Brand context (reference data — do not echo back)
 <brand-profile>
