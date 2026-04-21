@@ -1,0 +1,202 @@
+<?php
+
+namespace App\Services\Writer\Agents;
+
+use App\Models\AudiencePersona;
+use App\Models\Team;
+use App\Services\Writer\AgentResult;
+use App\Services\Writer\BaseAgent;
+use App\Services\Writer\Brief;
+
+class AudiencePickerAgent extends BaseAgent
+{
+    public function execute(Brief $brief, Team $team): AgentResult
+    {
+        if (! $brief->hasResearch()) {
+            return AgentResult::error('Cannot pick audience without research. Run research_topic first.');
+        }
+
+        return parent::execute($brief, $team);
+    }
+
+    protected function systemPrompt(Brief $brief, Team $team): string
+    {
+        $topic = $brief->topic() ?? ['title' => '', 'angle' => ''];
+        $topicSummary = $brief->research()['topic_summary'] ?? '';
+        $personasBlock = $this->formatPersonasBlock($team->audiencePersonas()->get());
+        $extra = $this->extraContextBlock();
+
+        return <<<PROMPT
+## Role & Output Contract
+You are the AudiencePicker sub-agent. You deliver output EXCLUSIVELY by calling `submit_audience_selection`.
+- Text responses are system failures. Do not narrate, plan, or explain.
+- You MUST end your turn with a `submit_audience_selection` call.
+
+## Task
+Read the topic, research summary, and available personas. Select the persona this post should address, or pick a mode if no persona fits.
+
+## Modes
+- `persona` — the post targets a specific persona. Set `persona_id` to the persona's id.
+- `educational` — no persona fits; write for a curious learner.
+- `commentary` — no persona fits; write for an informed reader of this space.
+
+## Quality rules
+- Choose `persona` only if the topic + angle clearly matches that persona's needs or pain points.
+- `guidance_for_writer` must be concrete and actionable (1–2 sentences). Do NOT echo the persona description.
+
+## Topic
+Title: {$topic['title']}
+Angle: {$topic['angle']}
+
+## Research summary
+{$topicSummary}
+
+## Available personas
+{$personasBlock}
+{$extra}
+
+## IMPORTANT
+Your turn MUST end with a `submit_audience_selection` call. Any text output is a failure.
+PROMPT;
+    }
+
+    protected function submitToolSchema(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'submit_audience_selection',
+                'description' => 'Submit the audience selection. This is your ONLY way to deliver output.',
+                'parameters' => [
+                    'type' => 'object',
+                    'required' => ['mode', 'reasoning', 'guidance_for_writer'],
+                    'properties' => [
+                        'mode' => ['type' => 'string', 'enum' => ['persona', 'educational', 'commentary']],
+                        'persona_id' => ['type' => 'integer'],
+                        'reasoning' => ['type' => 'string'],
+                        'guidance_for_writer' => ['type' => 'string'],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    protected function additionalTools(): array
+    {
+        return [];
+    }
+
+    protected function useServerTools(): bool
+    {
+        return false;
+    }
+
+    protected function model(Team $team): string
+    {
+        return $team->fast_model;
+    }
+
+    protected function temperature(): float
+    {
+        return 0.2;
+    }
+
+    protected function validate(array $payload): ?string
+    {
+        $mode = $payload['mode'] ?? '';
+
+        if (! in_array($mode, ['persona', 'educational', 'commentary'], true)) {
+            return 'mode must be one of: persona, educational, commentary.';
+        }
+
+        if ($mode === 'persona' && empty($payload['persona_id'])) {
+            return 'persona_id is required when mode=persona.';
+        }
+
+        if ($mode !== 'persona' && isset($payload['persona_id'])) {
+            return "persona_id must not be set when mode={$mode}.";
+        }
+
+        if (trim($payload['guidance_for_writer'] ?? '') === '') {
+            return 'guidance_for_writer must not be empty.';
+        }
+
+        return null;
+    }
+
+    protected function applyToBrief(Brief $brief, array $payload, Team $team): Brief
+    {
+        $audience = [
+            'mode' => $payload['mode'],
+            'reasoning' => $payload['reasoning'],
+            'guidance_for_writer' => $payload['guidance_for_writer'],
+        ];
+
+        if ($payload['mode'] === 'persona') {
+            $personaId = (int) $payload['persona_id'];
+            $persona = AudiencePersona::where('id', $personaId)
+                ->where('team_id', $team->id)
+                ->first();
+
+            if ($persona !== null) {
+                $audience['persona_id'] = $personaId;
+                $audience['persona_label'] = $persona->label;
+                $audience['persona_summary'] = $this->buildPersonaSummary($persona);
+            }
+        }
+
+        return $brief->withAudience($audience);
+    }
+
+    protected function buildCard(array $payload): array
+    {
+        return [
+            'kind' => 'audience',
+            'summary' => $this->buildSummary($payload),
+            'mode' => $payload['mode'],
+            'guidance_for_writer' => $payload['guidance_for_writer'],
+        ];
+    }
+
+    protected function buildSummary(array $payload): string
+    {
+        return match ($payload['mode']) {
+            'persona' => 'Audience: persona selected',
+            'educational' => 'Audience: educational (no persona)',
+            'commentary' => 'Audience: commentary (no persona)',
+            default => 'Audience selected',
+        };
+    }
+
+    private function buildPersonaSummary(AudiencePersona $persona): string
+    {
+        $parts = [];
+        if ($persona->description) $parts[] = $persona->description;
+        if ($persona->pain_points) $parts[] = 'Pain points: ' . $persona->pain_points;
+        if ($persona->push) $parts[] = 'Push: ' . $persona->push;
+        if ($persona->pull) $parts[] = 'Pull: ' . $persona->pull;
+        if ($persona->anxiety) $parts[] = 'Anxiety: ' . $persona->anxiety;
+        return implode('. ', $parts);
+    }
+
+    /** @param \Illuminate\Database\Eloquent\Collection<int, AudiencePersona> $personas */
+    private function formatPersonasBlock($personas): string
+    {
+        if ($personas->isEmpty()) {
+            return '(none)';
+        }
+
+        $lines = [];
+        foreach ($personas as $i => $p) {
+            $lines[] = ($i + 1) . ". [id={$p->id}] {$p->label}" . ($p->role ? " ({$p->role})" : '');
+            if ($p->description) $lines[] = "   description: {$p->description}";
+            if ($p->pain_points) $lines[] = "   pain_points: {$p->pain_points}";
+            if ($p->push) $lines[] = "   push: {$p->push}";
+            if ($p->pull) $lines[] = "   pull: {$p->pull}";
+            if ($p->anxiety) $lines[] = "   anxiety: {$p->anxiety}";
+            $lines[] = '';
+        }
+
+        return implode("\n", $lines);
+    }
+}
