@@ -12,7 +12,7 @@ class StubbedEditorAgent extends EditorAgent
         parent::__construct($extraContext);
     }
 
-    protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120): ?array
+    protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter'): ?array
     {
         return $this->stubPayload;
     }

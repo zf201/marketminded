@@ -16,7 +16,7 @@ class StubbedResearchAgent extends ResearchAgent
         parent::__construct($extraContext);
     }
 
-    protected function llmCall(string $systemPrompt, array $tools, string $model, float $temperature, bool $useServerTools, ?string $apiKey, int $timeout = 120): ?array
+    protected function llmCall(string $systemPrompt, array $tools, string $model, float $temperature, bool $useServerTools, ?string $apiKey, int $timeout = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter'): ?array
     {
         return $this->stubPayload;
     }
@@ -110,7 +110,7 @@ test('ResearchAgent returns error if llmCall returns null (no submit tool)', fun
     $brief = Brief::fromJson(['topic' => researchTopic()]);
 
     $agent = new class extends ResearchAgent {
-        protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120): ?array
+        protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter'): ?array
         {
             return null;
         }
