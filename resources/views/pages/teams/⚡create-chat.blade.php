@@ -92,8 +92,8 @@ new class extends Component
             return;
         }
 
-        if (! $this->teamModel->openrouter_api_key) {
-            \Flux\Flux::toast(variant: 'danger', text: __('OpenRouter API key required. Add it in Team Settings.'));
+        if (! $this->teamModel->ai_api_key) {
+            \Flux\Flux::toast(variant: 'danger', text: __('API key required. Add it in Team Settings.'));
             return;
         }
 
@@ -166,10 +166,12 @@ new class extends Component
             ->toArray();
 
         $client = new OpenRouterClient(
-            apiKey: $this->teamModel->openrouter_api_key,
+            apiKey: $this->teamModel->ai_api_key,
             model: $this->teamModel->fast_model,
             urlFetcher: new UrlFetcher,
             maxIterations: 8,
+            baseUrl: $this->teamModel->ai_api_url ?? 'https://openrouter.ai/api/v1',
+            provider: $this->teamModel->ai_provider ?? 'openrouter',
         );
 
         $brandHandler = new BrandIntelligenceToolHandler;
@@ -241,7 +243,8 @@ new class extends Component
         $interrupted = false;
 
         try {
-            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
+            $useServerTools = $this->teamModel->ai_provider !== 'custom';
+            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor, temperature: 0.7, useServerTools: $useServerTools) as $item) {
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'completed') {
                         $completedTools[] = $item;
