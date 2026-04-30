@@ -3,6 +3,7 @@
 namespace App\Services\Writer;
 
 use App\Models\Team;
+use App\Services\BraveSearchClient;
 use App\Services\OpenRouterClient;
 use App\Services\UrlFetcher;
 
@@ -84,16 +85,35 @@ abstract class BaseAgent implements Agent
         $submitToolName = $this->submitToolSchema()['function']['name'] ?? '?';
         $model = $this->model($team);
 
+        $webSearchProvider = $team->web_search_provider ?? 'openrouter_builtin';
+        $useServerTools = $this->useServerTools()
+            && $team->ai_provider !== 'custom'
+            && $webSearchProvider === 'openrouter_builtin';
+
+        // Brave web search is only attached to agents that explicitly want web
+        // access (useServerTools() === true). Agents like the Writer should
+        // not be able to wander off and search the web — they work from the
+        // research already gathered. Without this gate, deepseek-reasoner
+        // burned the whole writer step calling brave_web_search in a loop
+        // instead of submitting the post.
+        $extraTools = [];
+        $braveClient = null;
+        if ($this->useServerTools() && $webSearchProvider === 'brave' && $team->brave_api_key) {
+            $braveClient = new BraveSearchClient($team->brave_api_key);
+            $extraTools[] = BraveSearchClient::toolSchema();
+        }
+
         $payload = $this->llmCall(
             $systemPrompt,
-            array_merge([$this->submitToolSchema()], $this->additionalTools()),
+            array_merge([$this->submitToolSchema()], $this->additionalTools(), $extraTools),
             $model,
             $this->temperature(),
-            $this->useServerTools() && $team->ai_provider !== 'custom',
+            $useServerTools,
             $team->ai_api_key,
             $this->timeout(),
             $team->ai_api_url ?? 'https://openrouter.ai/api/v1',
             $team->ai_provider ?? 'openrouter',
+            $braveClient,
         );
 
         // Append a sub-agent log line to storage/logs/agent-debug.log so we can
@@ -139,6 +159,10 @@ abstract class BaseAgent implements Agent
         $card['cost'] = $this->lastCost;
         $card['input_tokens'] = $this->lastInputTokens;
         $card['output_tokens'] = $this->lastOutputTokens;
+        $card['reasoning_tokens'] = $this->lastReasoningTokens;
+        if ($this->lastReasoningContent !== '') {
+            $card['reasoning'] = $this->lastReasoningContent;
+        }
 
         return AgentResult::ok(
             brief: $newBrief,
@@ -162,7 +186,9 @@ abstract class BaseAgent implements Agent
     /** Populated after llmCall so handlers can surface cost/tokens on cards. */
     protected int $lastInputTokens = 0;
     protected int $lastOutputTokens = 0;
+    protected int $lastReasoningTokens = 0;
     protected float $lastCost = 0.0;
+    protected string $lastReasoningContent = '';
 
     protected function llmCall(
         string $systemPrompt,
@@ -174,6 +200,7 @@ abstract class BaseAgent implements Agent
         int $timeout = 120,
         string $baseUrl = 'https://openrouter.ai/api/v1',
         string $provider = 'openrouter',
+        ?BraveSearchClient $braveSearchClient = null,
     ): ?array {
         $client = new OpenRouterClient(
             apiKey: $apiKey,
@@ -182,23 +209,20 @@ abstract class BaseAgent implements Agent
             maxIterations: 10,
             baseUrl: $baseUrl,
             provider: $provider,
+            braveSearchClient: $braveSearchClient,
         );
 
         // Sub-agents need a user turn to actually act — most providers will
         // just acknowledge a system-only message without invoking a tool.
         // The system prompt tells them WHAT and HOW; this user message is
-        // the "go" signal that triggers the required submit_* tool call.
-        // Constrain tool_choice to eliminate the "I'll do X..." prose failure
-        // mode. If the agent has server tools (web_search), we use "required"
-        // so the model can still call web_search before converging on the
-        // submit tool. Otherwise we force the specific submit function.
+        // the "go" signal that triggers the submit_* tool call.
+        //
+        // We don't set tool_choice — reasoning models like deepseek-reasoner
+        // reject any forced value, and the explicit "You MUST call X" in the
+        // user message is enough for compliant models. If a model returns
+        // text instead, the retry loop below tries once more.
         $submitToolName = $tools[0]['function']['name'] ?? 'submit';
-        $toolChoice = $useServerTools
-            ? 'required'
-            : [
-                'type' => 'function',
-                'function' => ['name' => $submitToolName],
-            ];
+        $hasFreeTools = $useServerTools || count($tools) > 1;
 
         $result = $client->chat(
             messages: [
@@ -206,7 +230,7 @@ abstract class BaseAgent implements Agent
                 ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields. Do not respond with text.'],
             ],
             tools: $tools,
-            toolChoice: $toolChoice,
+            toolChoice: null,
             temperature: $temperature,
             useServerTools: $useServerTools,
             timeout: $timeout,
@@ -214,20 +238,20 @@ abstract class BaseAgent implements Agent
 
         $this->lastInputTokens = $result->inputTokens;
         $this->lastOutputTokens = $result->outputTokens;
+        $this->lastReasoningTokens = $result->reasoningTokens;
         $this->lastCost = $result->cost;
+        $this->lastReasoningContent = $result->reasoningContent;
 
         if (is_array($result->data)) {
             $this->lastTextResponse = null;
             return $result->data;
         }
 
-        // The model returned text instead of calling the submit tool. This
-        // happens with server-tool agents (tool_choice='required') when the
-        // model does web searches but then narrates instead of submitting.
-        // Retry once with the full conversation history (including any web
-        // search results the model gathered) and force the specific submit
-        // function so the model has no choice but to call it.
-        if ($useServerTools && ! empty($result->messages)) {
+        // The model returned text instead of calling the submit tool. Retry
+        // once with the full conversation history (including any web search
+        // results the model gathered) and a stronger instruction. We still
+        // don't set tool_choice — see the note above.
+        if ($hasFreeTools && ! empty($result->messages)) {
             $retryMessages = $result->messages;
             $retryMessages[] = [
                 'role' => 'user',
@@ -237,7 +261,7 @@ abstract class BaseAgent implements Agent
             $retry = $client->chat(
                 messages: $retryMessages,
                 tools: $tools,
-                toolChoice: ['type' => 'function', 'function' => ['name' => $submitToolName]],
+                toolChoice: null,
                 temperature: $temperature,
                 useServerTools: false,
                 timeout: $timeout,
@@ -245,7 +269,12 @@ abstract class BaseAgent implements Agent
 
             $this->lastInputTokens += $retry->inputTokens;
             $this->lastOutputTokens += $retry->outputTokens;
+            $this->lastReasoningTokens += $retry->reasoningTokens;
             $this->lastCost += $retry->cost;
+            if ($retry->reasoningContent !== '') {
+                $this->lastReasoningContent .= ($this->lastReasoningContent === '' ? '' : "\n\n--- retry ---\n\n")
+                    . $retry->reasoningContent;
+            }
 
             if (is_array($retry->data)) {
                 $this->lastTextResponse = null;

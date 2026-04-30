@@ -61,6 +61,7 @@ class ChatPromptBuilder
         if ($team->target_audience) $lines[] = 'Target audience: ' . $team->target_audience;
         if ($team->tone_keywords) $lines[] = 'Tone: ' . $team->tone_keywords;
         if ($team->content_language) $lines[] = 'Language: ' . $team->content_language;
+        if ($team->countries) $lines[] = 'Target countries: ' . $team->countries;
         if (! empty($team->product_urls)) $lines[] = 'Product pages: ' . implode(', ', $team->product_urls);
         if (! empty($team->competitor_urls)) $lines[] = 'Competitors: ' . implode(', ', $team->competitor_urls);
         if (! empty($team->style_reference_urls)) $lines[] = 'Style references: ' . implode(', ', $team->style_reference_urls);

@@ -14,8 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'is_personal', 'ai_api_key', 'ai_provider', 'ai_api_url', 'fast_model', 'powerful_model', 'homepage_url', 'blog_url', 'brand_description', 'product_urls', 'competitor_urls', 'style_reference_urls', 'target_audience', 'tone_keywords', 'content_language'])]
-#[Hidden(['ai_api_key'])]
+#[Fillable(['name', 'slug', 'is_personal', 'ai_api_key', 'ai_provider', 'ai_api_url', 'fast_model', 'powerful_model', 'web_search_provider', 'brave_api_key', 'countries', 'homepage_url', 'blog_url', 'brand_description', 'product_urls', 'competitor_urls', 'style_reference_urls', 'target_audience', 'tone_keywords', 'content_language'])]
+#[Hidden(['ai_api_key', 'brave_api_key'])]
 class Team extends Model
 {
     /** @use HasFactory<TeamFactory> */
@@ -30,6 +30,7 @@ class Team extends Model
         'ai_provider'          => 'openrouter',
         'fast_model'           => 'deepseek/deepseek-v3.2:nitro',
         'powerful_model'       => 'deepseek/deepseek-v3.2:nitro',
+        'web_search_provider'  => 'openrouter_builtin',
         'product_urls'         => '[]',
         'competitor_urls'      => '[]',
         'style_reference_urls' => '[]',
@@ -169,6 +170,7 @@ class Team extends Model
         return [
             'is_personal'          => 'boolean',
             'ai_api_key'           => 'encrypted',
+            'brave_api_key'        => 'encrypted',
             'product_urls'         => 'array',
             'competitor_urls'      => 'array',
             'style_reference_urls' => 'array',

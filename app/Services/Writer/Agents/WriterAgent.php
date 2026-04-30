@@ -164,7 +164,12 @@ PROMPT;
      */
     protected function timeout(): int
     {
-        return 300;
+        // Reasoning models (e.g. deepseek-reasoner / deepseek-v4-pro) emit a
+        // long chain-of-thought trace before the blog post body. For a
+        // 1000-word post that can take 5–8 minutes. 300s was clipping at the
+        // edge; 600s leaves headroom without the orchestrator getting stuck
+        // for too long if the model genuinely hangs.
+        return 600;
     }
 
     protected function validate(array $payload): ?string

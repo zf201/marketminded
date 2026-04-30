@@ -20,6 +20,7 @@ class OpenRouterClient
         private int $maxIterations = 20,
         private string $baseUrl = 'https://openrouter.ai/api/v1',
         private string $provider = 'openrouter',
+        private ?BraveSearchClient $braveSearchClient = null,
     ) {}
 
     public function getModel(): string
@@ -37,6 +38,7 @@ class OpenRouterClient
         $totalReasoningTokens = 0;
         $totalCacheReadTokens = 0;
         $totalCacheWriteTokens = 0;
+        $totalReasoningContent = '';
 
         while ($iteration < $this->maxIterations) {
             $iteration++;
@@ -81,6 +83,14 @@ class OpenRouterClient
                 $choice['content'] = $this->normalizeContent($choice['content']);
             }
 
+            // Accumulate the reasoning trace if the model returned one (DeepSeek-R1
+            // and o1-class models put their chain-of-thought here). Tag each turn so
+            // multi-iteration calls remain readable.
+            if (! empty($choice['reasoning_content'])) {
+                $totalReasoningContent .= ($totalReasoningContent === '' ? '' : "\n\n--- iteration {$iteration} ---\n\n")
+                    . $choice['reasoning_content'];
+            }
+
             $messages[] = $choice;
 
             if (empty($choice['tool_calls'])) {
@@ -94,6 +104,7 @@ class OpenRouterClient
                     reasoningTokens: $totalReasoningTokens,
                     cacheReadTokens: $totalCacheReadTokens,
                     cacheWriteTokens: $totalCacheWriteTokens,
+                    reasoningContent: $totalReasoningContent,
                 );
             }
 
@@ -112,6 +123,7 @@ class OpenRouterClient
                         reasoningTokens: $totalReasoningTokens,
                         cacheReadTokens: $totalCacheReadTokens,
                         cacheWriteTokens: $totalCacheWriteTokens,
+                        reasoningContent: $totalReasoningContent,
                     );
                 }
 
@@ -128,6 +140,11 @@ class OpenRouterClient
 
                 if ($functionName === 'fetch_url') {
                     $toolResult = $this->urlFetcher->fetch($arguments['url'] ?? '');
+                } elseif ($functionName === 'brave_web_search' && $this->braveSearchClient !== null) {
+                    $toolResult = $this->braveSearchClient->search(
+                        $arguments['query'] ?? '',
+                        $arguments['country'] ?? null,
+                    );
                 } else {
                     $toolResult = "Unknown tool: {$functionName}";
                 }
@@ -266,6 +283,7 @@ class OpenRouterClient
         $totalReasoningTokens = 0;
         $totalCacheReadTokens = 0;
         $totalCacheWriteTokens = 0;
+        $totalReasoningContent = '';
         $fullContent = '';
 
         for ($iteration = 0; $iteration < $this->maxIterations; $iteration++) {
@@ -337,7 +355,12 @@ class OpenRouterClient
 
                         yield new ToolEvent($fnName, $fnArgs, null, 'started');
 
-                        if ($toolExecutor) {
+                        if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
+                            $toolResult = $this->braveSearchClient->search(
+                                $fnArgs['query'] ?? '',
+                                $fnArgs['country'] ?? null,
+                            );
+                        } elseif ($toolExecutor) {
                             $toolResult = $toolExecutor($fnName, $fnArgs);
                         } elseif ($fnName === 'fetch_url') {
                             $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
@@ -372,6 +395,7 @@ class OpenRouterClient
             $hasToolCalls = false;
             $streamToolCalls = [];
             $streamContent = '';
+            $streamReasoningContent = '';
 
             while (! $streamBody->eof()) {
                 $buffer .= $streamBody->read(1024);
@@ -395,6 +419,10 @@ class OpenRouterClient
                     }
 
                     $delta = $json['choices'][0]['delta'] ?? [];
+
+                    if (isset($delta['reasoning_content']) && $delta['reasoning_content'] !== '') {
+                        $streamReasoningContent .= $delta['reasoning_content'];
+                    }
 
                     $content = $this->normalizeContent($delta['content'] ?? '');
                     if ($content !== '') {
@@ -434,8 +462,15 @@ class OpenRouterClient
                 }
             }
 
+            if ($streamReasoningContent !== '') {
+                $totalReasoningContent .= $streamReasoningContent;
+            }
+
             if ($hasToolCalls && ! empty($streamToolCalls)) {
                 $assistantMsg = ['role' => 'assistant', 'content' => $streamContent ?: null, 'tool_calls' => []];
+                if ($streamReasoningContent !== '') {
+                    $assistantMsg['reasoning_content'] = $streamReasoningContent;
+                }
                 foreach ($streamToolCalls as $tc) {
                     $assistantMsg['tool_calls'][] = [
                         'id' => $tc['id'],
@@ -461,7 +496,12 @@ class OpenRouterClient
 
                     yield new ToolEvent($fnName, $fnArgs, null, 'started');
 
-                    if ($toolExecutor) {
+                    if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
+                        $toolResult = $this->braveSearchClient->search(
+                            $fnArgs['query'] ?? '',
+                            $fnArgs['country'] ?? null,
+                        );
+                    } elseif ($toolExecutor) {
                         $toolResult = $toolExecutor($fnName, $fnArgs);
                     } elseif ($fnName === 'fetch_url') {
                         $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
@@ -493,6 +533,7 @@ class OpenRouterClient
             reasoningTokens: $totalReasoningTokens,
             cacheReadTokens: $totalCacheReadTokens,
             cacheWriteTokens: $totalCacheWriteTokens,
+            reasoningContent: $totalReasoningContent,
         );
     }
 

@@ -10,6 +10,7 @@ use App\Services\FetchStyleReferenceToolHandler;
 use App\Services\OpenRouterClient;
 use App\Services\PickAudienceToolHandler;
 use App\Services\ResearchTopicToolHandler;
+use App\Services\BraveSearchClient;
 use App\Services\StreamResult;
 use App\Services\ToolEvent;
 use App\Services\TopicToolHandler;
@@ -35,6 +36,10 @@ new class extends Component
 
     public ?int $topicId = null;
 
+    public ?string $topicTitle = null;
+
+    public bool $freeForm = false;
+
     public array $messages = [];
 
     public function mount(Team $current_team, ?Conversation $conversation = null): void
@@ -46,6 +51,7 @@ new class extends Component
         if ($conversation) {
             $this->loadMessages();
             $this->topicId = $conversation->topic_id;
+            $this->topicTitle = $conversation->topic?->title;
         }
     }
 
@@ -76,12 +82,19 @@ new class extends Component
             ->findOrFail($topicId);
 
         $this->topicId = $topic->id;
+        $this->topicTitle = $topic->title;
         $this->prompt = __("Let's write a blog post about: :title", ['title' => $topic->title]);
 
         if ($this->conversation) {
             $this->conversation->update(['topic_id' => $topic->id]);
             $this->conversation->refresh();
         }
+    }
+
+    public function selectFreeForm(): void
+    {
+        $this->freeForm = true;
+        $this->topicTitle = null;
     }
 
     public function submitPrompt(): void
@@ -165,6 +178,11 @@ new class extends Component
             ->map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']])
             ->toArray();
 
+        $webSearchProvider = $this->teamModel->web_search_provider ?? 'openrouter_builtin';
+        $braveClient = ($webSearchProvider === 'brave' && $this->teamModel->brave_api_key)
+            ? new BraveSearchClient($this->teamModel->brave_api_key)
+            : null;
+
         $client = new OpenRouterClient(
             apiKey: $this->teamModel->ai_api_key,
             model: $this->teamModel->fast_model,
@@ -172,6 +190,7 @@ new class extends Component
             maxIterations: 8,
             baseUrl: $this->teamModel->ai_api_url ?? 'https://openrouter.ai/api/v1',
             provider: $this->teamModel->ai_provider ?? 'openrouter',
+            braveSearchClient: $braveClient,
         );
 
         $brandHandler = new BrandIntelligenceToolHandler;
@@ -241,10 +260,44 @@ new class extends Component
         $streamResult = null;
         $completedTools = [];
         $interrupted = false;
+        $saved = false;
+
+        // Backstop: if the request dies before the finally block runs (PHP-FPM
+        // request_terminate_timeout, OOM, fatal error after streaming starts,
+        // etc.), persist whatever work has accumulated. Idempotent — the
+        // happy-path finally flips $saved=true so this becomes a no-op.
+        // Captures by reference so it sees the latest state at shutdown time.
+        $teamId = $this->teamModel->id;
+        $conversationId = $this->conversation->id;
+        $fastModel = $this->teamModel->fast_model;
+        register_shutdown_function(function () use (
+            &$fullContent, &$completedTools, &$streamResult, &$interrupted, &$saved,
+            $conversationId, $fastModel
+        ) {
+            if ($saved) return;
+            try {
+                self::persistAssistantMessage(
+                    conversationId: $conversationId,
+                    model: $fastModel,
+                    fullContent: $fullContent,
+                    completedTools: $completedTools,
+                    streamResult: $streamResult,
+                    interrupted: true,
+                    cleanContent: false,
+                );
+            } catch (\Throwable $e) {
+                \Log::error('Shutdown save failed', ['error' => $e->getMessage()]);
+            }
+        });
 
         try {
-            $useServerTools = $this->teamModel->ai_provider !== 'custom';
-            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor, temperature: 0.7, useServerTools: $useServerTools) as $item) {
+            $useServerTools = $this->teamModel->ai_provider !== 'custom'
+                && $webSearchProvider === 'openrouter_builtin';
+            $chatTools = $tools;
+            if ($braveClient !== null) {
+                $chatTools[] = BraveSearchClient::toolSchema();
+            }
+            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $chatTools, $toolExecutor, temperature: 0.7, useServerTools: $useServerTools) as $item) {
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'completed') {
                         $completedTools[] = $item;
@@ -266,70 +319,39 @@ new class extends Component
         } catch (\Throwable $e) {
             $interrupted = true;
             \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
-            if (! $fullContent && empty($completedTools)) {
-                $fullContent = 'Error: ' . $e->getMessage();
-            }
+            $errorLine = 'Error: ' . $e->getMessage();
+            $fullContent = $fullContent ? $fullContent . "\n\n" . $errorLine : $errorLine;
         } finally {
-            // Always save the message, even if the connection was interrupted.
-            // Tool side effects (e.g. Topic::create) are already committed,
-            // so the message metadata must be persisted to render cards.
             ignore_user_abort(true);
 
             $fullContent = $this->cleanContent($fullContent);
 
-            $metadata = [];
-            if (! empty($completedTools)) {
-                $metadata['tools'] = collect($completedTools)->map(function (ToolEvent $t) {
-                    $entry = [
-                        'name' => $t->name,
-                        'args' => $t->arguments,
-                    ];
-                    $result = json_decode($t->result ?? '{}', true);
-                    if (isset($result['card'])) {
-                        $entry['card'] = $result['card'];
-                    }
-                    if (isset($result['piece_id'])) {
-                        $entry['piece_id'] = $result['piece_id'];
-                    }
-                    if (isset($result['status'])) {
-                        $entry['status'] = $result['status'];
-                    }
-                    return $entry;
-                })->toArray();
-            }
-            if ($streamResult?->webSearchRequests > 0) {
-                $metadata['web_searches'] = $streamResult->webSearchRequests;
-            }
-            if ($interrupted) {
-                $metadata['interrupted'] = true;
-            }
+            $message = self::persistAssistantMessage(
+                conversationId: $this->conversation->id,
+                model: $this->teamModel->fast_model,
+                fullContent: $fullContent,
+                completedTools: $completedTools,
+                streamResult: $streamResult,
+                interrupted: $interrupted,
+                cleanContent: false,
+            );
 
-            // Only save if there's content or tool calls (avoid empty messages)
-            if ($fullContent !== '' || ! empty($metadata)) {
-                Message::create([
-                    'conversation_id' => $this->conversation->id,
-                    'role' => 'assistant',
-                    'content' => $fullContent,
-                    'model' => $this->teamModel->fast_model,
-                    'input_tokens' => $streamResult?->inputTokens ?? 0,
-                    'output_tokens' => $streamResult?->outputTokens ?? 0,
-                    'cost' => $streamResult?->cost ?? 0,
-                    'metadata' => ! empty($metadata) ? $metadata : null,
-                ]);
-
+            if ($message) {
                 $this->messages[] = [
                     'role' => 'assistant',
-                    'content' => $fullContent,
-                    'metadata' => ! empty($metadata) ? $metadata : null,
-                    'input_tokens' => $streamResult?->inputTokens ?? 0,
-                    'output_tokens' => $streamResult?->outputTokens ?? 0,
-                    'cost' => $streamResult?->cost ?? 0,
+                    'content' => $message->content,
+                    'metadata' => $message->metadata,
+                    'input_tokens' => $message->input_tokens,
+                    'output_tokens' => $message->output_tokens,
+                    'cost' => (float) $message->cost,
                 ];
             }
 
+            $saved = true;
+
             $this->writeChatDebugLog(
                 systemPrompt: $systemPrompt,
-                tools: $tools,
+                tools: $chatTools,
                 apiMessages: $apiMessages,
                 responseContent: $fullContent,
                 completedTools: $completedTools,
@@ -339,6 +361,72 @@ new class extends Component
 
             $this->isStreaming = false;
         }
+    }
+
+    /**
+     * Build metadata + create the assistant Message row. Used by both the
+     * happy-path finally block and the shutdown backstop. Static so the
+     * shutdown closure doesn't need to capture $this — a Livewire component's
+     * lifecycle is unpredictable at shutdown time.
+     *
+     * @param array<int, ToolEvent> $completedTools
+     */
+    private static function persistAssistantMessage(
+        int $conversationId,
+        string $model,
+        string $fullContent,
+        array $completedTools,
+        ?StreamResult $streamResult,
+        bool $interrupted,
+        bool $cleanContent,
+    ): ?Message {
+        $metadata = [];
+        if (! empty($completedTools)) {
+            $metadata['tools'] = collect($completedTools)->map(function (ToolEvent $t) {
+                $entry = [
+                    'name' => $t->name,
+                    'args' => $t->arguments,
+                ];
+                $result = json_decode($t->result ?? '{}', true);
+                if (isset($result['card'])) {
+                    $entry['card'] = $result['card'];
+                }
+                if (isset($result['piece_id'])) {
+                    $entry['piece_id'] = $result['piece_id'];
+                }
+                if (isset($result['status'])) {
+                    $entry['status'] = $result['status'];
+                }
+                return $entry;
+            })->toArray();
+        }
+        if ($streamResult?->webSearchRequests > 0) {
+            $metadata['web_searches'] = $streamResult->webSearchRequests;
+        }
+        if ($streamResult?->reasoningContent !== '') {
+            $metadata['reasoning'] = $streamResult->reasoningContent;
+        }
+        if ($streamResult?->reasoningTokens > 0) {
+            $metadata['reasoning_tokens'] = $streamResult->reasoningTokens;
+        }
+        if ($interrupted) {
+            $metadata['interrupted'] = true;
+        }
+
+        if ($fullContent === '' && empty($metadata)) {
+            return null;
+        }
+
+        return Message::create([
+            'conversation_id' => $conversationId,
+            'role' => 'assistant',
+            'content' => $fullContent,
+            'model' => $model,
+            'input_tokens' => $streamResult?->inputTokens ?? 0,
+            'output_tokens' => $streamResult?->outputTokens ?? 0,
+            'cost' => $streamResult?->cost ?? 0,
+            'metadata' => ! empty($metadata) ? $metadata : null,
+        ]);
     }
 
     /**
@@ -400,8 +488,12 @@ new class extends Component
 
         $lastAssistant = $this->conversation->messages()->where('role', 'assistant')->latest('id')->first();
 
+        // Last-turn token usage: input (history sent to model) + output
+        // (what the model produced, including reasoning tokens for R1-class).
+        // This is what the user pays for on the most recent turn — clearer
+        // than just the input side, especially with reasoning models.
         return [
-            'context' => (int) ($lastAssistant?->input_tokens ?? 0),
+            'context' => (int) (($lastAssistant?->input_tokens ?? 0) + ($lastAssistant?->output_tokens ?? 0)),
         ];
     }
 
@@ -477,6 +569,7 @@ new class extends Component
         if ($activeTool && ! $isWriterTool) {
             $label = match ($activeTool->name) {
                 'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
+                'brave_web_search' => 'Searching: ' . ($activeTool->arguments['query'] ?? ''),
                 'update_brand_intelligence' => 'Updating brand profile',
                 'save_topics' => 'Saving topics...',
                 default => $activeTool->name,
@@ -563,8 +656,10 @@ new class extends Component
         $cost = (float) ($card['cost'] ?? 0);
         $inTok = (int) ($card['input_tokens'] ?? 0);
         $outTok = (int) ($card['output_tokens'] ?? 0);
+        $reasoningTok = (int) ($card['reasoning_tokens'] ?? 0);
+        $reasoning = (string) ($card['reasoning'] ?? '');
 
-        if ($cost === 0.0 && $inTok === 0 && $outTok === 0) {
+        if ($cost === 0.0 && $inTok === 0 && $outTok === 0 && $reasoning === '') {
             return '';
         }
 
@@ -572,17 +667,36 @@ new class extends Component
         if ($inTok > 0 || $outTok > 0) {
             $parts[] = number_format($inTok + $outTok) . ' tokens';
         }
+        if ($reasoningTok > 0) {
+            $parts[] = number_format($reasoningTok) . ' reasoning';
+        }
         if ($cost > 0) {
             $parts[] = '$' . number_format($cost, 4);
         }
 
-        return '<div class="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-500">' . e(implode(' · ', $parts)) . '</div>';
+        $wrapAttr = $reasoning !== '' ? ' x-data="{ open: false }"' : '';
+        $html = '<div class="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-500"' . $wrapAttr . '>';
+        $html .= '<div class="flex items-center justify-between gap-2">';
+        $html .= '<span>' . e(implode(' · ', $parts)) . '</span>';
+        if ($reasoning !== '') {
+            $html .= '<button @click="open = !open" class="inline-flex items-center gap-1 hover:text-zinc-300 transition-colors">';
+            $html .= 'reasoning';
+            $html .= '<svg x-bind:class="open ? \'rotate-180\' : \'\'" class="size-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
+            $html .= '</button>';
+        }
+        $html .= '</div>';
+        if ($reasoning !== '') {
+            $html .= '<div x-show="open" x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-2 text-xs text-zinc-400 whitespace-pre-wrap">' . e($reasoning) . '</div>';
+        }
+        $html .= '</div>';
+        return $html;
     }
 
     private function toolPill(ToolEvent $tool, bool $active): string
     {
         $label = match ($tool->name) {
             'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
+            'brave_web_search' => 'Searched: ' . ($tool->arguments['query'] ?? ''),
             'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
             'save_topics' => 'Saved ' . (json_decode($tool->result ?? '{}', true)['count'] ?? 0) . ' topics',
             'research_topic' => (function () use ($tool) {
@@ -812,9 +926,9 @@ new class extends Component
             @endif
         </div>
         @if ($this->conversationStats['context'] > 0)
-            <flux:tooltip content="{{ __('Current context size. Longer chats send more tokens per message -- start a new conversation for a new task to keep costs low.') }}" position="bottom">
+            <flux:tooltip content="{{ __('Tokens used on the last turn (input + output). Longer chats grow the input each turn — start a new conversation when switching tasks to keep costs low.') }}" position="bottom">
                 <div class="flex items-center gap-1.5 cursor-help">
-                    <flux:text class="text-xs text-zinc-500">{{ number_format($this->conversationStats['context']) }} {{ __('context tokens') }}</flux:text>
+                    <flux:text class="text-xs text-zinc-500">{{ number_format($this->conversationStats['context']) }} {{ __('last-turn tokens') }}</flux:text>
                     <flux:icon name="information-circle" variant="mini" class="size-3.5 text-zinc-400" />
                 </div>
             </flux:tooltip>
@@ -828,9 +942,10 @@ new class extends Component
         x-data
         x-init="
             const el = $el;
+            const shouldScroll = () => $wire.isStreaming || ($wire.messages && $wire.messages.length > 0);
             const scroll = () => el.scrollTop = el.scrollHeight;
-            scroll();
-            new MutationObserver(scroll).observe(el, { childList: true, subtree: true, characterData: true });
+            if (shouldScroll()) scroll();
+            new MutationObserver(() => { if (shouldScroll()) scroll(); }).observe(el, { childList: true, subtree: true, characterData: true });
         "
     >
         <div class="mx-auto flex w-full max-w-5xl flex-col-reverse px-6 py-4">
@@ -856,6 +971,15 @@ new class extends Component
                 @else
                     <div class="mb-6">
                         <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
+                        @if (!empty($message['metadata']['reasoning']))
+                            <div x-data="{ open: false }" class="mb-2">
+                                <button @click="open = !open" class="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+                                    <svg x-bind:class="open ? 'rotate-180' : ''" class="size-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    {{ __('Reasoning') }}
+                                </button>
+                                <div x-show="open" x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-400 whitespace-pre-wrap">{{ $message['metadata']['reasoning'] }}</div>
+                            </div>
+                        @endif
                         <p class="text-sm whitespace-pre-wrap {{ str_starts_with($message['content'], 'Error:') ? 'text-red-400' : '' }}">{{ $message['content'] }}</p>
 
                         {{-- Tool pills + stats for every assistant message --}}
@@ -864,6 +988,8 @@ new class extends Component
                                 @foreach ($message['metadata']['tools'] ?? [] as $tool)
                                     @if ($tool['name'] === 'fetch_url')
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Read {{ $tool['args']['url'] ?? '' }}</span>
+                                    @elseif ($tool['name'] === 'brave_web_search')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Searched: {{ $tool['args']['query'] ?? '' }}</span>
                                     @elseif ($tool['name'] === 'update_brand_intelligence')
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated profile</span>
                                     @elseif ($tool['name'] === 'save_topics')
@@ -919,16 +1045,7 @@ new class extends Component
 
                                 $card = $tool['card'] ?? null;
                                 $kind = $card['kind'] ?? null;
-                                $metricsParts = [];
-                                if ($card) {
-                                    if (($card['input_tokens'] ?? 0) + ($card['output_tokens'] ?? 0) > 0) {
-                                        $metricsParts[] = number_format(($card['input_tokens'] ?? 0) + ($card['output_tokens'] ?? 0)) . ' tokens';
-                                    }
-                                    if (($card['cost'] ?? 0) > 0) {
-                                        $metricsParts[] = '$' . number_format($card['cost'], 4);
-                                    }
-                                }
-                                $metricsFooter = empty($metricsParts) ? '' : '<div class="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-500">' . e(implode(' · ', $metricsParts)) . '</div>';
+                                $metricsFooter = $card ? $this->cardMetricsFooter($card) : '';
                             @endphp
 
                             @if ($tool['name'] === 'research_topic' && $kind === 'research')
@@ -1051,7 +1168,7 @@ new class extends Component
             @endif
 
             {{-- Writer: Topic picker (required before mode) --}}
-            @if ($type === 'writer' && !$topicId && empty($messages))
+            @if ($type === 'writer' && !$topicId && !$freeForm && empty($messages))
                 @php
                     $availableTopics = \App\Models\Topic::where('team_id', $teamModel->id)
                         ->where('status', 'available')
@@ -1063,26 +1180,23 @@ new class extends Component
                     <flux:heading size="xl" class="mb-2">{{ __('Pick a topic for this blog post') }}</flux:heading>
                     <flux:subheading class="mb-8">{{ __('The writer grounds the post in one of your topics.') }}</flux:subheading>
 
+                    <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
+                        <button wire:click="selectFreeForm" class="group cursor-pointer rounded-xl border border-dashed border-zinc-300 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-600 dark:hover:border-indigo-500">
+                            <flux:heading size="sm">{{ __('Free form') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Write about anything — no topic required.') }}</flux:text>
+                        </button>
+                        @foreach ($availableTopics as $t)
+                            <button wire:click="selectWriterTopic({{ $t->id }})" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                                <flux:heading size="sm">{{ $t->title }}</flux:heading>
+                                <flux:text class="mt-1 text-xs">{{ $t->angle }}</flux:text>
+                            </button>
+                        @endforeach
+                    </div>
                     @if ($availableTopics->isEmpty())
-                        <div class="w-full max-w-xl text-center">
-                            <flux:icon name="light-bulb" class="mx-auto size-10 text-zinc-400" />
-                            <flux:heading size="sm" class="mt-3">{{ __('No available topics') }}</flux:heading>
-                            <flux:subheading class="mt-1">{{ __('Brainstorm topics first, then come back to write one.') }}</flux:subheading>
-                            <div class="mt-4">
-                                <flux:button variant="primary" icon="light-bulb" :href="route('topics', ['current_team' => $teamModel])" wire:navigate>
-                                    {{ __('Go to Topics') }}
-                                </flux:button>
-                            </div>
-                        </div>
-                    @else
-                        <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
-                            @foreach ($availableTopics as $t)
-                                <button wire:click="selectWriterTopic({{ $t->id }})" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
-                                    <flux:heading size="sm">{{ $t->title }}</flux:heading>
-                                    <flux:text class="mt-1 text-xs">{{ $t->angle }}</flux:text>
-                                </button>
-                            @endforeach
-                        </div>
+                        <p class="mt-4 text-sm text-zinc-500">
+                            {{ __('No topics yet.') }}
+                            <a href="{{ route('topics', ['current_team' => $teamModel]) }}" class="text-indigo-400 hover:underline" wire:navigate>{{ __('Brainstorm topics') }}</a>
+                        </p>
                     @endif
                 </div>
             @endif
@@ -1093,12 +1207,16 @@ new class extends Component
     {{-- Input (only shown after type is selected) --}}
     @if ($type
         && !($type === 'topics' && !$topicsMode && empty($messages))
-        && !($type === 'writer' && !$topicId && empty($messages)))
-        @if ($type === 'writer' && $topicId && $conversation?->topic)
+        && !($type === 'writer' && !$topicId && !$freeForm && empty($messages)))
+        @if ($type === 'writer' && ($topicTitle || $freeForm))
             <div class="mx-auto w-full max-w-5xl px-6 pb-1">
                 <p class="text-xs text-zinc-400 dark:text-zinc-500">
                     <flux:icon name="document-text" class="inline size-3.5 -mt-0.5 mr-0.5" />
-                    {{ __('Writing about: :title', ['title' => $conversation?->topic?->title ?? '']) }}
+                    @if ($freeForm && !$topicTitle)
+                        {{ __('Free writing') }}
+                    @else
+                        {{ __('Writing about: :title', ['title' => $topicTitle ?? '']) }}
+                    @endif
                 </p>
             </div>
         @endif

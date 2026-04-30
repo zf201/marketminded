@@ -10,7 +10,7 @@ class BrandIntelligenceToolHandler
     private const SETUP_FIELDS = [
         'homepage_url', 'blog_url', 'brand_description',
         'product_urls', 'competitor_urls', 'style_reference_urls',
-        'target_audience', 'tone_keywords', 'content_language',
+        'target_audience', 'tone_keywords', 'content_language', 'countries',
     ];
 
     public function execute(Team $team, array $data): string
@@ -73,6 +73,7 @@ class BrandIntelligenceToolHandler
                                 'target_audience' => ['type' => 'string'],
                                 'tone_keywords' => ['type' => 'string'],
                                 'content_language' => ['type' => 'string'],
+                                'countries'        => ['type' => 'string', 'description' => 'Comma-separated ISO 3166-1 alpha-2 country codes for the brand\'s target markets (e.g. "GB, IE, US"). Used to localise web searches.'],
                             ],
                         ],
                         'positioning' => [

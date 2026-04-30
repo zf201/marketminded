@@ -80,7 +80,7 @@ test('custom provider url must be a valid url format', function () {
 
 test('openrouter provider does not require url', function () {
     $user = User::factory()->create();
-    $team = Team::factory()->create();
+    $team = Team::factory()->create(['ai_api_key' => 'sk-test']);
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
 
     $this->actingAs($user);
@@ -97,7 +97,7 @@ test('openrouter provider does not require url', function () {
 test('admin can update ai settings', function () {
     $owner = User::factory()->create();
     $admin = User::factory()->create();
-    $team = Team::factory()->create();
+    $team = Team::factory()->create(['ai_api_key' => 'sk-test']);
     $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
     $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
 
@@ -136,7 +136,7 @@ test('ai settings have correct defaults', function () {
     expect($team->ai_api_url)->toBeNull();
 });
 
-test('api key can be cleared', function () {
+test('api key is required', function () {
     $user = User::factory()->create();
     $team = Team::factory()->create(['ai_api_key' => 'old-key']);
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
@@ -146,9 +146,7 @@ test('api key can be cleared', function () {
     Livewire::test('pages::teams.edit', ['team' => $team])
         ->set('aiApiKey', '')
         ->call('updateAiSettings')
-        ->assertHasNoErrors();
-
-    expect($team->fresh()->ai_api_key)->toBeNull();
+        ->assertHasErrors(['aiApiKey']);
 });
 
 test('model fields are required', function () {

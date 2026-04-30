@@ -26,20 +26,63 @@ new class extends Component
 
     private function loadEntries(): void
     {
-        $this->entries = $this->teamModel->conversations()
-            ->with(['messages' => fn ($q) => $q->where('role', 'assistant')->where('cost', '>', 0)])
-            ->whereHas('messages', fn ($q) => $q->where('role', 'assistant')->where('cost', '>', 0))
+        // Filter on tokens, not cost: custom providers (direct DeepSeek,
+        // Moonshot, etc.) don't return a cost in usage, so cost stays 0
+        // even though tokens were consumed.
+        $hasUsage = fn ($q) => $q->where('role', 'assistant')
+            ->where(fn ($qq) => $qq->where('input_tokens', '>', 0)->orWhere('output_tokens', '>', 0));
+
+        $rows = collect();
+
+        $this->teamModel->conversations()
+            ->with(['messages' => fn ($q) => $q->where('role', 'assistant')])
             ->get()
-            ->flatMap(fn ($conversation) => $conversation->messages->map(fn ($msg) => [
-                'conversation_title' => $conversation->title ?? 'Untitled',
-                'conversation_id' => $conversation->id,
-                'model' => $msg->model,
-                'input_tokens' => $msg->input_tokens,
-                'output_tokens' => $msg->output_tokens,
-                'cost' => (float) $msg->cost,
-                'created_at' => $msg->created_at->diffForHumans(),
-                'created_at_raw' => $msg->created_at,
-            ]))
+            ->each(function ($conversation) use (&$rows, $hasUsage) {
+                foreach ($conversation->messages as $msg) {
+                    // Orchestrator turn — only count it if the parent message
+                    // itself spent tokens (it can be 0 when sub-agents did all
+                    // the work and the orchestrator just tool-called).
+                    if ($msg->input_tokens > 0 || $msg->output_tokens > 0) {
+                        $rows->push([
+                            'kind' => 'chat',
+                            'conversation_title' => $conversation->title ?? 'Untitled',
+                            'conversation_id' => $conversation->id,
+                            'model' => $msg->model,
+                            'input_tokens' => $msg->input_tokens,
+                            'output_tokens' => $msg->output_tokens,
+                            'reasoning_tokens' => (int) ($msg->metadata['reasoning_tokens'] ?? 0),
+                            'cost' => (float) $msg->cost,
+                            'created_at' => $msg->created_at->diffForHumans(),
+                            'created_at_raw' => $msg->created_at,
+                        ]);
+                    }
+
+                    // Sub-agent turns — buried in metadata.tools[i].card.
+                    foreach (($msg->metadata['tools'] ?? []) as $tool) {
+                        $card = $tool['card'] ?? null;
+                        if (! $card) continue;
+                        $in = (int) ($card['input_tokens'] ?? 0);
+                        $out = (int) ($card['output_tokens'] ?? 0);
+                        if ($in === 0 && $out === 0) continue;
+
+                        $rows->push([
+                            'kind' => 'sub-agent',
+                            'conversation_title' => $conversation->title ?? 'Untitled',
+                            'conversation_id' => $conversation->id,
+                            'model' => $card['model'] ?? $tool['name'],
+                            'input_tokens' => $in,
+                            'output_tokens' => $out,
+                            'reasoning_tokens' => (int) ($card['reasoning_tokens'] ?? 0),
+                            'cost' => (float) ($card['cost'] ?? 0),
+                            'created_at' => $msg->created_at->diffForHumans(),
+                            'created_at_raw' => $msg->created_at,
+                            'sub_agent_label' => $tool['name'],
+                        ]);
+                    }
+                }
+            });
+
+        $this->entries = $rows
             ->sortByDesc('created_at_raw')
             ->take(100)
             ->values()
@@ -48,19 +91,44 @@ new class extends Component
 
     private function loadSummary(): void
     {
-        $thirtyDays = $this->teamModel->conversations()
+        // Orchestrator side: direct from messages table.
+        $orchestrator = $this->teamModel->conversations()
             ->reorder()
             ->join('messages', 'conversations.id', '=', 'messages.conversation_id')
             ->where('messages.role', 'assistant')
-            ->where('messages.cost', '>', 0)
+            ->where(fn ($q) => $q->where('messages.input_tokens', '>', 0)->orWhere('messages.output_tokens', '>', 0))
             ->where('messages.created_at', '>=', now()->subDays(30))
             ->selectRaw('SUM(messages.cost) as total_cost, COUNT(*) as total_messages, SUM(messages.input_tokens + messages.output_tokens) as total_tokens')
             ->first();
 
+        // Sub-agent side: walk metadata. SQL JSON aggregation is fragile across
+        // SQLite/Postgres, and this page is read by humans not workloads —
+        // looping in PHP is simpler and fine at this scale.
+        $subTokens = 0;
+        $subCost = 0.0;
+        $subCount = 0;
+        $this->teamModel->conversations()
+            ->with(['messages' => fn ($q) => $q->where('role', 'assistant')->where('created_at', '>=', now()->subDays(30))])
+            ->get()
+            ->each(function ($conversation) use (&$subTokens, &$subCost, &$subCount) {
+                foreach ($conversation->messages as $msg) {
+                    foreach (($msg->metadata['tools'] ?? []) as $tool) {
+                        $card = $tool['card'] ?? null;
+                        if (! $card) continue;
+                        $in = (int) ($card['input_tokens'] ?? 0);
+                        $out = (int) ($card['output_tokens'] ?? 0);
+                        if ($in === 0 && $out === 0) continue;
+                        $subTokens += $in + $out;
+                        $subCost += (float) ($card['cost'] ?? 0);
+                        $subCount++;
+                    }
+                }
+            });
+
         $this->summary = [
-            'total_cost' => (float) ($thirtyDays->total_cost ?? 0),
-            'total_messages' => (int) ($thirtyDays->total_messages ?? 0),
-            'total_tokens' => (int) ($thirtyDays->total_tokens ?? 0),
+            'total_cost' => (float) ($orchestrator->total_cost ?? 0) + $subCost,
+            'total_messages' => (int) ($orchestrator->total_messages ?? 0) + $subCount,
+            'total_tokens' => (int) ($orchestrator->total_tokens ?? 0) + $subTokens,
         ];
     }
 }; ?>
@@ -91,14 +159,16 @@ new class extends Component
         </div>
 
         {{-- Log table --}}
-        <div class="mt-8">
+        <div class="mt-8 overflow-x-auto">
             @if (count($entries) > 0)
                 <flux:table>
                     <flux:table.columns>
-                        <flux:table.column>{{ __('Conversation') }}</flux:table.column>
+                        <flux:table.column>{{ __('Conv #') }}</flux:table.column>
+                        <flux:table.column>{{ __('Source') }}</flux:table.column>
                         <flux:table.column>{{ __('Model') }}</flux:table.column>
-                        <flux:table.column align="end">{{ __('In Tokens') }}</flux:table.column>
-                        <flux:table.column align="end">{{ __('Out Tokens') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('In') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Out') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Reasoning') }}</flux:table.column>
                         <flux:table.column align="end">{{ __('Cost') }}</flux:table.column>
                         <flux:table.column align="end">{{ __('When') }}</flux:table.column>
                     </flux:table.columns>
@@ -106,10 +176,18 @@ new class extends Component
                     <flux:table.rows>
                         @foreach ($entries as $entry)
                             <flux:table.row>
-                                <flux:table.cell variant="strong">{{ Str::limit($entry['conversation_title'], 40) }}</flux:table.cell>
+                                <flux:table.cell variant="strong">{{ $entry['conversation_id'] }}</flux:table.cell>
+                                <flux:table.cell>
+                                    @if ($entry['kind'] === 'sub-agent')
+                                        <flux:badge size="sm" color="purple">{{ Str::of($entry['sub_agent_label'] ?? '')->replace('_', ' ')->title() }}</flux:badge>
+                                    @else
+                                        <flux:badge size="sm" color="zinc">{{ __('Chat') }}</flux:badge>
+                                    @endif
+                                </flux:table.cell>
                                 <flux:table.cell>{{ $entry['model'] ? Str::afterLast($entry['model'], '/') : '—' }}</flux:table.cell>
                                 <flux:table.cell align="end">{{ number_format($entry['input_tokens']) }}</flux:table.cell>
                                 <flux:table.cell align="end">{{ number_format($entry['output_tokens']) }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ $entry['reasoning_tokens'] > 0 ? number_format($entry['reasoning_tokens']) : '—' }}</flux:table.cell>
                                 <flux:table.cell align="end">{{ $entry['cost'] > 0 ? '$' . number_format($entry['cost'], 4) : '—' }}</flux:table.cell>
                                 <flux:table.cell align="end">{{ $entry['created_at'] }}</flux:table.cell>
                             </flux:table.row>

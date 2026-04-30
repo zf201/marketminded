@@ -38,6 +38,10 @@ new class extends Component
 
     public string $powerfulModel = '';
 
+    public string $webSearchProvider = 'openrouter_builtin';
+
+    public string $braveApiKey = '';
+
     public function mount(Team $team): void
     {
         $this->teamModel = $team;
@@ -50,6 +54,8 @@ new class extends Component
         $this->aiApiUrl = $team->ai_api_url ?? '';
         $this->fastModel = $team->fast_model;
         $this->powerfulModel = $team->powerful_model;
+        $this->webSearchProvider = $team->web_search_provider ?? 'openrouter_builtin';
+        $this->braveApiKey = $team->brave_api_key ?? '';
     }
 
     public function updateTeam(): void
@@ -100,22 +106,26 @@ new class extends Component
         Gate::authorize('update', $this->teamModel);
 
         $validated = $this->validate([
-            'aiProvider'    => ['required', 'in:openrouter,custom'],
-            'aiApiKey'      => ['nullable', 'string', 'max:255'],
-            'aiApiUrl'      => ['required_if:aiProvider,custom', 'nullable', 'url', 'max:500'],
-            'fastModel'     => ['required', 'string', 'max:255'],
-            'powerfulModel' => ['required', 'string', 'max:255'],
+            'aiProvider'        => ['required', 'in:openrouter,custom'],
+            'aiApiKey'          => ['required', 'string', 'max:255'],
+            'aiApiUrl'          => ['required_if:aiProvider,custom', 'nullable', 'url', 'max:500'],
+            'fastModel'         => ['required', 'string', 'max:255'],
+            'powerfulModel'     => ['required', 'string', 'max:255'],
+            'webSearchProvider' => ['required', 'in:openrouter_builtin,brave,none'],
+            'braveApiKey'       => ['required_if:webSearchProvider,brave', 'nullable', 'string', 'max:255'],
         ]);
 
         $this->teamModel->update([
-            'ai_provider'    => $validated['aiProvider'],
-            'ai_api_key'     => $validated['aiApiKey'] ?: null,
-            'ai_api_url'     => $validated['aiApiUrl'] ?: null,
-            'fast_model'     => $validated['fastModel'],
-            'powerful_model' => $validated['powerfulModel'],
+            'ai_provider'         => $validated['aiProvider'],
+            'ai_api_key'          => $validated['aiApiKey'],
+            'ai_api_url'          => $validated['aiApiUrl'] ?: null,
+            'fast_model'          => $validated['fastModel'],
+            'powerful_model'      => $validated['powerfulModel'],
+            'web_search_provider' => $validated['webSearchProvider'],
+            'brave_api_key'       => $validated['braveApiKey'] ?: null,
         ]);
 
-        Flux::toast(variant: 'success', text: __('AI settings updated.'));
+        Flux::toast(variant: 'success', text: __('Settings saved.'));
     }
 
     private function populateTeamData(): void
@@ -328,8 +338,8 @@ new class extends Component
             @if ($this->permissions->canUpdateTeam)
                 <div class="space-y-6">
                     <div>
-                        <flux:heading>{{ __('AI settings') }}</flux:heading>
-                        <flux:subheading>{{ __('Configure your team\'s AI model preferences') }}</flux:subheading>
+                        <flux:heading>{{ __('AI & search settings') }}</flux:heading>
+                        <flux:subheading>{{ __('Configure your team\'s AI provider, models, and web search') }}</flux:subheading>
                     </div>
 
                     <form wire:submit="updateAiSettings" class="space-y-6">
@@ -355,6 +365,7 @@ new class extends Component
                             :description="__('Your team\'s API key for AI features.')"
                             type="password"
                             viewable
+                            required
                         />
 
                         <flux:input
@@ -373,8 +384,30 @@ new class extends Component
                             required
                         />
 
+                        <flux:separator />
+
+                        <flux:radio.group wire:model.live="webSearchProvider" :label="__('Web search')" variant="segmented">
+                            @if ($aiProvider !== 'custom')
+                                <flux:radio value="openrouter_builtin">{{ __('Built-in') }}</flux:radio>
+                            @endif
+                            <flux:radio value="brave">{{ __('Brave') }}</flux:radio>
+                            <flux:radio value="none">{{ __('None') }}</flux:radio>
+                        </flux:radio.group>
+
+                        @if ($webSearchProvider === 'brave')
+                            <flux:input
+                                wire:model="braveApiKey"
+                                :label="__('Brave API Key')"
+                                :description="__('Your Brave Search API key for web search.')"
+                                type="password"
+                                viewable
+                                placeholder="BSA..."
+                                required
+                            />
+                        @endif
+
                         <flux:button variant="primary" type="submit">
-                            {{ __('Save AI settings') }}
+                            {{ __('Save settings') }}
                         </flux:button>
                     </form>
                 </div>
