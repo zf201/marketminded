@@ -23,7 +23,9 @@ new class extends Component
 {
     public Team $teamModel;
 
-    public Conversation $conversation;
+    public ?Conversation $conversation = null;
+
+    public ?string $type = null;
 
     public string $prompt = '';
 
@@ -35,18 +37,26 @@ new class extends Component
 
     public array $messages = [];
 
-    public function mount(Team $current_team, Conversation $conversation): void
+    public function mount(Team $current_team, ?Conversation $conversation = null): void
     {
         $this->teamModel = $current_team;
         $this->conversation = $conversation;
-        $this->loadMessages();
-        $this->topicId = $this->conversation->topic_id;
+        $this->type = $conversation?->type ?? request('type') ?: null;
+
+        if ($conversation) {
+            $this->loadMessages();
+            $this->topicId = $conversation->topic_id;
+        }
     }
 
     public function selectType(string $type): void
     {
-        $this->conversation->update(['type' => $type]);
-        $this->conversation->refresh();
+        $this->type = $type;
+
+        if ($this->conversation) {
+            $this->conversation->update(['type' => $type]);
+            $this->conversation->refresh();
+        }
     }
 
     public function selectTopicsMode(string $mode): void
@@ -65,17 +75,20 @@ new class extends Component
             ->where('status', 'available')
             ->findOrFail($topicId);
 
-        $this->conversation->update(['topic_id' => $topic->id]);
-        $this->conversation->refresh();
         $this->topicId = $topic->id;
         $this->prompt = __("Let's write a blog post about: :title", ['title' => $topic->title]);
+
+        if ($this->conversation) {
+            $this->conversation->update(['topic_id' => $topic->id]);
+            $this->conversation->refresh();
+        }
     }
 
     public function submitPrompt(): void
     {
         $content = trim($this->prompt);
 
-        if ($content === '' || $this->isStreaming || ! $this->conversation->type) {
+        if ($content === '' || $this->isStreaming || ! $this->type) {
             return;
         }
 
@@ -84,15 +97,25 @@ new class extends Component
             return;
         }
 
+        if (! $this->conversation) {
+            $this->conversation = Conversation::create([
+                'team_id' => $this->teamModel->id,
+                'user_id' => Auth::id(),
+                'title' => mb_substr($content, 0, 80),
+                'type' => $this->type,
+                'topic_id' => $this->topicId ?: null,
+            ]);
+            $url = route('create.chat', ['current_team' => $this->teamModel, 'conversation' => $this->conversation]);
+            $this->js("history.replaceState(null, '', '" . addslashes($url) . "')");
+        } elseif ($this->conversation->title === __('New conversation')) {
+            $this->conversation->update(['title' => mb_substr($content, 0, 80)]);
+        }
+
         Message::create([
             'conversation_id' => $this->conversation->id,
             'role' => 'user',
             'content' => $content,
         ]);
-
-        if ($this->conversation->title === __('New conversation')) {
-            $this->conversation->update(['title' => mb_substr($content, 0, 80)]);
-        }
 
         $this->messages[] = [
             'role' => 'user',
@@ -368,6 +391,10 @@ new class extends Component
 
     public function getConversationStatsProperty(): array
     {
+        if (! $this->conversation) {
+            return ['context' => 0];
+        }
+
         $lastAssistant = $this->conversation->messages()->where('role', 'assistant')->latest('id')->first();
 
         return [
@@ -377,7 +404,7 @@ new class extends Component
 
     public function render()
     {
-        return $this->view()->title($this->conversation->title);
+        return $this->view()->title($this->conversation?->title ?? __('New conversation'));
     }
 
     private function loadMessages(): void
@@ -769,13 +796,13 @@ new class extends Component
     <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-3">
         <div class="flex items-center gap-3">
             <flux:button variant="subtle" size="sm" icon="arrow-left" :href="route('create')" wire:navigate />
-            <flux:heading size="lg">{{ $conversation->title }}</flux:heading>
-            @if ($conversation->type)
-                <flux:badge variant="pill" size="sm">{{ match($conversation->type) {
+            <flux:heading size="lg">{{ $conversation?->title ?? __('New conversation') }}</flux:heading>
+            @if ($type)
+                <flux:badge variant="pill" size="sm">{{ match($type) {
                     'brand' => __('Brand Knowledge'),
                     'topics' => __('Brainstorm'),
                     'writer' => __('Writer'),
-                    default => $conversation->type,
+                    default => $type,
                 } }}</flux:badge>
             @endif
         </div>
@@ -969,7 +996,7 @@ new class extends Component
             @endforeach
 
             {{-- Type selection (no type yet, no messages) --}}
-            @if (!$conversation->type && empty($messages))
+            @if (!$type && empty($messages))
                 <div class="flex flex-col items-center justify-center py-16">
                     <flux:heading size="xl" class="mb-2">{{ __('What would you like to create?') }}</flux:heading>
                     <flux:subheading class="mb-8">{{ __('Choose a mode to get started.') }}</flux:subheading>
@@ -997,7 +1024,7 @@ new class extends Component
             @endif
 
             {{-- Topics sub-card selection --}}
-            @if ($conversation->type === 'topics' && !$topicsMode && empty($messages))
+            @if ($type === 'topics' && !$topicsMode && empty($messages))
                 <div class="flex flex-col items-center justify-center py-16">
                     <flux:heading size="xl" class="mb-2">{{ __('How would you like to brainstorm?') }}</flux:heading>
                     <flux:subheading class="mb-8">{{ __('Choose how to discover topics.') }}</flux:subheading>
@@ -1019,7 +1046,7 @@ new class extends Component
             @endif
 
             {{-- Writer: Topic picker (required before mode) --}}
-            @if ($conversation->type === 'writer' && !$topicId && empty($messages))
+            @if ($type === 'writer' && !$topicId && empty($messages))
                 @php
                     $availableTopics = \App\Models\Topic::where('team_id', $teamModel->id)
                         ->where('status', 'available')
@@ -1059,14 +1086,14 @@ new class extends Component
     </div>
 
     {{-- Input (only shown after type is selected) --}}
-    @if ($conversation->type
-        && !($conversation->type === 'topics' && !$topicsMode && empty($messages))
-        && !($conversation->type === 'writer' && !$topicId && empty($messages)))
-        @if ($conversation->type === 'writer' && $topicId && $conversation->topic)
+    @if ($type
+        && !($type === 'topics' && !$topicsMode && empty($messages))
+        && !($type === 'writer' && !$topicId && empty($messages)))
+        @if ($type === 'writer' && $topicId && $conversation?->topic)
             <div class="mx-auto w-full max-w-5xl px-6 pb-1">
                 <p class="text-xs text-zinc-400 dark:text-zinc-500">
                     <flux:icon name="document-text" class="inline size-3.5 -mt-0.5 mr-0.5" />
-                    {{ __('Writing about: :title', ['title' => $conversation->topic->title]) }}
+                    {{ __('Writing about: :title', ['title' => $conversation?->topic?->title ?? '']) }}
                 </p>
             </div>
         @endif

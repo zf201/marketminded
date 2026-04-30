@@ -16,13 +16,7 @@ new class extends Component
 
     public function newConversation(): void
     {
-        $conversation = Conversation::create([
-            'team_id' => $this->teamModel->id,
-            'user_id' => Auth::id(),
-            'title' => __('New conversation'),
-        ]);
-
-        $this->redirect(route('create.chat', ['current_team' => $this->teamModel, 'conversation' => $conversation]), navigate: true);
+        $this->redirect(route('create.new', ['current_team' => $this->teamModel]), navigate: true);
     }
 
     public function deleteConversation(int $conversationId): void
@@ -74,6 +68,7 @@ new class extends Component
         @else
             <div class="space-y-2">
                 @foreach ($this->conversations as $conversation)
+                    <div wire:key="conversation-{{ $conversation->id }}">
                     <flux:card class="flex items-center justify-between p-4 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                         <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $conversation]) }}" wire:navigate class="flex-1 min-w-0">
                             <div class="flex items-center gap-3">
@@ -118,6 +113,7 @@ new class extends Component
                             </div>
                         </div>
                     </flux:modal>
+                    </div>
                 @endforeach
             </div>
         @endif
