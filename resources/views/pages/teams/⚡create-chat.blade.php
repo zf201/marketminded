@@ -92,8 +92,8 @@ new class extends Component
             return;
         }
 
-        if (! $this->teamModel->openrouter_api_key) {
-            \Flux\Flux::toast(variant: 'danger', text: __('OpenRouter API key required. Add it in Team Settings.'));
+        if (! $this->teamModel->ai_api_key) {
+            \Flux\Flux::toast(variant: 'danger', text: __('API key required. Add it in Team Settings.'));
             return;
         }
 
@@ -166,10 +166,12 @@ new class extends Component
             ->toArray();
 
         $client = new OpenRouterClient(
-            apiKey: $this->teamModel->openrouter_api_key,
+            apiKey: $this->teamModel->ai_api_key,
             model: $this->teamModel->fast_model,
             urlFetcher: new UrlFetcher,
             maxIterations: 8,
+            baseUrl: $this->teamModel->ai_api_url ?? 'https://openrouter.ai/api/v1',
+            provider: $this->teamModel->ai_provider ?? 'openrouter',
         );
 
         $brandHandler = new BrandIntelligenceToolHandler;
@@ -241,7 +243,8 @@ new class extends Component
         $interrupted = false;
 
         try {
-            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor) as $item) {
+            $useServerTools = $this->teamModel->ai_provider !== 'custom';
+            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $tools, $toolExecutor, temperature: 0.7, useServerTools: $useServerTools) as $item) {
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'completed') {
                         $completedTools[] = $item;
@@ -264,7 +267,7 @@ new class extends Component
             $interrupted = true;
             \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
             if (! $fullContent && empty($completedTools)) {
-                $fullContent = 'Sorry, something went wrong. Please try again.';
+                $fullContent = 'Error: ' . $e->getMessage();
             }
         } finally {
             // Always save the message, even if the connection was interrupted.
@@ -460,7 +463,9 @@ new class extends Component
 
         // Text content first
         if ($content !== '') {
-            $html .= '<div class="whitespace-pre-wrap">' . e($content) . '</div>';
+            $isError = str_starts_with($content, 'Error:');
+            $textClass = $isError ? 'whitespace-pre-wrap text-red-400' : 'whitespace-pre-wrap';
+            $html .= '<div class="' . $textClass . '">' . e($content) . '</div>';
         }
 
         // Writer sub-agents get dedicated full-width cards instead of small pills.
@@ -851,7 +856,7 @@ new class extends Component
                 @else
                     <div class="mb-6">
                         <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
-                        <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
+                        <p class="text-sm whitespace-pre-wrap {{ str_starts_with($message['content'], 'Error:') ? 'text-red-400' : '' }}">{{ $message['content'] }}</p>
 
                         {{-- Tool pills + stats for every assistant message --}}
                         @if (!empty($message['metadata']['tools']) || ($message['input_tokens'] ?? 0) > 0)
