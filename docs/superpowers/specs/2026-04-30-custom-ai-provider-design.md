@@ -27,7 +27,39 @@ Three changes to the `teams` table via a single migration:
 ## Service (`App\Services\OpenRouterClient`)
 
 - Replace the `API_URL` constant with a `$baseUrl` constructor parameter, default `'https://openrouter.ai/api/v1'`
+- Add a `$provider` constructor parameter (`'openrouter'|'custom'`), default `'openrouter'`
 - All three methods (`chat`, `streamChat`, `streamChatWithTools`) build the endpoint as `$this->baseUrl . '/chat/completions'`
+
+### Request body — required defaults
+
+Every request body must include:
+
+```php
+// reasoning_effort: controls thinking depth on reasoning models (o1, o3, DeepSeek-R1, etc.).
+// Ignored by non-reasoning models. 'medium' is the safe balanced default.
+// Future: make this configurable per team or per call.
+'reasoning_effort' => 'medium',
+```
+
+When `$this->provider === 'openrouter'` only, also include:
+
+```php
+// verbosity: OpenRouter-specific; controls response detail level.
+// 'medium' is the default. Future: expose as a team setting.
+'verbosity' => 'medium',
+```
+
+### Usage tracking
+
+Parse these fields from every usage object and surface them in `ChatResult` / `StreamResult`:
+
+| Field | Source in `usage` |
+|---|---|
+| `reasoningTokens` | `completion_tokens_details.reasoning_tokens ?? 0` |
+| `cacheReadTokens` | `prompt_tokens_details.cached_tokens ?? 0` |
+| `cacheWriteTokens` | `prompt_tokens_details.cache_write_tokens ?? 0` |
+
+`cost` is already read with `?? 0`, so it degrades gracefully on custom providers that don't return it.
 
 ### Instantiation sites
 
@@ -35,6 +67,7 @@ Both places that `new OpenRouterClient(...)` pass:
 
 ```php
 baseUrl: $team->ai_api_url ?? 'https://openrouter.ai/api/v1',
+provider: $team->ai_provider,
 ```
 
 ### Server tools
