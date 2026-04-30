@@ -291,6 +291,11 @@ class OpenRouterClient
                 ->withOptions(['stream' => true])
                 ->post($this->baseUrl . '/chat/completions', $body);
 
+            $status = $response->status();
+            if ($status >= 400) {
+                throw new \RuntimeException("API error {$status}: " . $response->body());
+            }
+
             $contentType = $response->header('Content-Type') ?? '';
             $isStream = str_contains($contentType, 'text/event-stream');
 

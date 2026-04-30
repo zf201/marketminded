@@ -267,7 +267,7 @@ new class extends Component
             $interrupted = true;
             \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
             if (! $fullContent && empty($completedTools)) {
-                $fullContent = 'Sorry, something went wrong. Please try again.';
+                $fullContent = 'Error: ' . $e->getMessage();
             }
         } finally {
             // Always save the message, even if the connection was interrupted.
@@ -463,7 +463,9 @@ new class extends Component
 
         // Text content first
         if ($content !== '') {
-            $html .= '<div class="whitespace-pre-wrap">' . e($content) . '</div>';
+            $isError = str_starts_with($content, 'Error:');
+            $textClass = $isError ? 'whitespace-pre-wrap text-red-400' : 'whitespace-pre-wrap';
+            $html .= '<div class="' . $textClass . '">' . e($content) . '</div>';
         }
 
         // Writer sub-agents get dedicated full-width cards instead of small pills.
@@ -854,7 +856,7 @@ new class extends Component
                 @else
                     <div class="mb-6">
                         <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
-                        <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
+                        <p class="text-sm whitespace-pre-wrap {{ str_starts_with($message['content'], 'Error:') ? 'text-red-400' : '' }}">{{ $message['content'] }}</p>
 
                         {{-- Tool pills + stats for every assistant message --}}
                         @if (!empty($message['metadata']['tools']) || ($message['input_tokens'] ?? 0) > 0)

@@ -333,19 +333,10 @@ new class extends Component
                     </div>
 
                     <form wire:submit="updateAiSettings" class="space-y-6">
-                        <flux:radio.group wire:model="aiProvider" :label="__('Provider')" variant="segmented">
+                        <flux:radio.group wire:model.live="aiProvider" :label="__('Provider')" variant="segmented">
                             <flux:radio value="openrouter">{{ __('OpenRouter') }}</flux:radio>
                             <flux:radio value="custom">{{ __('Custom') }}</flux:radio>
                         </flux:radio.group>
-
-                        <flux:input
-                            wire:model="aiApiKey"
-                            :label="$aiProvider === 'openrouter' ? __('OpenRouter API Key') : __('API Key')"
-                            :description="__('Your team\'s API key for AI features.')"
-                            type="password"
-                            viewable
-                            :placeholder="$aiProvider === 'openrouter' ? 'sk-or-...' : ''"
-                        />
 
                         <flux:input
                             wire:model="aiApiUrl"
@@ -356,6 +347,14 @@ new class extends Component
                             :placeholder="$aiProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://api.moonshot.ai/v1'"
                             :disabled="$aiProvider === 'openrouter'"
                             type="url"
+                        />
+
+                        <flux:input
+                            wire:model="aiApiKey"
+                            :label="__('API Key')"
+                            :description="__('Your team\'s API key for AI features.')"
+                            type="password"
+                            viewable
                         />
 
                         <flux:input
