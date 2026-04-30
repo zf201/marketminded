@@ -6,8 +6,6 @@ use Illuminate\Support\Facades\Http;
 
 class OpenRouterClient
 {
-    private const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
     private const MAX_RETRIES = 3;
 
     private const SERVER_TOOLS = [
@@ -20,6 +18,8 @@ class OpenRouterClient
         private string $model,
         private UrlFetcher $urlFetcher,
         private int $maxIterations = 20,
+        private string $baseUrl = 'https://openrouter.ai/api/v1',
+        private string $provider = 'openrouter',
     ) {}
 
     public function getModel(): string
@@ -34,16 +34,29 @@ class OpenRouterClient
         $totalInputTokens = 0;
         $totalOutputTokens = 0;
         $totalCost = 0.0;
+        $totalReasoningTokens = 0;
+        $totalCacheReadTokens = 0;
+        $totalCacheWriteTokens = 0;
 
         while ($iteration < $this->maxIterations) {
             $iteration++;
 
             $body = [
-                'model' => $this->model,
-                'messages' => $messages,
+                'model'       => $this->model,
+                'messages'    => $messages,
                 'temperature' => $temperature,
-                'stream' => false,
+                'stream'      => false,
+                // reasoning_effort: controls thinking depth on reasoning models (o1, o3, DeepSeek-R1, etc.)
+                // Ignored by non-reasoning models. 'medium' is the safe balanced default.
+                // Future: make this configurable per team or per call.
+                'reasoning_effort' => 'medium',
             ];
+
+            if ($this->provider === 'openrouter') {
+                // verbosity: OpenRouter-specific; controls response detail level.
+                // Future: make this configurable per team.
+                $body['verbosity'] = 'medium';
+            }
 
             if (! empty($allTools)) {
                 $body['tools'] = $allTools;
@@ -55,9 +68,12 @@ class OpenRouterClient
 
             $response = $this->sendWithRetry($body, $timeout);
             $usage = $response['usage'] ?? [];
-            $totalInputTokens += $usage['prompt_tokens'] ?? 0;
-            $totalOutputTokens += $usage['completion_tokens'] ?? 0;
-            $totalCost += (float) ($usage['cost'] ?? 0);
+            $totalInputTokens      += $usage['prompt_tokens'] ?? 0;
+            $totalOutputTokens     += $usage['completion_tokens'] ?? 0;
+            $totalCost             += (float) ($usage['cost'] ?? 0);
+            $totalReasoningTokens  += $usage['completion_tokens_details']['reasoning_tokens'] ?? 0;
+            $totalCacheReadTokens  += $usage['prompt_tokens_details']['cached_tokens'] ?? 0;
+            $totalCacheWriteTokens += $usage['prompt_tokens_details']['cache_write_tokens'] ?? 0;
             $choice = $response['choices'][0]['message'];
 
             // Normalize array content blocks to string
@@ -75,6 +91,9 @@ class OpenRouterClient
                     cost: $totalCost,
                     iterations: $iteration,
                     messages: $messages,
+                    reasoningTokens: $totalReasoningTokens,
+                    cacheReadTokens: $totalCacheReadTokens,
+                    cacheWriteTokens: $totalCacheWriteTokens,
                 );
             }
 
@@ -90,6 +109,9 @@ class OpenRouterClient
                         cost: $totalCost,
                         iterations: $iteration,
                         messages: $messages,
+                        reasoningTokens: $totalReasoningTokens,
+                        cacheReadTokens: $totalCacheReadTokens,
+                        cacheWriteTokens: $totalCacheWriteTokens,
                     );
                 }
 
@@ -135,21 +157,30 @@ class OpenRouterClient
         );
 
         $body = [
-            'model' => $this->model,
-            'messages' => $allMessages,
+            'model'       => $this->model,
+            'messages'    => $allMessages,
             'temperature' => $temperature,
-            'stream' => true,
+            'stream'      => true,
+            // reasoning_effort: see chat() method comment.
+            'reasoning_effort' => 'medium',
         ];
+
+        if ($this->provider === 'openrouter') {
+            $body['verbosity'] = 'medium';
+        }
 
         $response = Http::timeout(120)
             ->withHeader('Authorization', "Bearer {$this->apiKey}")
             ->withOptions(['stream' => true])
-            ->post(self::API_URL, $body);
+            ->post($this->baseUrl . '/chat/completions', $body);
 
         $fullContent = '';
         $inputTokens = 0;
         $outputTokens = 0;
         $cost = 0.0;
+        $reasoningTokens = 0;
+        $cacheReadTokens = 0;
+        $cacheWriteTokens = 0;
         $buffer = '';
 
         $body = $response->getBody();
@@ -187,9 +218,12 @@ class OpenRouterClient
 
                 // Usage comes on the final chunk
                 if (isset($json['usage'])) {
-                    $inputTokens = $json['usage']['prompt_tokens'] ?? 0;
-                    $outputTokens = $json['usage']['completion_tokens'] ?? 0;
-                    $cost = (float) ($json['usage']['cost'] ?? 0);
+                    $inputTokens      = $json['usage']['prompt_tokens'] ?? 0;
+                    $outputTokens     = $json['usage']['completion_tokens'] ?? 0;
+                    $cost             = (float) ($json['usage']['cost'] ?? 0);
+                    $reasoningTokens  = $json['usage']['completion_tokens_details']['reasoning_tokens'] ?? 0;
+                    $cacheReadTokens  = $json['usage']['prompt_tokens_details']['cached_tokens'] ?? 0;
+                    $cacheWriteTokens = $json['usage']['prompt_tokens_details']['cache_write_tokens'] ?? 0;
                 }
             }
         }
@@ -199,6 +233,9 @@ class OpenRouterClient
             inputTokens: $inputTokens,
             outputTokens: $outputTokens,
             cost: $cost,
+            reasoningTokens: $reasoningTokens,
+            cacheReadTokens: $cacheReadTokens,
+            cacheWriteTokens: $cacheWriteTokens,
         );
     }
 
@@ -226,15 +263,24 @@ class OpenRouterClient
         $totalOutputTokens = 0;
         $totalCost = 0.0;
         $webSearchRequests = 0;
+        $totalReasoningTokens = 0;
+        $totalCacheReadTokens = 0;
+        $totalCacheWriteTokens = 0;
         $fullContent = '';
 
         for ($iteration = 0; $iteration < $this->maxIterations; $iteration++) {
             $body = [
-                'model' => $this->model,
-                'messages' => $allMessages,
+                'model'       => $this->model,
+                'messages'    => $allMessages,
                 'temperature' => $temperature,
-                'stream' => true,
+                'stream'      => true,
+                // reasoning_effort: see chat() method comment.
+                'reasoning_effort' => 'medium',
             ];
+
+            if ($this->provider === 'openrouter') {
+                $body['verbosity'] = 'medium';
+            }
 
             if (! empty($allTools)) {
                 $body['tools'] = $allTools;
@@ -243,7 +289,7 @@ class OpenRouterClient
             $response = Http::timeout(120)
                 ->withHeader('Authorization', "Bearer {$this->apiKey}")
                 ->withOptions(['stream' => true])
-                ->post(self::API_URL, $body);
+                ->post($this->baseUrl . '/chat/completions', $body);
 
             $contentType = $response->header('Content-Type') ?? '';
             $isStream = str_contains($contentType, 'text/event-stream');
@@ -252,10 +298,13 @@ class OpenRouterClient
             if (! $isStream) {
                 $json = $response->json();
                 $usage = $json['usage'] ?? [];
-                $totalInputTokens += $usage['prompt_tokens'] ?? 0;
-                $totalOutputTokens += $usage['completion_tokens'] ?? 0;
-                $totalCost += (float) ($usage['cost'] ?? 0);
-                $webSearchRequests += $usage['server_tool_use']['web_search_requests'] ?? 0;
+                $totalInputTokens      += $usage['prompt_tokens'] ?? 0;
+                $totalOutputTokens     += $usage['completion_tokens'] ?? 0;
+                $totalCost             += (float) ($usage['cost'] ?? 0);
+                $webSearchRequests     += $usage['server_tool_use']['web_search_requests'] ?? 0;
+                $totalReasoningTokens  += $usage['completion_tokens_details']['reasoning_tokens'] ?? 0;
+                $totalCacheReadTokens  += $usage['prompt_tokens_details']['cached_tokens'] ?? 0;
+                $totalCacheWriteTokens += $usage['prompt_tokens_details']['cache_write_tokens'] ?? 0;
 
                 $choice = $json['choices'][0]['message'] ?? [];
 
@@ -369,10 +418,13 @@ class OpenRouterClient
                     }
 
                     if (isset($json['usage'])) {
-                        $totalInputTokens += $json['usage']['prompt_tokens'] ?? 0;
-                        $totalOutputTokens += $json['usage']['completion_tokens'] ?? 0;
-                        $totalCost += (float) ($json['usage']['cost'] ?? 0);
-                        $webSearchRequests += $json['usage']['server_tool_use']['web_search_requests'] ?? 0;
+                        $totalInputTokens      += $json['usage']['prompt_tokens'] ?? 0;
+                        $totalOutputTokens     += $json['usage']['completion_tokens'] ?? 0;
+                        $totalCost             += (float) ($json['usage']['cost'] ?? 0);
+                        $webSearchRequests     += $json['usage']['server_tool_use']['web_search_requests'] ?? 0;
+                        $totalReasoningTokens  += $json['usage']['completion_tokens_details']['reasoning_tokens'] ?? 0;
+                        $totalCacheReadTokens  += $json['usage']['prompt_tokens_details']['cached_tokens'] ?? 0;
+                        $totalCacheWriteTokens += $json['usage']['prompt_tokens_details']['cache_write_tokens'] ?? 0;
                     }
                 }
             }
@@ -433,6 +485,9 @@ class OpenRouterClient
             outputTokens: $totalOutputTokens,
             cost: $totalCost,
             webSearchRequests: $webSearchRequests,
+            reasoningTokens: $totalReasoningTokens,
+            cacheReadTokens: $totalCacheReadTokens,
+            cacheWriteTokens: $totalCacheWriteTokens,
         );
     }
 
@@ -468,7 +523,7 @@ class OpenRouterClient
             try {
                 $response = Http::timeout($timeout)
                     ->withHeader('Authorization', "Bearer {$this->apiKey}")
-                    ->post(self::API_URL, $body);
+                    ->post($this->baseUrl . '/chat/completions', $body);
 
                 if ($response->successful()) {
                     return $response->json();
