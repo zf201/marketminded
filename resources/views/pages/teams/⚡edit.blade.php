@@ -347,15 +347,16 @@ new class extends Component
                             :placeholder="$aiProvider === 'openrouter' ? 'sk-or-...' : ''"
                         />
 
-                        @if ($aiProvider === 'custom')
-                            <flux:input
-                                wire:model="aiApiUrl"
-                                :label="__('API Base URL')"
-                                :description="__('Use MarketMinded with any OpenAI-compatible provider — Claude, GPT, Kimi K2.6, GLM 5.1, Ollama Cloud, OpenCode Go, and more.')"
-                                placeholder="https://api.moonshot.ai/v1"
-                                type="url"
-                            />
-                        @endif
+                        <flux:input
+                            wire:model="aiApiUrl"
+                            :label="__('API Base URL')"
+                            :description="$aiProvider === 'openrouter'
+                                ? __('Default OpenRouter endpoint. Switch to Custom to use your own.')
+                                : __('Use MarketMinded with any OpenAI-compatible provider — Claude, GPT, Kimi K2.6, GLM 5.1, Ollama Cloud, OpenCode Go, and more.')"
+                            :placeholder="$aiProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://api.moonshot.ai/v1'"
+                            :disabled="$aiProvider === 'openrouter'"
+                            type="url"
+                        />
 
                         <flux:input
                             wire:model="fastModel"
