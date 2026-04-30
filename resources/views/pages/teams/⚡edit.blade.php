@@ -28,7 +28,11 @@ new class extends Component
 
     public bool $isCurrentTeam = false;
 
-    public string $openrouterApiKey = '';
+    public string $aiProvider = 'openrouter';
+
+    public string $aiApiKey = '';
+
+    public string $aiApiUrl = '';
 
     public string $fastModel = '';
 
@@ -41,7 +45,9 @@ new class extends Component
 
         $this->populateTeamData();
 
-        $this->openrouterApiKey = $team->openrouter_api_key ?? '';
+        $this->aiProvider = $team->ai_provider ?? 'openrouter';
+        $this->aiApiKey = $team->ai_api_key ?? '';
+        $this->aiApiUrl = $team->ai_api_url ?? '';
         $this->fastModel = $team->fast_model;
         $this->powerfulModel = $team->powerful_model;
     }
@@ -94,14 +100,18 @@ new class extends Component
         Gate::authorize('update', $this->teamModel);
 
         $validated = $this->validate([
-            'openrouterApiKey' => ['nullable', 'string', 'max:255'],
-            'fastModel' => ['required', 'string', 'max:255'],
+            'aiProvider'    => ['required', 'in:openrouter,custom'],
+            'aiApiKey'      => ['nullable', 'string', 'max:255'],
+            'aiApiUrl'      => ['required_if:aiProvider,custom', 'nullable', 'url', 'max:500'],
+            'fastModel'     => ['required', 'string', 'max:255'],
             'powerfulModel' => ['required', 'string', 'max:255'],
         ]);
 
         $this->teamModel->update([
-            'openrouter_api_key' => $validated['openrouterApiKey'] ?: null,
-            'fast_model' => $validated['fastModel'],
+            'ai_provider'    => $validated['aiProvider'],
+            'ai_api_key'     => $validated['aiApiKey'] ?: null,
+            'ai_api_url'     => $validated['aiApiUrl'] ?: null,
+            'fast_model'     => $validated['fastModel'],
             'powerful_model' => $validated['powerfulModel'],
         ]);
 
@@ -323,19 +333,34 @@ new class extends Component
                     </div>
 
                     <form wire:submit="updateAiSettings" class="space-y-6">
+                        <flux:radio.group wire:model="aiProvider" :label="__('Provider')" variant="segmented">
+                            <flux:radio value="openrouter">{{ __('OpenRouter') }}</flux:radio>
+                            <flux:radio value="custom">{{ __('Custom') }}</flux:radio>
+                        </flux:radio.group>
+
                         <flux:input
-                            wire:model="openrouterApiKey"
-                            :label="__('OpenRouter API Key')"
+                            wire:model="aiApiKey"
+                            :label="$aiProvider === 'openrouter' ? __('OpenRouter API Key') : __('API Key')"
                             :description="__('Your team\'s API key for AI features.')"
                             type="password"
                             viewable
-                            placeholder="sk-or-..."
+                            :placeholder="$aiProvider === 'openrouter' ? 'sk-or-...' : ''"
                         />
+
+                        @if ($aiProvider === 'custom')
+                            <flux:input
+                                wire:model="aiApiUrl"
+                                :label="__('API Base URL')"
+                                :description="__('Use MarketMinded with any OpenAI-compatible provider — Claude, GPT, Kimi K2.6, GLM 5.1, Ollama Cloud, OpenCode Go, and more.')"
+                                placeholder="https://api.moonshot.ai/v1"
+                                type="url"
+                            />
+                        @endif
 
                         <flux:input
                             wire:model="fastModel"
                             :label="__('Fast Model')"
-                            :description="__('Used for research, ideation, and verification. e.g. x-ai/grok-4.1-fast, anthropic/claude-sonnet-4.6, deepseek/deepseek-v3.2:nitro')"
+                            :description="__('Used for research, ideation, and verification. e.g. deepseek/deepseek-v3.2:nitro, gpt-4o-mini, kimi-k2.6')"
                             placeholder="deepseek/deepseek-v3.2:nitro"
                             required
                         />
@@ -343,7 +368,7 @@ new class extends Component
                         <flux:input
                             wire:model="powerfulModel"
                             :label="__('Powerful Model')"
-                            :description="__('Used for writing and editing. e.g. x-ai/grok-4.1-fast, anthropic/claude-sonnet-4.6, deepseek/deepseek-v3.2:nitro')"
+                            :description="__('Used for writing and editing. e.g. deepseek/deepseek-v3.2:nitro, anthropic/claude-sonnet-4.6, kimi-k2.6')"
                             placeholder="deepseek/deepseek-v3.2:nitro"
                             required
                         />
