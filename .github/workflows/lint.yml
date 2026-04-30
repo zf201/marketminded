@@ -1,18 +1,10 @@
 name: linter
 
+# Manual-only until Flux Pro composer credentials (FLUX_USERNAME +
+# FLUX_LICENSE_KEY) are configured in repo secrets. Re-enable the
+# push/pull_request triggers once secrets are set.
 on:
-  push:
-    branches:
-      - develop
-      - main
-      - master
-      - workos
-  pull_request:
-    branches:
-      - develop
-      - main
-      - master
-      - workos
+  workflow_dispatch:
 
 permissions:
   contents: write
