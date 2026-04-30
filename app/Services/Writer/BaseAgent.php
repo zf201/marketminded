@@ -89,9 +89,11 @@ abstract class BaseAgent implements Agent
             array_merge([$this->submitToolSchema()], $this->additionalTools()),
             $model,
             $this->temperature(),
-            $this->useServerTools(),
-            $team->openrouter_api_key,
+            $this->useServerTools() && $team->ai_provider !== 'custom',
+            $team->ai_api_key,
             $this->timeout(),
+            $team->ai_api_url ?? 'https://openrouter.ai/api/v1',
+            $team->ai_provider ?? 'openrouter',
         );
 
         // Append a sub-agent log line to storage/logs/agent-debug.log so we can
@@ -170,12 +172,16 @@ abstract class BaseAgent implements Agent
         bool $useServerTools,
         ?string $apiKey,
         int $timeout = 120,
+        string $baseUrl = 'https://openrouter.ai/api/v1',
+        string $provider = 'openrouter',
     ): ?array {
         $client = new OpenRouterClient(
             apiKey: $apiKey,
             model: $model,
             urlFetcher: new UrlFetcher,
             maxIterations: 10,
+            baseUrl: $baseUrl,
+            provider: $provider,
         );
 
         // Sub-agents need a user turn to actually act — most providers will
