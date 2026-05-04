@@ -535,117 +535,6 @@ new class extends Component
         return trim($content);
     }
 
-    private function renderResearchCard(array $card): string
-    {
-        $summary = e($card['summary'] ?? 'Research complete');
-        $claims = $card['claims'] ?? [];
-        // Show first 5 claims as a bullet preview
-        $preview = collect(array_slice($claims, 0, 5))
-            ->map(fn ($c) => '<li class="text-xs text-zinc-400">' . e($c['text'] ?? '') . '</li>')
-            ->implode('');
-        $more = count($claims) > 5 ? '<div class="mt-1 text-xs text-zinc-500">…and ' . (count($claims) - 5) . ' more</div>' : '';
-
-        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="text-xs text-purple-400">&#10003; ' . $summary . '</div>'
-            . '<ul class="mt-1 list-disc pl-5">' . $preview . '</ul>'
-            . $more
-            . $this->intermediateToolsPills($card)
-            . $this->cardMetricsFooter($card)
-            . '</div>';
-    }
-
-    private function renderOutlineCard(array $card): string
-    {
-        $summary = e($card['summary'] ?? 'Outline ready');
-        $sections = $card['sections'] ?? [];
-        $sectionList = collect($sections)
-            ->map(fn ($s) => '<li class="text-xs text-zinc-400">' . e($s['heading'] ?? '') . '</li>')
-            ->implode('');
-
-        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="text-xs text-blue-400">&#10003; ' . $summary . '</div>'
-            . '<ul class="mt-1 list-disc pl-5">' . $sectionList . '</ul>'
-            . $this->intermediateToolsPills($card)
-            . $this->cardMetricsFooter($card)
-            . '</div>';
-    }
-
-    private function renderAudienceCard(array $card): string
-    {
-        $guidance = e($card['guidance_for_writer'] ?? '');
-        $summary = e($card['summary'] ?? 'Audience selected');
-
-        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="text-xs text-amber-400">&#10003; ' . $summary . '</div>'
-            . '<div class="mt-1 text-xs text-zinc-400">' . $guidance . '</div>'
-            . $this->intermediateToolsPills($card)
-            . $this->cardMetricsFooter($card)
-            . '</div>';
-    }
-
-    private function renderStyleReferenceCard(array $card): string
-    {
-        $summary = e($card['summary'] ?? 'Style reference ready');
-        $examples = $card['examples'] ?? [];
-        $items = '';
-        foreach ($examples as $ex) {
-            $items .= '<li class="text-xs text-zinc-400">· ' . e($ex['title'] ?? '') . '</li>';
-        }
-
-        return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="text-xs text-violet-400">&#10003; ' . $summary . '</div>'
-            . '<ul class="mt-1 list-none">' . $items . '</ul>'
-            . $this->intermediateToolsPills($card)
-            . $this->cardMetricsFooter($card)
-            . '</div>';
-    }
-
-    private function renderSkippedCard(string $toolName, string $reason): string
-    {
-        $label = match ($toolName) {
-            'pick_audience' => 'Audience step skipped',
-            'fetch_style_reference' => 'Style reference skipped',
-            default => ucfirst(str_replace('_', ' ', $toolName)) . ' skipped',
-        };
-        $note = $reason ?: match ($toolName) {
-            'pick_audience' => 'No audience personas configured.',
-            'fetch_style_reference' => 'No blog URL configured.',
-            default => '',
-        };
-
-        return '<div class="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">'
-            . '<div class="text-xs text-zinc-500">&#8212; ' . e($label) . ($note ? ' &middot; ' . e($note) : '') . '</div>'
-            . '</div>';
-    }
-
-    private function renderContentPieceCard(\App\Models\ContentPiece $piece, string $toolName, array $card = []): string
-    {
-        $url = route('content.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece->id]);
-        $preview = trim(mb_substr(strip_tags($piece->body), 0, 200));
-        $badge = $toolName === 'write_blog_post' ? __('Draft created') : __('Revised');
-        $wordCount = str_word_count(strip_tags($piece->body));
-
-        return sprintf(
-            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
-            . '<div class="flex items-center justify-between mb-1">'
-            . '<span class="text-xs text-green-400">&#10003; %s &middot; v%d &middot; %s words</span>'
-            . '<a href="%s" class="text-xs text-indigo-400 hover:text-indigo-300">%s &rarr;</a>'
-            . '</div>'
-            . '<div class="text-sm font-semibold text-zinc-200">%s</div>'
-            . '<div class="mt-1 text-xs text-zinc-400 line-clamp-3">%s</div>'
-            . '%s%s'
-            . '</div>',
-            e($badge),
-            e($piece->current_version),
-            number_format($wordCount),
-            e($url),
-            e(__('Open')),
-            e($piece->title),
-            e($preview),
-            $this->intermediateToolsPills($card),
-            $this->cardMetricsFooter($card),
-        );
-    }
 }; ?>
 
 <div class="flex h-[calc(100vh-4rem)] flex-col">
@@ -772,28 +661,88 @@ new class extends Component
                         @endif
                         <p class="text-sm whitespace-pre-wrap {{ str_starts_with($message['content'], 'Error:') ? 'text-red-400' : '' }}">{{ $message['content'] }}</p>
 
-                        {{-- Tool pills + stats for every assistant message --}}
-                        @if (!empty($message['metadata']['tools']) || ($message['input_tokens'] ?? 0) > 0)
-                            <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                                @foreach ($message['metadata']['tools'] ?? [] as $tool)
-                                    @if ($tool['name'] === 'fetch_url')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Read {{ $tool['args']['url'] ?? '' }}</span>
-                                    @elseif ($tool['name'] === 'brave_web_search')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Searched: {{ $tool['args']['query'] ?? '' }}</span>
-                                    @elseif ($tool['name'] === 'update_brand_intelligence')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated profile</span>
-                                    @elseif ($tool['name'] === 'save_topics')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Saved {{ count($tool['args']['topics'] ?? []) }} topics</span>
-                                    @elseif ($tool['name'] === 'propose_posts')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Saved {{ count($tool['args']['posts'] ?? []) }} posts</span>
-                                    @elseif ($tool['name'] === 'replace_all_posts')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Rebuilt funnel ({{ count($tool['args']['posts'] ?? []) }} posts)</span>
-                                    @elseif ($tool['name'] === 'update_post')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated post</span>
-                                    @elseif ($tool['name'] === 'delete_post')
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Deleted post</span>
+                        {{-- Sub-agent event cards (metadata.events format) --}}
+                        @if (!empty($message['metadata']['events']))
+                            @php $seenHistoryPieceIds = []; @endphp
+                            @foreach ($message['metadata']['events'] as $event)
+                                @php
+                                    $etype    = $event['type'] ?? '';
+                                    $epayload = $event['payload'] ?? [];
+                                    $eagent   = $epayload['agent'] ?? '';
+                                    $ecard    = $epayload['card'] ?? null;
+                                    $ekind    = $ecard['kind'] ?? null;
+                                @endphp
+
+                                @if ($etype === 'subagent_completed')
+                                    @if ($eagent === 'research_topic' && $ekind === 'research')
+                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                            <div class="text-xs text-purple-400">&#10003; {{ $ecard['summary'] ?? 'Research complete' }}</div>
+                                            <ul class="mt-1 list-disc pl-5">
+                                                @foreach (array_slice($ecard['claims'] ?? [], 0, 5) as $c)
+                                                    <li class="text-xs text-zinc-400">{{ $c['text'] ?? '' }}</li>
+                                                @endforeach
+                                            </ul>
+                                            @if (count($ecard['claims'] ?? []) > 5)
+                                                <div class="mt-1 text-xs text-zinc-500">…and {{ count($ecard['claims']) - 5 }} more</div>
+                                            @endif
+                                        </div>
+                                    @elseif ($eagent === 'pick_audience' && $ekind === 'audience')
+                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                            <div class="text-xs text-amber-400">&#10003; {{ $ecard['summary'] ?? 'Audience selected' }}</div>
+                                            <div class="mt-1 text-xs text-zinc-400">{{ $ecard['guidance_for_writer'] ?? '' }}</div>
+                                        </div>
+                                    @elseif ($eagent === 'create_outline' && $ekind === 'outline')
+                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                            <div class="text-xs text-blue-400">&#10003; {{ $ecard['summary'] ?? 'Outline ready' }}</div>
+                                            <ul class="mt-1 list-disc pl-5">
+                                                @foreach ($ecard['sections'] ?? [] as $s)
+                                                    <li class="text-xs text-zinc-400">{{ $s['heading'] }}</li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @elseif ($eagent === 'fetch_style_reference' && $ekind === 'style_reference')
+                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                            <div class="text-xs text-violet-400">&#10003; {{ $ecard['summary'] ?? 'Style reference ready' }}</div>
+                                            <ul class="mt-1 list-none">
+                                                @foreach ($ecard['examples'] ?? [] as $ex)
+                                                    <li class="text-xs text-zinc-400">· {{ $ex['title'] ?? '' }}</li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @elseif (in_array($eagent, ['write_blog_post', 'proofread_blog_post'], true))
+                                        @php
+                                            $ePieceId = $ecard['piece_id'] ?? null;
+                                            if ($ePieceId !== null && ! isset($seenHistoryPieceIds[$ePieceId])) {
+                                                $seenHistoryPieceIds[$ePieceId] = true;
+                                                $ePiece = \App\Models\ContentPiece::where('id', $ePieceId)->where('team_id', $teamModel->id)->first();
+                                            } else {
+                                                $ePiece = null;
+                                            }
+                                            $eBadge = $eagent === 'write_blog_post' ? __('Draft created') : __('Revised');
+                                        @endphp
+                                        @if ($ePiece)
+                                            <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                                <div class="flex items-center justify-between mb-1">
+                                                    <span class="text-xs text-green-400">&#10003; {{ $eBadge }} &middot; v{{ $ePiece->current_version }} &middot; {{ number_format(str_word_count(strip_tags($ePiece->body))) }} words</span>
+                                                    <a href="{{ route('content.show', ['current_team' => $teamModel, 'contentPiece' => $ePiece->id]) }}" wire:navigate class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
+                                                </div>
+                                                <div class="text-sm font-semibold text-zinc-200">{{ $ePiece->title }}</div>
+                                                <div class="mt-1 text-xs text-zinc-400 line-clamp-3">{{ mb_substr(strip_tags($ePiece->body), 0, 200) }}</div>
+                                            </div>
+                                        @endif
                                     @endif
-                                @endforeach
+                                @elseif ($etype === 'subagent_error')
+                                    <div class="mt-2 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
+                                        <span class="text-xs text-red-400">&#9888; {{ $eagent }} failed</span>
+                                        <p class="mt-1 text-xs text-zinc-500">{{ $epayload['message'] ?? '' }}</p>
+                                    </div>
+                                @endif
+                            @endforeach
+                        @endif
+
+                        {{-- Stats footer --}}
+                        @if (!empty($message['metadata']['interrupted']) || !empty($message['metadata']['web_searches']) || ($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0) > 0)
+                            <div class="mt-2 flex flex-wrap items-center gap-1.5">
                                 @if (!empty($message['metadata']['interrupted']))
                                     <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs text-amber-500">&#9888; {{ __('Interrupted') }}</span>
                                 @endif
@@ -808,155 +757,6 @@ new class extends Component
                                 @endif
                             </div>
                         @endif
-
-                        {{-- Saved topic cards from history --}}
-                        @foreach ($message['metadata']['tools'] ?? [] as $tool)
-                            @if ($tool['name'] === 'save_topics')
-                                @foreach ($tool['args']['topics'] ?? [] as $topic)
-                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                        <div class="flex items-center justify-between mb-1">
-                                            <span class="text-xs text-purple-400">&#10003; {{ __('Saved') }}</span>
-                                            <a href="{{ route('topics', ['current_team' => $teamModel]) }}" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-300">{{ __('Manage in Topics') }} &rarr;</a>
-                                        </div>
-                                        <div class="text-sm font-semibold text-zinc-200">{{ $topic['title'] ?? '' }}</div>
-                                        <div class="mt-1 text-xs text-zinc-400">{{ $topic['angle'] ?? '' }}</div>
-                                    </div>
-                                @endforeach
-                            @endif
-                        @endforeach
-
-                        {{-- Funnel social-post cards from history --}}
-                        @foreach ($message['metadata']['tools'] ?? [] as $tool)
-                            @php
-                                $piece = $conversation?->contentPiece;
-                                $socialUrl = $piece
-                                    ? route('social.show', ['current_team' => $teamModel, 'contentPiece' => $piece])
-                                    : route('social.index', ['current_team' => $teamModel]);
-                            @endphp
-                            @if (in_array($tool['name'] ?? '', ['propose_posts', 'replace_all_posts'], true) && ($tool['status'] ?? '') !== 'error')
-                                @php $posts = $tool['args']['posts'] ?? []; @endphp
-                                @if (! empty($posts))
-                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                        <div class="flex items-center justify-between mb-2">
-                                            <span class="text-xs text-pink-400">&#10003; {{ $tool['name'] === 'replace_all_posts' ? __('Rebuilt funnel') : __('Saved funnel') }} &middot; {{ count($posts) }} {{ __('posts') }}</span>
-                                            <a href="{{ $socialUrl }}" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-300">{{ __('Open in Social') }} &rarr;</a>
-                                        </div>
-                                        @foreach ($posts as $p)
-                                            @php
-                                                $platformLabel = match ($p['platform'] ?? '') {
-                                                    'linkedin' => 'LinkedIn',
-                                                    'facebook' => 'Facebook',
-                                                    'instagram' => 'Instagram',
-                                                    'short_video' => 'Short-form Video',
-                                                    default => $p['platform'] ?? '',
-                                                };
-                                            @endphp
-                                            <div class="mt-2 rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
-                                                <span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] uppercase text-zinc-400">{{ $platformLabel }}</span>
-                                                <div class="mt-1 text-sm font-semibold text-zinc-200">{{ $p['hook'] ?? '' }}</div>
-                                                <div class="mt-1 text-xs text-zinc-400 line-clamp-2 whitespace-pre-line">{{ $p['body'] ?? '' }}</div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            @elseif ($tool['name'] === 'update_post' && ($tool['status'] ?? '') === 'saved')
-                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">
-                                    <span class="text-pink-400">&#10003;</span> {{ __('Updated post') }}
-                                    &middot; <a href="{{ $socialUrl }}" wire:navigate class="text-zinc-500 hover:text-zinc-300">{{ __('Open in Social') }} &rarr;</a>
-                                </div>
-                            @elseif ($tool['name'] === 'delete_post' && ($tool['status'] ?? '') === 'deleted')
-                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">
-                                    <span class="text-pink-400">&#10003;</span> {{ __('Deleted post') }}
-                                </div>
-                            @endif
-                        @endforeach
-
-                        {{-- Sub-agent cards from history --}}
-                        @php
-                            $seenHistoryPieceIds = [];
-                        @endphp
-                        @foreach ($message['metadata']['tools'] ?? [] as $tool)
-                            @php
-                                $status = $tool['status'] ?? 'ok';
-                                $skippableHistoryTools = ['pick_audience', 'fetch_style_reference'];
-                                if ($status === 'skipped' && in_array($tool['name'], $skippableHistoryTools, true)) {
-                                    echo $this->renderSkippedCard($tool['name'], '');
-                                    continue;
-                                }
-                                if ($status !== 'ok') {
-                                    continue;
-                                }
-
-                                $card = $tool['card'] ?? null;
-                                $kind = $card['kind'] ?? null;
-                                $metricsFooter = $card ? $this->cardMetricsFooter($card) : '';
-                            @endphp
-
-                            @if ($tool['name'] === 'research_topic' && $kind === 'research')
-                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                    <div class="text-xs text-purple-400">&#10003; {{ $card['summary'] ?? 'Research complete' }}</div>
-                                    <ul class="mt-1 list-disc pl-5">
-                                        @foreach (array_slice($card['claims'] ?? [], 0, 5) as $c)
-                                            <li class="text-xs text-zinc-400">{{ $c['text'] ?? '' }}</li>
-                                        @endforeach
-                                    </ul>
-                                    @if (count($card['claims'] ?? []) > 5)
-                                        <div class="mt-1 text-xs text-zinc-500">…and {{ count($card['claims']) - 5 }} more</div>
-                                    @endif
-                                    {!! $metricsFooter !!}
-                                </div>
-                            @elseif ($tool['name'] === 'pick_audience' && $kind === 'audience')
-                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                    <div class="text-xs text-amber-400">&#10003; {{ $card['summary'] ?? 'Audience selected' }}</div>
-                                    <div class="mt-1 text-xs text-zinc-400">{{ $card['guidance_for_writer'] ?? '' }}</div>
-                                    {!! $metricsFooter !!}
-                                </div>
-                            @elseif ($tool['name'] === 'create_outline' && $kind === 'outline')
-                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                    <div class="text-xs text-blue-400">&#10003; {{ $card['summary'] ?? 'Outline ready' }}</div>
-                                    <ul class="mt-1 list-disc pl-5">
-                                        @foreach ($card['sections'] ?? [] as $s)
-                                            <li class="text-xs text-zinc-400">{{ $s['heading'] }}</li>
-                                        @endforeach
-                                    </ul>
-                                    {!! $metricsFooter !!}
-                                </div>
-                            @elseif ($tool['name'] === 'fetch_style_reference' && $kind === 'style_reference')
-                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                    <div class="text-xs text-violet-400">&#10003; {{ $card['summary'] ?? 'Style reference ready' }}</div>
-                                    <ul class="mt-1 list-none">
-                                        @foreach ($card['examples'] ?? [] as $ex)
-                                            <li class="text-xs text-zinc-400">· {{ $ex['title'] ?? '' }}</li>
-                                        @endforeach
-                                    </ul>
-                                    {!! $metricsFooter !!}
-                                </div>
-                            @elseif (in_array($tool['name'], ['write_blog_post', 'proofread_blog_post'], true))
-                                @php
-                                    $pieceId = $tool['piece_id'] ?? null;
-                                    if ($pieceId === null || isset($seenHistoryPieceIds[$pieceId])) {
-                                        $piece = null;
-                                    } else {
-                                        $seenHistoryPieceIds[$pieceId] = true;
-                                        $piece = \App\Models\ContentPiece::where('id', $pieceId)
-                                            ->where('team_id', $teamModel->id)
-                                            ->first();
-                                    }
-                                    $badge = $tool['name'] === 'write_blog_post' ? __('Draft created') : __('Revised');
-                                @endphp
-                                @if ($piece)
-                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                        <div class="flex items-center justify-between mb-1">
-                                            <span class="text-xs text-green-400">&#10003; {{ $badge }} &middot; v{{ $piece->current_version }} &middot; {{ number_format(str_word_count(strip_tags($piece->body))) }} words</span>
-                                            <a href="{{ route('content.show', ['current_team' => $teamModel, 'contentPiece' => $piece->id]) }}" wire:navigate class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
-                                        </div>
-                                        <div class="text-sm font-semibold text-zinc-200">{{ $piece->title }}</div>
-                                        <div class="mt-1 text-xs text-zinc-400 line-clamp-3">{{ mb_substr(strip_tags($piece->body), 0, 200) }}</div>
-                                        {!! $metricsFooter !!}
-                                    </div>
-                                @endif
-                            @endif
-                        @endforeach
                     </div>
                 @endif
             @endforeach
