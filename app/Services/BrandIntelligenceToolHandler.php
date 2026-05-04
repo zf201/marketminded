@@ -17,38 +17,58 @@ class BrandIntelligenceToolHandler
     {
         $savedSections = [];
 
-        if (isset($data['setup'])) {
-            $team->update(Arr::only($data['setup'], self::SETUP_FIELDS));
+        // Some models occasionally send nested sections as JSON strings rather
+        // than structured objects. Defensively decode when that happens.
+        $setup = self::asArray($data['setup'] ?? null);
+        $positioning = self::asArray($data['positioning'] ?? null);
+        $personas = self::asArray($data['personas'] ?? null);
+        $voice = self::asArray($data['voice'] ?? null);
+
+        if ($setup !== null) {
+            $team->update(Arr::only($setup, self::SETUP_FIELDS));
             $savedSections[] = 'setup';
         }
 
-        if (isset($data['positioning'])) {
+        if ($positioning !== null) {
             $team->brandPositioning()->updateOrCreate(
                 ['team_id' => $team->id],
-                $data['positioning'],
+                $positioning,
             );
             $savedSections[] = 'positioning';
         }
 
-        if (isset($data['personas'])) {
+        if ($personas !== null) {
             $team->audiencePersonas()->delete();
 
-            foreach ($data['personas'] as $i => $persona) {
+            foreach ($personas as $i => $persona) {
+                $persona = self::asArray($persona);
+                if ($persona === null) continue;
                 $team->audiencePersonas()->create(array_merge($persona, ['sort_order' => $i]));
             }
 
             $savedSections[] = 'personas';
         }
 
-        if (isset($data['voice'])) {
+        if ($voice !== null) {
             $team->voiceProfile()->updateOrCreate(
                 ['team_id' => $team->id],
-                $data['voice'],
+                $voice,
             );
             $savedSections[] = 'voice';
         }
 
         return json_encode(['status' => 'saved', 'sections' => $savedSections]);
+    }
+
+    private static function asArray(mixed $value): ?array
+    {
+        if ($value === null) return null;
+        if (is_array($value)) return $value;
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : null;
+        }
+        return null;
     }
 
     public static function toolSchema(): array
