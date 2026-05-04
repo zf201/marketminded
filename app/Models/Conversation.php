@@ -3,13 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['team_id', 'user_id', 'title', 'type', 'writer_mode', 'topic_id', 'brief'])]
+#[Fillable(['team_id', 'user_id', 'title', 'type', 'writer_mode', 'topic_id', 'content_piece_id', 'brief'])]
 class Conversation extends Model
 {
+    use HasFactory;
+
     protected $attributes = [
         'brief' => '{}',
     ];
@@ -34,6 +37,11 @@ class Conversation extends Model
     public function topic(): BelongsTo
     {
         return $this->belongsTo(Topic::class);
+    }
+
+    public function contentPiece(): BelongsTo
+    {
+        return $this->belongsTo(ContentPiece::class);
     }
 
     public function messages(): HasMany
