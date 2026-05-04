@@ -30,7 +30,7 @@ class OpenRouterClient
         return $this->model;
     }
 
-    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120, ?callable $onToolCall = null): ChatResult
+    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120, ?callable $onToolCall = null, ?callable $stopCheck = null): ChatResult
     {
         $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;
@@ -44,6 +44,10 @@ class OpenRouterClient
 
         while ($iteration < $this->maxIterations) {
             $iteration++;
+
+            if ($stopCheck !== null) {
+                ($stopCheck)();
+            }
 
             $body = [
                 'model'       => $this->model,
@@ -71,6 +75,11 @@ class OpenRouterClient
             }
 
             $response = $this->sendWithRetry($body, $timeout);
+
+            if ($stopCheck !== null) {
+                ($stopCheck)();
+            }
+
             $usage = $response['usage'] ?? [];
             $totalInputTokens      += $usage['prompt_tokens'] ?? 0;
             $totalOutputTokens     += $usage['completion_tokens'] ?? 0;
@@ -360,6 +369,7 @@ class OpenRouterClient
                         }
 
                         if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
+                            $bus?->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'web search']);
                             $toolResult = $this->braveSearchClient->search(
                                 $fnArgs['query'] ?? '',
                                 $fnArgs['country'] ?? null,
@@ -367,6 +377,7 @@ class OpenRouterClient
                         } elseif ($toolExecutor) {
                             $toolResult = $toolExecutor($fnName, $fnArgs);
                         } elseif ($fnName === 'fetch_url') {
+                            $bus?->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'fetch url']);
                             $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
                         } else {
                             $toolResult = "Unknown tool: {$fnName}";
@@ -497,6 +508,7 @@ class OpenRouterClient
                     }
 
                     if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
+                        $bus?->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'web search']);
                         $toolResult = $this->braveSearchClient->search(
                             $fnArgs['query'] ?? '',
                             $fnArgs['country'] ?? null,
@@ -504,6 +516,7 @@ class OpenRouterClient
                     } elseif ($toolExecutor) {
                         $toolResult = $toolExecutor($fnName, $fnArgs);
                     } elseif ($fnName === 'fetch_url') {
+                        $bus?->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'fetch url']);
                         $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
                     } else {
                         $toolResult = "Unknown tool: {$fnName}";

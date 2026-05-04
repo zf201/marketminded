@@ -247,6 +247,11 @@ abstract class BaseAgent implements Agent
             $card['reasoning'] = $this->lastReasoningContent;
         }
 
+        $pieceId = $newBrief->contentPieceId();
+        if ($pieceId !== null && ($card['kind'] ?? '') === 'content_piece') {
+            $card['piece_id'] = $pieceId;
+        }
+
         $this->bus?->publish('subagent_completed', [
             'agent' => $submitToolName,
             'card'  => $card,
@@ -331,6 +336,13 @@ abstract class BaseAgent implements Agent
         $this->lastAttempts = 1;
         $attemptStart = microtime(true);
 
+        $conversationId = $this->conversationId;
+        $stopCheck = function () use ($conversationId): void {
+            if ($conversationId !== null && Cache::get("conv-stop:{$conversationId}")) {
+                throw new TurnStoppedException('Stopped by user.');
+            }
+        };
+
         try {
             $result = $client->chat(
                 messages: [
@@ -343,6 +355,7 @@ abstract class BaseAgent implements Agent
                 useServerTools: $useServerTools,
                 timeout: $timeout,
                 onToolCall: $onToolCall,
+                stopCheck: $stopCheck,
             );
         } catch (TurnStoppedException) {
             SubagentLogger::write([
@@ -425,6 +438,7 @@ abstract class BaseAgent implements Agent
                     useServerTools: false,
                     timeout: $timeout,
                     onToolCall: $onToolCall,
+                    stopCheck: $stopCheck,
                 );
             } catch (TurnStoppedException) {
                 SubagentLogger::write([

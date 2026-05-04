@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Middleware\EnsureTeamMembership;
+use App\Models\Conversation;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -27,6 +30,15 @@ Route::prefix('{current_team}')
 
 Route::middleware(['auth'])->group(function () {
     Route::livewire('invitations/{invitation}/accept', 'pages::teams.accept-invitation')->name('invitations.accept');
+
+    Route::post('conversations/{conversation}/stop', function (Conversation $conversation) {
+        abort_unless(
+            Auth::user()->teams()->where('teams.id', $conversation->team_id)->exists(),
+            403,
+        );
+        Cache::put('conv-stop:' . $conversation->id, true, 60);
+        return response()->noContent();
+    })->name('conversations.stop');
 });
 
 require __DIR__.'/settings.php';

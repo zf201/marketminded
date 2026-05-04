@@ -31,6 +31,8 @@ class ResearchTopicToolHandler
 
         try {
             $result = $agent->execute($brief, $team);
+        } catch (TurnStoppedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }

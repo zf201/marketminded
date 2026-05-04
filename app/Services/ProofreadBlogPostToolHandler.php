@@ -33,6 +33,7 @@ class ProofreadBlogPostToolHandler
                             'title' => $piece->title,
                             'preview' => mb_substr(strip_tags($piece->body), 0, 200),
                             'change_description' => 'already applied this turn',
+                            'piece_id' => $piece->id,
                         ],
                         'piece_id' => $piece->id,
                     ]);
@@ -58,6 +59,8 @@ class ProofreadBlogPostToolHandler
 
         try {
             $result = $agent->execute($brief, $team);
+        } catch (TurnStoppedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }

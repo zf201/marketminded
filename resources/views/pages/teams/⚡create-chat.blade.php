@@ -249,6 +249,12 @@ new class extends Component
             'content' => $content,
             'metadata' => null,
         ];
+        $this->messages[] = [
+            'role' => 'assistant',
+            'content' => '',
+            'metadata' => null,
+            'is_live' => true,
+        ];
         $this->prompt = '';
         $this->isStreaming = true;
 
@@ -325,7 +331,11 @@ new class extends Component
                 return $brandHandler->execute($team, $args);
             }
             if ($name === 'save_topics') {
-                return $topicHandler->execute($team, $conversation->id, $args);
+                $bus->publish('subagent_started', ['agent' => 'topics', 'title' => 'Saving topics', 'color' => 'teal']);
+                $result = $topicHandler->execute($team, $conversation->id, $args);
+                $saved = json_decode($result, true)['count'] ?? 0;
+                $bus->publish('subagent_completed', ['agent' => 'topics', 'card' => ['summary' => "Saved {$saved} topic(s) to backlog"]]);
+                return $result;
             }
             if ($name === 'fetch_url') {
                 return (new UrlFetcher)->fetch($args['url'] ?? '');
@@ -505,6 +515,90 @@ new class extends Component
             ->toArray();
     }
 
+    public function buildItems(array $message): array
+    {
+        $items = [];
+        $meta = $message['metadata'] ?? [];
+
+        if (! empty($meta['reasoning'])) {
+            $items[] = ['type' => 'reasoning', 'content' => $meta['reasoning']];
+        }
+
+        if (! empty($message['content'])) {
+            $items[] = ['type' => 'text', 'content' => $message['content']];
+        }
+
+        $findLastAgent = function (array &$items, string $agent): ?int {
+            for ($i = count($items) - 1; $i >= 0; $i--) {
+                if (($items[$i]['type'] ?? '') === 'subagent' && ($items[$i]['agent'] ?? '') === $agent) {
+                    return $i;
+                }
+            }
+            return null;
+        };
+
+        foreach ($meta['events'] ?? [] as $event) {
+            $type = $event['type'] ?? '';
+            $p = $event['payload'] ?? [];
+            $agent = $p['agent'] ?? '';
+
+            if ($type === 'subagent_started') {
+                $items[] = [
+                    'type' => 'subagent', 'agent' => $agent,
+                    'title' => $p['title'] ?? '', 'color' => $p['color'] ?? 'zinc',
+                    'status' => 'working', 'pills' => [], 'card' => null, 'message' => null,
+                ];
+            } elseif ($type === 'subagent_tool_call') {
+                $idx = $findLastAgent($items, $agent);
+                if ($idx === null) {
+                    $items[] = [
+                        'type' => 'subagent', 'agent' => $agent,
+                        'title' => 'Tools used', 'color' => 'zinc',
+                        'status' => 'working', 'pills' => [], 'card' => null, 'message' => null,
+                    ];
+                    $idx = count($items) - 1;
+                }
+                $items[$idx]['pills'][] = str_replace('_', ' ', $p['name'] ?? '?');
+            } elseif ($type === 'subagent_completed') {
+                $idx = $findLastAgent($items, $agent);
+                if ($idx !== null) {
+                    $items[$idx]['status'] = 'done';
+                    $items[$idx]['card'] = $p['card'] ?? null;
+                }
+            } elseif ($type === 'subagent_error') {
+                $idx = $findLastAgent($items, $agent);
+                if ($idx !== null) {
+                    $items[$idx]['status'] = 'error';
+                    $items[$idx]['message'] = $p['message'] ?? '';
+                }
+            }
+        }
+
+        foreach ($items as &$it) {
+            if (($it['type'] ?? '') === 'subagent' && ($it['status'] ?? '') === 'working') {
+                $it['status'] = 'done';
+            }
+        }
+        unset($it);
+
+        $hasStats = ! empty($meta['interrupted'])
+            || ! empty($meta['web_searches'])
+            || ($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0) > 0
+            || ($message['cost'] ?? 0) > 0;
+        if ($hasStats) {
+            $items[] = [
+                'type' => 'stats',
+                'interrupted' => ! empty($meta['interrupted']),
+                'web_searches' => $meta['web_searches'] ?? 0,
+                'input_tokens' => $message['input_tokens'] ?? 0,
+                'output_tokens' => $message['output_tokens'] ?? 0,
+                'cost' => $message['cost'] ?? 0,
+            ];
+        }
+
+        return $items;
+    }
+
     private function cleanContent(string $content): string
     {
         $maxPasses = 5;
@@ -576,187 +670,179 @@ new class extends Component
             new MutationObserver(() => { if (shouldScroll()) scroll(); }).observe(el, { childList: true, subtree: true, characterData: true });
         "
     >
+        @php
+            $pieceUrlTemplate = $conversation
+                ? route('content.show', ['current_team' => $teamModel, 'contentPiece' => '__PIECE_ID__'])
+                : '';
+        @endphp
         <div class="mx-auto flex w-full max-w-5xl flex-col-reverse px-6 py-4">
-            {{-- Streaming response (Echo/Alpine) --}}
-            @if ($isStreaming)
-                <div class="mb-6"
-                    x-data="conversationStream({{ $conversation->id }})"
-                    x-init="init()"
-                >
-                    <div class="mb-1.5 flex items-center gap-2">
-                        <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
-                        <flux:icon.loading class="size-3.5 text-zinc-500" x-show="items.length === 0" />
-                    </div>
-                    <div class="text-sm">
-                        <template x-if="items.length === 0">
-                            <span class="inline-flex items-center gap-1.5 text-zinc-500">
-                                <flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}
-                            </span>
-                        </template>
-                        <template x-for="(item, idx) in items" :key="idx">
-                            <div class="mb-1">
-                                <template x-if="item.type === 'text'">
-                                    <p class="whitespace-pre-wrap text-sm" x-text="item.content"></p>
-                                </template>
-                                <template x-if="item.type === 'subagent' && item.status === 'working'">
-                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                        <div class="flex items-center gap-2">
-                                            <flux:icon.loading class="size-3.5" :class="'text-' + item.color + '-400'" />
-                                            <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'" x-text="item.title"></span>
-                                            <span class="text-xs text-zinc-500">working…</span>
-                                        </div>
-                                        <template x-if="item.pills.length > 0">
-                                            <div class="mt-2 flex flex-wrap gap-1">
-                                                <template x-for="(pill, pi) in item.pills" :key="pi">
-                                                    <span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700">
-                                                        <svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
-                                                        <span x-text="pill"></span>
-                                                    </span>
-                                                </template>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template x-if="item.type === 'subagent' && item.status === 'done'">
-                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'">&#10003; <span x-text="item.title"></span></span>
-                                        </div>
-                                        <template x-if="item.card && item.card.summary">
-                                            <p class="mt-1 text-xs text-zinc-400" x-text="item.card.summary"></p>
-                                        </template>
-                                    </div>
-                                </template>
-                                <template x-if="item.type === 'subagent' && item.status === 'error'">
-                                    <div class="mt-2 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
-                                        <span class="text-xs text-red-400">&#9888; <span x-text="item.title"></span> failed</span>
-                                        <p class="mt-1 text-xs text-zinc-500" x-text="item.message || ''"></p>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            @endif
-
-            {{-- Message history (reversed for flex-col-reverse) --}}
-            @foreach (array_reverse($messages) as $message)
+            {{-- Unified message rendering (live + history) --}}
+            @foreach (array_reverse($messages) as $idx => $message)
                 @if ($message['role'] === 'user')
-                    <div class="mb-6 flex justify-end">
+                    <div class="mb-6 flex justify-end" wire:key="user-{{ $idx }}-{{ md5($message['content']) }}">
                         <div class="max-w-2xl rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 dark:bg-zinc-700">
                             <p class="text-sm whitespace-pre-wrap">{{ $message['content'] }}</p>
                         </div>
                     </div>
                 @else
-                    <div class="mb-6">
-                        <flux:badge variant="pill" color="indigo" size="sm" class="mb-1.5">AI</flux:badge>
-                        @if (!empty($message['metadata']['reasoning']))
-                            <div x-data="{ open: false }" class="mb-2">
-                                <button @click="open = !open" class="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-                                    <svg x-bind:class="open ? 'rotate-180' : ''" class="size-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                    {{ __('Reasoning') }}
-                                </button>
-                                <div x-show="open" x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-400 whitespace-pre-wrap">{{ $message['metadata']['reasoning'] }}</div>
-                            </div>
-                        @endif
-                        <p class="text-sm whitespace-pre-wrap {{ str_starts_with($message['content'], 'Error:') ? 'text-red-400' : '' }}">{{ $message['content'] }}</p>
+                    @php
+                        $isLive = ! empty($message['is_live']);
+                        $items = $isLive ? [] : $this->buildItems($message);
+                        $key = $isLive ? 'msg-live' : ('msg-' . $idx . '-' . md5(json_encode([$message['content'] ?? '', $message['metadata'] ?? null])));
+                    @endphp
+                    <div class="mb-6"
+                        wire:key="{{ $key }}"
+                        x-data="conversationStream({{ $conversation?->id ?? 0 }}, @js($items), {{ $isLive ? 'true' : 'false' }}, '{{ $pieceUrlTemplate }}')"
+                    >
+                        <div class="mb-1.5 flex items-center gap-2">
+                            <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
+                            <flux:icon.loading class="size-3.5 text-zinc-500" x-show="live && items.length === 0" />
+                        </div>
+                        <div class="text-sm">
+                            <template x-if="live && items.length === 0">
+                                <span class="inline-flex items-center gap-1.5 text-zinc-500">
+                                    <flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}
+                                </span>
+                            </template>
+                            <template x-for="(item, i) in items" :key="i">
+                                <div>
+                                    {{-- Reasoning (collapsible) --}}
+                                    <template x-if="item.type === 'reasoning'">
+                                        <div x-data="{ open: false }" class="mb-2">
+                                            <button @click="open = !open" class="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+                                                <svg x-bind:class="open ? 'rotate-180' : ''" class="size-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                                {{ __('Reasoning') }}
+                                            </button>
+                                            <div x-show="open" x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-400 whitespace-pre-wrap" x-text="item.content"></div>
+                                        </div>
+                                    </template>
 
-                        {{-- Sub-agent event cards (metadata.events format) --}}
-                        @if (!empty($message['metadata']['events']))
-                            @php $seenHistoryPieceIds = []; @endphp
-                            @foreach ($message['metadata']['events'] as $event)
-                                @php
-                                    $etype    = $event['type'] ?? '';
-                                    $epayload = $event['payload'] ?? [];
-                                    $eagent   = $epayload['agent'] ?? '';
-                                    $ecard    = $epayload['card'] ?? null;
-                                    $ekind    = $ecard['kind'] ?? null;
-                                @endphp
+                                    {{-- Text --}}
+                                    <template x-if="item.type === 'text'">
+                                        <p class="whitespace-pre-wrap text-sm mb-1"
+                                           :class="item.content && item.content.startsWith('Error:') ? 'text-red-400' : ''"
+                                           x-text="item.content"></p>
+                                    </template>
 
-                                @if ($etype === 'subagent_completed')
-                                    @if ($eagent === 'research_topic' && $ekind === 'research')
+                                    {{-- Subagent: working --}}
+                                    <template x-if="item.type === 'subagent' && item.status === 'working'">
                                         <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                            <div class="text-xs text-purple-400">&#10003; {{ $ecard['summary'] ?? 'Research complete' }}</div>
-                                            <ul class="mt-1 list-disc pl-5">
-                                                @foreach (array_slice($ecard['claims'] ?? [], 0, 5) as $c)
-                                                    <li class="text-xs text-zinc-400">{{ $c['text'] ?? '' }}</li>
-                                                @endforeach
-                                            </ul>
-                                            @if (count($ecard['claims'] ?? []) > 5)
-                                                <div class="mt-1 text-xs text-zinc-500">…and {{ count($ecard['claims']) - 5 }} more</div>
-                                            @endif
-                                        </div>
-                                    @elseif ($eagent === 'pick_audience' && $ekind === 'audience')
-                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                            <div class="text-xs text-amber-400">&#10003; {{ $ecard['summary'] ?? 'Audience selected' }}</div>
-                                            <div class="mt-1 text-xs text-zinc-400">{{ $ecard['guidance_for_writer'] ?? '' }}</div>
-                                        </div>
-                                    @elseif ($eagent === 'create_outline' && $ekind === 'outline')
-                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                            <div class="text-xs text-blue-400">&#10003; {{ $ecard['summary'] ?? 'Outline ready' }}</div>
-                                            <ul class="mt-1 list-disc pl-5">
-                                                @foreach ($ecard['sections'] ?? [] as $s)
-                                                    <li class="text-xs text-zinc-400">{{ $s['heading'] }}</li>
-                                                @endforeach
-                                            </ul>
-                                        </div>
-                                    @elseif ($eagent === 'fetch_style_reference' && $ekind === 'style_reference')
-                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                            <div class="text-xs text-violet-400">&#10003; {{ $ecard['summary'] ?? 'Style reference ready' }}</div>
-                                            <ul class="mt-1 list-none">
-                                                @foreach ($ecard['examples'] ?? [] as $ex)
-                                                    <li class="text-xs text-zinc-400">· {{ $ex['title'] ?? '' }}</li>
-                                                @endforeach
-                                            </ul>
-                                        </div>
-                                    @elseif (in_array($eagent, ['write_blog_post', 'proofread_blog_post'], true))
-                                        @php
-                                            $ePieceId = $ecard['piece_id'] ?? null;
-                                            if ($ePieceId !== null && ! isset($seenHistoryPieceIds[$ePieceId])) {
-                                                $seenHistoryPieceIds[$ePieceId] = true;
-                                                $ePiece = \App\Models\ContentPiece::where('id', $ePieceId)->where('team_id', $teamModel->id)->first();
-                                            } else {
-                                                $ePiece = null;
-                                            }
-                                            $eBadge = $eagent === 'write_blog_post' ? __('Draft created') : __('Revised');
-                                        @endphp
-                                        @if ($ePiece)
-                                            <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                                <div class="flex items-center justify-between mb-1">
-                                                    <span class="text-xs text-green-400">&#10003; {{ $eBadge }} &middot; v{{ $ePiece->current_version }} &middot; {{ number_format(str_word_count(strip_tags($ePiece->body))) }} words</span>
-                                                    <a href="{{ route('content.show', ['current_team' => $teamModel, 'contentPiece' => $ePiece->id]) }}" wire:navigate class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
-                                                </div>
-                                                <div class="text-sm font-semibold text-zinc-200">{{ $ePiece->title }}</div>
-                                                <div class="mt-1 text-xs text-zinc-400 line-clamp-3">{{ mb_substr(strip_tags($ePiece->body), 0, 200) }}</div>
+                                            <div class="flex items-center gap-2">
+                                                <span :class="'text-' + item.color + '-400'"><flux:icon.loading class="size-3.5" /></span>
+                                                <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'" x-text="item.title"></span>
+                                                <span class="text-xs text-zinc-500">working…</span>
                                             </div>
-                                        @endif
-                                    @endif
-                                @elseif ($etype === 'subagent_error')
-                                    <div class="mt-2 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
-                                        <span class="text-xs text-red-400">&#9888; {{ $eagent }} failed</span>
-                                        <p class="mt-1 text-xs text-zinc-500">{{ $epayload['message'] ?? '' }}</p>
-                                    </div>
-                                @endif
-                            @endforeach
-                        @endif
+                                            <template x-if="item.pills && item.pills.length > 0">
+                                                <div class="mt-2 flex flex-wrap gap-1">
+                                                    <template x-for="(pill, pi) in item.pills" :key="pi">
+                                                        <span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700">
+                                                            <svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                                                            <span x-text="pill"></span>
+                                                        </span>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
 
-                        {{-- Stats footer --}}
-                        @if (!empty($message['metadata']['interrupted']) || !empty($message['metadata']['web_searches']) || ($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0) > 0)
-                            <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                                @if (!empty($message['metadata']['interrupted']))
-                                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs text-amber-500">&#9888; {{ __('Interrupted') }}</span>
-                                @endif
-                                @if (!empty($message['metadata']['web_searches']))
-                                    <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">{{ $message['metadata']['web_searches'] }} web searches</span>
-                                @endif
-                                @if (($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0) > 0)
-                                    <span class="text-xs text-zinc-500">{{ number_format(($message['input_tokens'] ?? 0) + ($message['output_tokens'] ?? 0)) }} tokens</span>
-                                @endif
-                                @if (($message['cost'] ?? 0) > 0)
-                                    <span class="text-xs text-zinc-500">&middot; ${{ number_format($message['cost'], 4) }}</span>
-                                @endif
-                            </div>
-                        @endif
+                                    {{-- Subagent: done --}}
+                                    <template x-if="item.type === 'subagent' && item.status === 'done'">
+                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'">&#10003; <span x-text="item.title"></span></span>
+                                                <template x-if="item.card && item.card.piece_id">
+                                                    <a :href="pieceUrl(item.card.piece_id)" class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
+                                                </template>
+                                            </div>
+
+                                            {{-- Pills (top-level "Tools used" rolled up) --}}
+                                            <template x-if="item.pills && item.pills.length > 0">
+                                                <div class="mt-2 flex flex-wrap gap-1">
+                                                    <template x-for="(pill, pi) in item.pills" :key="pi">
+                                                        <span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-400 border border-zinc-700" x-text="pill"></span>
+                                                    </template>
+                                                </div>
+                                            </template>
+
+                                            {{-- Generic summary --}}
+                                            <template x-if="item.card && item.card.summary && item.card.kind !== 'content_piece'">
+                                                <p class="mt-1 text-xs text-zinc-400" x-text="item.card.summary"></p>
+                                            </template>
+
+                                            {{-- content_piece (writer/proofread) --}}
+                                            <template x-if="item.card && item.card.kind === 'content_piece'">
+                                                <div class="mt-1">
+                                                    <div class="text-xs text-zinc-500" x-text="item.card.summary"></div>
+                                                    <div class="text-sm font-semibold text-zinc-200 mt-1" x-text="item.card.title"></div>
+                                                    <div class="mt-1 text-xs text-zinc-400 line-clamp-3" x-text="item.card.preview"></div>
+                                                </div>
+                                            </template>
+
+                                            {{-- research card --}}
+                                            <template x-if="item.card && item.card.kind === 'research'">
+                                                <ul class="mt-1 list-disc pl-5">
+                                                    <template x-for="(c, ci) in (item.card.claims || []).slice(0, 5)" :key="ci">
+                                                        <li class="text-xs text-zinc-400" x-text="c.text"></li>
+                                                    </template>
+                                                </ul>
+                                            </template>
+                                            <template x-if="item.card && item.card.kind === 'research' && (item.card.claims || []).length > 5">
+                                                <div class="mt-1 text-xs text-zinc-500">…and <span x-text="item.card.claims.length - 5"></span> more</div>
+                                            </template>
+
+                                            {{-- audience card --}}
+                                            <template x-if="item.card && item.card.kind === 'audience'">
+                                                <div class="mt-1 text-xs text-zinc-400" x-text="item.card.guidance_for_writer || ''"></div>
+                                            </template>
+
+                                            {{-- outline card --}}
+                                            <template x-if="item.card && item.card.kind === 'outline'">
+                                                <ul class="mt-1 list-disc pl-5">
+                                                    <template x-for="(s, si) in (item.card.sections || [])" :key="si">
+                                                        <li class="text-xs text-zinc-400" x-text="s.heading"></li>
+                                                    </template>
+                                                </ul>
+                                            </template>
+
+                                            {{-- style_reference card --}}
+                                            <template x-if="item.card && item.card.kind === 'style_reference'">
+                                                <ul class="mt-1 list-none">
+                                                    <template x-for="(ex, ei) in (item.card.examples || [])" :key="ei">
+                                                        <li class="text-xs text-zinc-400">· <span x-text="ex.title || ''"></span></li>
+                                                    </template>
+                                                </ul>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    {{-- Subagent: error --}}
+                                    <template x-if="item.type === 'subagent' && item.status === 'error'">
+                                        <div class="mt-2 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
+                                            <span class="text-xs text-red-400">&#9888; <span x-text="item.title || item.agent"></span> failed</span>
+                                            <p class="mt-1 text-xs text-zinc-500" x-text="item.message || ''"></p>
+                                        </div>
+                                    </template>
+
+                                    {{-- Stats footer --}}
+                                    <template x-if="item.type === 'stats'">
+                                        <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                            <template x-if="item.interrupted">
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs text-amber-500">&#9888; {{ __('Interrupted') }}</span>
+                                            </template>
+                                            <template x-if="item.web_searches > 0">
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500"><span x-text="item.web_searches"></span> web searches</span>
+                                            </template>
+                                            <template x-if="(item.input_tokens + item.output_tokens) > 0">
+                                                <span class="text-xs text-zinc-500"><span x-text="(item.input_tokens + item.output_tokens).toLocaleString()"></span> tokens</span>
+                                            </template>
+                                            <template x-if="item.cost > 0">
+                                                <span class="text-xs text-zinc-500">&middot; $<span x-text="item.cost.toFixed(4)"></span></span>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 @endif
             @endforeach
@@ -916,8 +1002,17 @@ new class extends Component
             @if ($isStreaming)
                 <div class="flex justify-center" x-data="{ stopping: false }">
                     <flux:button variant="danger" size="sm" icon="stop-circle"
-                        x-on:click="$wire.stop()">
-                        {{ __('Stop generating') }}
+                        :disabled="false"
+                        x-bind:disabled="stopping"
+                        x-on:click="
+                            stopping = true;
+                            fetch('{{ route('conversations.stop', ['conversation' => $conversation->id]) }}', {
+                                method: 'POST',
+                                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+                                credentials: 'same-origin',
+                            });
+                        ">
+                        <span x-text="stopping ? '{{ __('Stopping…') }}' : '{{ __('Stop generating') }}'"></span>
                     </flux:button>
                 </div>
             @else
@@ -941,69 +1036,3 @@ new class extends Component
     @endif
 </div>
 
-<script>
-function conversationStream(conversationId) {
-    return {
-        items: [],
-
-        init() {
-            if (typeof Echo === 'undefined') return;
-            window.Echo
-                .private('conversation.' + conversationId)
-                .listen('.ConversationEvent', e => this.handle(e));
-        },
-
-        handle(e) {
-            const p = e.payload;
-            switch (e.type) {
-                case 'text_chunk': {
-                    const last = this.items[this.items.length - 1];
-                    if (last && last.type === 'text') {
-                        last.content += p.content;
-                    } else {
-                        this.items.push({ type: 'text', content: p.content });
-                    }
-                    break;
-                }
-                case 'subagent_started':
-                    this.items.push({
-                        type: 'subagent', agent: p.agent,
-                        title: p.title, color: p.color,
-                        status: 'working', pills: [], card: null, message: null,
-                    });
-                    break;
-                case 'subagent_tool_call': {
-                    const sa = this.findLastAgent(p.agent);
-                    if (sa) sa.pills.push(p.name.replace(/_/g, ' '));
-                    break;
-                }
-                case 'subagent_completed': {
-                    const done = this.findLastAgent(p.agent);
-                    if (done) { done.status = 'done'; done.card = p.card; }
-                    break;
-                }
-                case 'subagent_error': {
-                    const err = this.findLastAgent(p.agent);
-                    if (err) { err.status = 'error'; err.message = p.message; }
-                    break;
-                }
-                case 'turn_complete':
-                case 'turn_interrupted':
-                case 'turn_error':
-                    this.items = [];
-                    $wire.loadMessages();
-                    break;
-            }
-        },
-
-        findLastAgent(agent) {
-            for (let i = this.items.length - 1; i >= 0; i--) {
-                if (this.items[i].type === 'subagent' && this.items[i].agent === agent) {
-                    return this.items[i];
-                }
-            }
-            return null;
-        },
-    };
-}
-</script>

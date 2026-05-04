@@ -36,6 +36,7 @@ class WriteBlogPostToolHandler
                             'title' => $piece->title,
                             'preview' => mb_substr(strip_tags($piece->body), 0, 200),
                             'word_count' => str_word_count(strip_tags($piece->body)),
+                            'piece_id' => $piece->id,
                         ],
                         'piece_id' => $piece->id,
                     ]);
@@ -54,6 +55,8 @@ class WriteBlogPostToolHandler
 
         try {
             $result = $agent->execute($brief, $team);
+        } catch (TurnStoppedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
