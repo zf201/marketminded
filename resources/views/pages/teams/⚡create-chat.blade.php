@@ -11,6 +11,7 @@ use App\Services\OpenRouterClient;
 use App\Services\PickAudienceToolHandler;
 use App\Services\ResearchTopicToolHandler;
 use App\Services\BraveSearchClient;
+use App\Services\ReasoningChunk;
 use App\Services\StreamResult;
 use App\Services\ToolEvent;
 use App\Services\TopicToolHandler;
@@ -326,6 +327,7 @@ new class extends Component
         $completedTools = [];
         $interrupted = false;
         $saved = false;
+        $partialReasoning = '';
 
         // Backstop: if the request dies before the finally block runs (PHP-FPM
         // request_terminate_timeout, OOM, fatal error after streaming starts,
@@ -336,7 +338,7 @@ new class extends Component
         $conversationId = $this->conversation->id;
         $fastModel = $this->teamModel->fast_model;
         register_shutdown_function(function () use (
-            &$fullContent, &$completedTools, &$streamResult, &$interrupted, &$saved,
+            &$fullContent, &$completedTools, &$streamResult, &$interrupted, &$saved, &$partialReasoning,
             $conversationId, $fastModel
         ) {
             if ($saved) return;
@@ -349,6 +351,7 @@ new class extends Component
                     streamResult: $streamResult,
                     interrupted: true,
                     cleanContent: false,
+                    partialReasoning: $partialReasoning,
                 );
             } catch (\Throwable $e) {
                 \Log::error('Shutdown save failed', ['error' => $e->getMessage()]);
@@ -371,6 +374,8 @@ new class extends Component
                     $this->streamUI($this->cleanContent($fullContent), $completedTools, $activeTool);
                 } elseif ($item instanceof StreamResult) {
                     $streamResult = $item;
+                } elseif ($item instanceof ReasoningChunk) {
+                    $partialReasoning .= $item->text;
                 } else {
                     $fullContent .= $item;
                     $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
@@ -399,6 +404,7 @@ new class extends Component
                 streamResult: $streamResult,
                 interrupted: $interrupted,
                 cleanContent: false,
+                partialReasoning: $partialReasoning,
             );
 
             if ($message) {
@@ -444,6 +450,7 @@ new class extends Component
         ?StreamResult $streamResult,
         bool $interrupted,
         bool $cleanContent,
+        string $partialReasoning = '',
     ): ?Message {
         $metadata = [];
         if (! empty($completedTools)) {
@@ -468,8 +475,9 @@ new class extends Component
         if ($streamResult && $streamResult->webSearchRequests > 0) {
             $metadata['web_searches'] = $streamResult->webSearchRequests;
         }
-        if ($streamResult && $streamResult->reasoningContent !== '') {
-            $metadata['reasoning'] = $streamResult->reasoningContent;
+        $reasoning = $streamResult?->reasoningContent ?: $partialReasoning;
+        if ($reasoning !== '') {
+            $metadata['reasoning'] = $reasoning;
         }
         if ($streamResult && $streamResult->reasoningTokens > 0) {
             $metadata['reasoning_tokens'] = $streamResult->reasoningTokens;
@@ -1464,9 +1472,22 @@ new class extends Component
 
         <div class="mx-auto w-full max-w-5xl px-6 pb-4 pt-2">
             @if ($isStreaming)
-                <div class="flex justify-center">
-                    <flux:button variant="danger" size="sm" icon="stop-circle" x-on:click="window.location.reload()">
-                        {{ __('Stop generating') }}
+                <div class="flex justify-center" x-data="{ stopping: false }">
+                    <flux:button variant="danger" size="sm" icon="stop-circle"
+                        x-bind:disabled="stopping"
+                        x-on:click="
+                            stopping = true;
+                            // Abort any in-flight Livewire fetches — closes the SSE so the
+                            // server's foreach loop sees connection_aborted() and breaks
+                            // out of the stream.
+                            try { Livewire.all().forEach(c => c.commit && c.commit({ cancel: true })); } catch(e) {}
+                            // ignore_user_abort(true) on the server keeps PHP running so
+                            // the finally block + shutdown_function persist the partial.
+                            // Give it up to 3s before reloading; the reload triggers a
+                            // fresh DB read which will include the new message row.
+                            setTimeout(() => window.location.reload(), 3000);">
+                        <span x-show="!stopping">{{ __('Stop generating') }}</span>
+                        <span x-show="stopping" x-cloak>{{ __('Saving partial…') }}</span>
                     </flux:button>
                 </div>
             @else

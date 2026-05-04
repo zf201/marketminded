@@ -422,6 +422,7 @@ class OpenRouterClient
 
                     if (isset($delta['reasoning_content']) && $delta['reasoning_content'] !== '') {
                         $streamReasoningContent .= $delta['reasoning_content'];
+                        yield new ReasoningChunk($delta['reasoning_content']);
                     }
 
                     $content = $this->normalizeContent($delta['content'] ?? '');
