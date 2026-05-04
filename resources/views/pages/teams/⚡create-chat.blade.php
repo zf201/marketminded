@@ -430,6 +430,9 @@ new class extends Component
             if ($braveClient !== null) {
                 $chatTools[] = BraveSearchClient::toolSchema();
             }
+            // Release the PHP session lock so concurrent Livewire poll requests
+            // (e.g. pollSubagentTools) can read session data without blocking.
+            session()->save();
             foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $chatTools, $toolExecutor, temperature: 0.7, useServerTools: $useServerTools) as $item) {
                 if ($item instanceof ToolEvent) {
                     if ($item->status === 'completed') {
@@ -618,6 +621,24 @@ new class extends Component
         }
     }
 
+    /**
+     * Called by Alpine.js polling on the active sub-agent card.
+     * Returns the list of intermediate tool calls made so far for the currently
+     * running sub-agent, or an empty array if no agent is active.
+     */
+    public function pollSubagentTools(): array
+    {
+        if (! $this->conversation) {
+            return [];
+        }
+        $conversationId = $this->conversation->id;
+        $callId = \Illuminate\Support\Facades\Cache::get("subagent-active:{$conversationId}");
+        if ($callId === null) {
+            return [];
+        }
+        return \Illuminate\Support\Facades\Cache::get("subagent-tools:{$callId}:{$conversationId}", []);
+    }
+
     public function getConversationStatsProperty(): array
     {
         if (! $this->conversation) {
@@ -774,14 +795,27 @@ new class extends Component
 
         $spinner = '<svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
 
+        // Alpine.js polls pollSubagentTools() every 2 s and renders tool pills
+        // as the sub-agent works. Pills disappear once the card is replaced by
+        // the completed card (which carries intermediate_tools in its payload).
         return sprintf(
-            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
+            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3"'
+            . ' x-data="{ tools: [] }"'
+            . ' x-init="() => { const poll = () => $wire.pollSubagentTools().then(r => { tools = r; }); poll(); const id = setInterval(poll, 2000); $once(() => clearInterval(id)); }">'
             . '<div class="flex items-center gap-2">'
             . '<span class="%s">%s</span>'
             . '<span class="text-xs font-semibold %s">%s</span>'
             . '<span class="text-xs text-zinc-500">working…</span>'
             . '</div>'
             . '<div class="mt-1 text-xs text-zinc-400">%s</div>'
+            . '<div class="mt-2 flex flex-wrap gap-1" x-show="tools.length > 0">'
+            . '<template x-for="(tool, i) in tools" :key="i">'
+            . '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700">'
+            . '<svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>'
+            . '<span x-text="tool.name.replace(/_/g, \' \')"></span>'
+            . '</span>'
+            . '</template>'
+            . '</div>'
             . '</div>',
             $colorText,
             $spinner,
@@ -789,6 +823,29 @@ new class extends Component
             e($meta['title']),
             e($meta['hint']),
         );
+    }
+
+    /**
+     * Pills row showing the intermediate tool calls the sub-agent made (web_search, fetch_url, …).
+     * Returns empty string if the card carries no intermediate_tools.
+     */
+    private function intermediateToolsPills(array $card): string
+    {
+        $tools = $card['intermediate_tools'] ?? [];
+        if (empty($tools)) {
+            return '';
+        }
+
+        $pills = '';
+        foreach ($tools as $t) {
+            $label = str_replace('_', ' ', $t['name'] ?? '');
+            $pills .= '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-400 border border-zinc-700">'
+                . '<svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>'
+                . e($label)
+                . '</span>';
+        }
+
+        return '<div class="mt-2 flex flex-wrap gap-1">' . $pills . '</div>';
     }
 
     /**
@@ -1028,6 +1085,7 @@ new class extends Component
             . '<div class="text-xs text-purple-400">&#10003; ' . $summary . '</div>'
             . '<ul class="mt-1 list-disc pl-5">' . $preview . '</ul>'
             . $more
+            . $this->intermediateToolsPills($card)
             . $this->cardMetricsFooter($card)
             . '</div>';
     }
@@ -1043,6 +1101,7 @@ new class extends Component
         return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
             . '<div class="text-xs text-blue-400">&#10003; ' . $summary . '</div>'
             . '<ul class="mt-1 list-disc pl-5">' . $sectionList . '</ul>'
+            . $this->intermediateToolsPills($card)
             . $this->cardMetricsFooter($card)
             . '</div>';
     }
@@ -1055,6 +1114,7 @@ new class extends Component
         return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
             . '<div class="text-xs text-amber-400">&#10003; ' . $summary . '</div>'
             . '<div class="mt-1 text-xs text-zinc-400">' . $guidance . '</div>'
+            . $this->intermediateToolsPills($card)
             . $this->cardMetricsFooter($card)
             . '</div>';
     }
@@ -1071,6 +1131,7 @@ new class extends Component
         return '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">'
             . '<div class="text-xs text-violet-400">&#10003; ' . $summary . '</div>'
             . '<ul class="mt-1 list-none">' . $items . '</ul>'
+            . $this->intermediateToolsPills($card)
             . $this->cardMetricsFooter($card)
             . '</div>';
     }
@@ -1108,7 +1169,7 @@ new class extends Component
             . '</div>'
             . '<div class="text-sm font-semibold text-zinc-200">%s</div>'
             . '<div class="mt-1 text-xs text-zinc-400 line-clamp-3">%s</div>'
-            . '%s'
+            . '%s%s'
             . '</div>',
             e($badge),
             e($piece->current_version),
@@ -1117,6 +1178,7 @@ new class extends Component
             e(__('Open')),
             e($piece->title),
             e($preview),
+            $this->intermediateToolsPills($card),
             $this->cardMetricsFooter($card),
         );
     }

@@ -15,7 +15,7 @@ class StubbedWriterAgentForIdempotency extends WriterAgent
         parent::__construct($extraContext);
     }
 
-    protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter', ?\App\Services\BraveSearchClient $braveSearchClient = null): ?array
+    protected function llmCall(string $sp, array $t, string $m, float $temp, bool $ust, ?string $key, int $to = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter', ?\App\Services\BraveSearchClient $braveSearchClient = null, ?callable $onToolCall = null): ?array
     {
         return $this->stubPayload;
     }

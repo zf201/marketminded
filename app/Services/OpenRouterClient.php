@@ -28,7 +28,7 @@ class OpenRouterClient
         return $this->model;
     }
 
-    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120): ChatResult
+    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120, ?callable $onToolCall = null): ChatResult
     {
         $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;
@@ -136,6 +136,10 @@ class OpenRouterClient
                     ];
 
                     continue;
+                }
+
+                if ($onToolCall !== null) {
+                    ($onToolCall)($functionName, $arguments);
                 }
 
                 if ($functionName === 'fetch_url') {

@@ -7,6 +7,7 @@ use App\Services\BraveSearchClient;
 use App\Services\OpenRouterClient;
 use App\Services\SubagentLogger;
 use App\Services\UrlFetcher;
+use Illuminate\Support\Facades\Cache;
 
 abstract class BaseAgent implements Agent
 {
@@ -129,6 +130,21 @@ abstract class BaseAgent implements Agent
             $extraTools[] = BraveSearchClient::toolSchema();
         }
 
+        $this->lastIntermediateTools = [];
+        $conversationId = $this->conversationId;
+        if ($conversationId !== null) {
+            Cache::put("subagent-active:{$conversationId}", $callId, 1800);
+        }
+
+        $onToolCall = function (string $name, array $args) use ($callId, $conversationId): void {
+            $entry = ['name' => $name, 'args' => $args, 'ts' => time()];
+            $this->lastIntermediateTools[] = $entry;
+            if ($conversationId !== null) {
+                $key = "subagent-tools:{$callId}:{$conversationId}";
+                Cache::put($key, $this->lastIntermediateTools, 1800);
+            }
+        };
+
         $payload = $this->llmCall(
             $systemPrompt,
             array_merge([$this->submitToolSchema()], $this->additionalTools(), $extraTools),
@@ -140,7 +156,12 @@ abstract class BaseAgent implements Agent
             $team->ai_api_url ?? 'https://openrouter.ai/api/v1',
             $team->ai_provider ?? 'openrouter',
             $braveClient,
+            $onToolCall,
         );
+
+        if ($conversationId !== null) {
+            Cache::forget("subagent-active:{$conversationId}");
+        }
 
         $duration = (int) round((microtime(true) - $startedAt) * 1000);
 
@@ -201,6 +222,9 @@ abstract class BaseAgent implements Agent
         if ($this->lastReasoningContent !== '') {
             $card['reasoning'] = $this->lastReasoningContent;
         }
+        if (! empty($this->lastIntermediateTools)) {
+            $card['intermediate_tools'] = $this->lastIntermediateTools;
+        }
 
         return AgentResult::ok(
             brief: $newBrief,
@@ -220,6 +244,9 @@ abstract class BaseAgent implements Agent
      */
     /** Captured when llmCall's response is text (not a tool call) — used for diagnostics. */
     protected ?string $lastTextResponse = null;
+
+    /** Intermediate tool calls made during this agent's run (web_search, fetch_url, etc.). */
+    protected array $lastIntermediateTools = [];
 
     /** Populated after llmCall so handlers can surface cost/tokens on cards. */
     protected int $lastInputTokens = 0;
@@ -241,6 +268,7 @@ abstract class BaseAgent implements Agent
         string $baseUrl = 'https://openrouter.ai/api/v1',
         string $provider = 'openrouter',
         ?BraveSearchClient $braveSearchClient = null,
+        ?callable $onToolCall = null,
     ): ?array {
         $client = new OpenRouterClient(
             apiKey: $apiKey,
@@ -291,6 +319,7 @@ abstract class BaseAgent implements Agent
                 temperature: $temperature,
                 useServerTools: $useServerTools,
                 timeout: $timeout,
+                onToolCall: $onToolCall,
             );
         } catch (\Throwable $e) {
             $this->lastTransportError = mb_substr($e->getMessage(), 0, 1000);
@@ -361,6 +390,7 @@ abstract class BaseAgent implements Agent
                     temperature: $temperature,
                     useServerTools: false,
                     timeout: $timeout,
+                    onToolCall: $onToolCall,
                 );
             } catch (\Throwable $e) {
                 $this->lastTransportError = mb_substr($e->getMessage(), 0, 1000);
