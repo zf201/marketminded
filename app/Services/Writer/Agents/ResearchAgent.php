@@ -172,4 +172,7 @@ PROMPT;
         $sources = count($payload['sources']);
         return "Gathered {$claims} claims from {$sources} sources";
     }
+
+    protected function agentTitle(): string { return 'Research sub-agent'; }
+    protected function agentColor(): string { return 'purple'; }
 }

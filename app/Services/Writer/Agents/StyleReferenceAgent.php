@@ -183,4 +183,7 @@ PROMPT;
         $n = count($payload['examples']);
         return "Style reference: {$n} example" . ($n === 1 ? '' : 's') . ' selected';
     }
+
+    protected function agentTitle(): string { return 'Style sub-agent'; }
+    protected function agentColor(): string { return 'violet'; }
 }

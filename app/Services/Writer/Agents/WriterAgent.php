@@ -308,4 +308,7 @@ PROMPT;
 
         return implode("\n", $lines);
     }
+
+    protected function agentTitle(): string { return 'Writer sub-agent'; }
+    protected function agentColor(): string { return 'green'; }
 }

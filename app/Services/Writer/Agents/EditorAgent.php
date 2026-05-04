@@ -191,4 +191,7 @@ PROMPT;
 
         return implode("\n", $lines);
     }
+
+    protected function agentTitle(): string { return 'Editor sub-agent'; }
+    protected function agentColor(): string { return 'blue'; }
 }

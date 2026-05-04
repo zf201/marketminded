@@ -148,4 +148,7 @@ PROMPT;
     {
         return 'Revised · ' . $payload['change_description'];
     }
+
+    protected function agentTitle(): string { return 'Proofread sub-agent'; }
+    protected function agentColor(): string { return 'green'; }
 }

@@ -200,4 +200,7 @@ PROMPT;
 
         return implode("\n", $lines);
     }
+
+    protected function agentTitle(): string { return 'Audience sub-agent'; }
+    protected function agentColor(): string { return 'amber'; }
 }

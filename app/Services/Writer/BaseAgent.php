@@ -4,10 +4,11 @@ namespace App\Services\Writer;
 
 use App\Models\Team;
 use App\Services\BraveSearchClient;
+use App\Services\ConversationBus;
 use App\Services\OpenRouterClient;
 use App\Services\SubagentLogger;
+use App\Services\TurnStoppedException;
 use App\Services\UrlFetcher;
-use App\Services\SubagentStoppedException;
 use Illuminate\Support\Facades\Cache;
 
 abstract class BaseAgent implements Agent
@@ -16,6 +17,9 @@ abstract class BaseAgent implements Agent
 
     /** Set by handlers before execute() so log entries can be correlated with the chat turn. */
     public ?int $conversationId = null;
+
+    /** Set by tool handlers before execute() so lifecycle events can be published. */
+    public ?ConversationBus $bus = null;
 
     /** Correlation id for the current execute() invocation; used by llmCall logging. */
     protected ?string $currentCallId = null;
@@ -88,6 +92,12 @@ abstract class BaseAgent implements Agent
      */
     abstract protected function buildSummary(array $payload): string;
 
+    /** Human-readable display title shown in the working card (e.g., "Research sub-agent"). */
+    abstract protected function agentTitle(): string;
+
+    /** Tailwind colour name for the working card badge (e.g., "purple", "blue"). */
+    abstract protected function agentColor(): string;
+
     public function execute(Brief $brief, Team $team): AgentResult
     {
         $callId = SubagentLogger::newCallId();
@@ -113,6 +123,12 @@ abstract class BaseAgent implements Agent
             'pid' => getmypid(),
         ]);
 
+        $this->bus?->publish('subagent_started', [
+            'agent' => $submitToolName,
+            'title' => $this->agentTitle(),
+            'color' => $this->agentColor(),
+        ]);
+
         $webSearchProvider = $team->web_search_provider ?? 'openrouter_builtin';
         $useServerTools = $this->useServerTools()
             && $team->ai_provider !== 'custom'
@@ -131,22 +147,15 @@ abstract class BaseAgent implements Agent
             $extraTools[] = BraveSearchClient::toolSchema();
         }
 
-        $this->lastIntermediateTools = [];
-        $conversationId = $this->conversationId;
-        if ($conversationId !== null) {
-            Cache::put("subagent-active:{$conversationId}", $callId, 1800);
-        }
-
-        $onToolCall = function (string $name, array $args) use ($callId, $conversationId): void {
-            if ($conversationId !== null && Cache::get("streaming-stop:{$conversationId}")) {
-                throw new SubagentStoppedException('Stopped by user.');
+        $onToolCall = function (string $name, array $args) use ($submitToolName): void {
+            if ($this->conversationId !== null && Cache::get("conv-stop:{$this->conversationId}")) {
+                throw new TurnStoppedException('Stopped by user.');
             }
-            $entry = ['name' => $name, 'args' => $args, 'ts' => time()];
-            $this->lastIntermediateTools[] = $entry;
-            if ($conversationId !== null) {
-                $key = "subagent-tools:{$callId}:{$conversationId}";
-                Cache::put($key, $this->lastIntermediateTools, 1800);
-            }
+            $this->bus?->publish('subagent_tool_call', [
+                'agent' => $submitToolName,
+                'name'  => $name,
+                'args'  => $args,
+            ]);
         };
 
         $payload = $this->llmCall(
@@ -162,10 +171,6 @@ abstract class BaseAgent implements Agent
             $braveClient,
             $onToolCall,
         );
-
-        if ($conversationId !== null) {
-            Cache::forget("subagent-active:{$conversationId}");
-        }
 
         $duration = (int) round((microtime(true) - $startedAt) * 1000);
 
@@ -204,15 +209,27 @@ abstract class BaseAgent implements Agent
 
         if ($payload === null) {
             if ($this->lastTransportError === 'stopped') {
+                $this->bus?->publish('subagent_error', [
+                    'agent'   => $submitToolName,
+                    'message' => 'Stopped.',
+                ]);
                 return AgentResult::error('Stopped.');
             }
             $hint = $this->lastTextResponse !== null
                 ? ' Model said: "' . mb_substr($this->lastTextResponse, 0, 300) . '"'
                 : '';
+            $this->bus?->publish('subagent_error', [
+                'agent'   => $submitToolName,
+                'message' => "Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}",
+            ]);
             return AgentResult::error("Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}");
         }
 
         if ($validationError !== null) {
+            $this->bus?->publish('subagent_error', [
+                'agent'   => $submitToolName,
+                'message' => $validationError,
+            ]);
             return AgentResult::error($validationError);
         }
 
@@ -229,9 +246,11 @@ abstract class BaseAgent implements Agent
         if ($this->lastReasoningContent !== '') {
             $card['reasoning'] = $this->lastReasoningContent;
         }
-        if (! empty($this->lastIntermediateTools)) {
-            $card['intermediate_tools'] = $this->lastIntermediateTools;
-        }
+
+        $this->bus?->publish('subagent_completed', [
+            'agent' => $submitToolName,
+            'card'  => $card,
+        ]);
 
         return AgentResult::ok(
             brief: $newBrief,
@@ -251,9 +270,6 @@ abstract class BaseAgent implements Agent
      */
     /** Captured when llmCall's response is text (not a tool call) — used for diagnostics. */
     protected ?string $lastTextResponse = null;
-
-    /** Intermediate tool calls made during this agent's run (web_search, fetch_url, etc.). */
-    protected array $lastIntermediateTools = [];
 
     /** Populated after llmCall so handlers can surface cost/tokens on cards. */
     protected int $lastInputTokens = 0;
@@ -328,7 +344,7 @@ abstract class BaseAgent implements Agent
                 timeout: $timeout,
                 onToolCall: $onToolCall,
             );
-        } catch (SubagentStoppedException) {
+        } catch (TurnStoppedException) {
             SubagentLogger::write([
                 'event' => 'attempt_stopped',
                 'call_id' => $this->currentCallId ?? null,
@@ -410,7 +426,7 @@ abstract class BaseAgent implements Agent
                     timeout: $timeout,
                     onToolCall: $onToolCall,
                 );
-            } catch (SubagentStoppedException) {
+            } catch (TurnStoppedException) {
                 SubagentLogger::write([
                     'event' => 'attempt_stopped',
                     'call_id' => $this->currentCallId,
