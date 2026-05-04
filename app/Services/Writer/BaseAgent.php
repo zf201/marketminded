@@ -5,11 +5,18 @@ namespace App\Services\Writer;
 use App\Models\Team;
 use App\Services\BraveSearchClient;
 use App\Services\OpenRouterClient;
+use App\Services\SubagentLogger;
 use App\Services\UrlFetcher;
 
 abstract class BaseAgent implements Agent
 {
     public function __construct(protected ?string $extraContext = null) {}
+
+    /** Set by handlers before execute() so log entries can be correlated with the chat turn. */
+    public ?int $conversationId = null;
+
+    /** Correlation id for the current execute() invocation; used by llmCall logging. */
+    protected ?string $currentCallId = null;
 
     /**
      * Build the full system prompt for this agent's LLM call. Should embed
@@ -81,9 +88,28 @@ abstract class BaseAgent implements Agent
 
     public function execute(Brief $brief, Team $team): AgentResult
     {
+        $callId = SubagentLogger::newCallId();
+        $this->currentCallId = $callId;
+        $startedAt = microtime(true);
         $systemPrompt = $this->systemPrompt($brief, $team);
         $submitToolName = $this->submitToolSchema()['function']['name'] ?? '?';
         $model = $this->model($team);
+
+        SubagentLogger::write([
+            'event' => 'start',
+            'call_id' => $callId,
+            'conversation_id' => $this->conversationId,
+            'agent' => static::class,
+            'model' => $model,
+            'submit_tool' => $submitToolName,
+            'system_prompt' => mb_substr($systemPrompt, 0, 8000),
+            'system_prompt_length' => strlen($systemPrompt),
+            'team_id' => $team->id,
+            'team_provider' => $team->ai_provider ?? 'openrouter',
+            'team_api_url' => $team->ai_api_url,
+            'extra_context' => $this->extraContext,
+            'pid' => getmypid(),
+        ]);
 
         $webSearchProvider = $team->web_search_provider ?? 'openrouter_builtin';
         $useServerTools = $this->useServerTools()
@@ -116,27 +142,40 @@ abstract class BaseAgent implements Agent
             $braveClient,
         );
 
-        // Append a sub-agent log line to storage/logs/agent-debug.log so we can
-        // see what each sub-agent's LLM actually did. One JSON line per call.
-        try {
-            $logPath = storage_path('logs/agent-debug.log');
-            file_put_contents(
-                $logPath,
-                json_encode([
-                    'ts' => now()->toIso8601String(),
-                    'agent' => static::class,
-                    'model' => $model,
-                    'submit_tool' => $submitToolName,
-                    'system_prompt_length' => strlen($systemPrompt),
-                    'result_is_array' => is_array($payload),
-                    'result' => is_array($payload) ? $payload : null,
-                    'text_response' => $this->lastTextResponse !== null ? mb_substr($this->lastTextResponse, 0, 2000) : null,
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n",
-                FILE_APPEND | LOCK_EX,
-            );
-        } catch (\Throwable) {
-            // swallow — don't let logging break the agent
+        $duration = (int) round((microtime(true) - $startedAt) * 1000);
+
+        $outcome = $payload === null ? 'text_only' : 'submitted';
+        $validationError = null;
+        if ($payload !== null) {
+            $validationError = $this->validate($payload);
+            if ($validationError !== null) {
+                $outcome = 'validation_failed';
+            }
         }
+
+        SubagentLogger::write([
+            'event' => 'end',
+            'call_id' => $callId,
+            'conversation_id' => $this->conversationId,
+            'agent' => static::class,
+            'model' => $model,
+            'submit_tool' => $submitToolName,
+            'outcome' => $outcome,
+            'duration_ms' => $duration,
+            'attempts' => $this->lastAttempts,
+            'input_tokens' => $this->lastInputTokens,
+            'output_tokens' => $this->lastOutputTokens,
+            'reasoning_tokens' => $this->lastReasoningTokens,
+            'cost' => $this->lastCost,
+            'reasoning_excerpt' => $this->lastReasoningContent !== ''
+                ? mb_substr($this->lastReasoningContent, 0, 2000) : null,
+            'text_response' => $this->lastTextResponse !== null
+                ? mb_substr($this->lastTextResponse, 0, 2000) : null,
+            'submit_payload_keys' => is_array($payload) ? array_keys($payload) : null,
+            'submit_payload_size' => is_array($payload) ? strlen(json_encode($payload)) : null,
+            'validation_error' => $validationError,
+            'transport_error' => $this->lastTransportError,
+        ]);
 
         if ($payload === null) {
             $hint = $this->lastTextResponse !== null
@@ -145,9 +184,8 @@ abstract class BaseAgent implements Agent
             return AgentResult::error("Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}");
         }
 
-        $err = $this->validate($payload);
-        if ($err !== null) {
-            return AgentResult::error($err);
+        if ($validationError !== null) {
+            return AgentResult::error($validationError);
         }
 
         $newBrief = $this->applyToBrief($brief, $payload, $team);
@@ -189,6 +227,8 @@ abstract class BaseAgent implements Agent
     protected int $lastReasoningTokens = 0;
     protected float $lastCost = 0.0;
     protected string $lastReasoningContent = '';
+    protected int $lastAttempts = 0;
+    protected ?string $lastTransportError = null;
 
     protected function llmCall(
         string $systemPrompt,
@@ -223,18 +263,62 @@ abstract class BaseAgent implements Agent
         // text instead, the retry loop below tries once more.
         $submitToolName = $tools[0]['function']['name'] ?? 'submit';
         $hasFreeTools = $useServerTools || count($tools) > 1;
+        $this->lastAttempts = 0;
+        $this->lastTransportError = null;
 
-        $result = $client->chat(
-            messages: [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields. Do not respond with text.'],
-            ],
-            tools: $tools,
-            toolChoice: null,
-            temperature: $temperature,
-            useServerTools: $useServerTools,
-            timeout: $timeout,
-        );
+        SubagentLogger::write([
+            'event' => 'attempt',
+            'call_id' => $this->currentCallId ?? null,
+            'conversation_id' => $this->conversationId,
+            'agent' => static::class,
+            'attempt_number' => 1,
+            'model' => $model,
+            'tools_offered' => array_map(fn ($t) => $t['function']['name'] ?? '?', $tools),
+            'use_server_tools' => $useServerTools,
+            'timeout_s' => $timeout,
+        ]);
+        $this->lastAttempts = 1;
+        $attemptStart = microtime(true);
+
+        try {
+            $result = $client->chat(
+                messages: [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields. Do not respond with text.'],
+                ],
+                tools: $tools,
+                toolChoice: null,
+                temperature: $temperature,
+                useServerTools: $useServerTools,
+                timeout: $timeout,
+            );
+        } catch (\Throwable $e) {
+            $this->lastTransportError = mb_substr($e->getMessage(), 0, 1000);
+            SubagentLogger::write([
+                'event' => 'attempt_failed',
+                'call_id' => $this->currentCallId ?? null,
+                'conversation_id' => $this->conversationId,
+                'agent' => static::class,
+                'attempt_number' => 1,
+                'duration_ms' => (int) round((microtime(true) - $attemptStart) * 1000),
+                'error' => $this->lastTransportError,
+                'exception_class' => get_class($e),
+            ]);
+            return null;
+        }
+
+        SubagentLogger::write([
+            'event' => 'attempt_done',
+            'call_id' => $this->currentCallId ?? null,
+            'conversation_id' => $this->conversationId,
+            'agent' => static::class,
+            'attempt_number' => 1,
+            'duration_ms' => (int) round((microtime(true) - $attemptStart) * 1000),
+            'got_tool_call' => is_array($result->data),
+            'input_tokens' => $result->inputTokens,
+            'output_tokens' => $result->outputTokens,
+            'reasoning_tokens' => $result->reasoningTokens,
+        ]);
 
         $this->lastInputTokens = $result->inputTokens;
         $this->lastOutputTokens = $result->outputTokens;
@@ -258,14 +342,51 @@ abstract class BaseAgent implements Agent
                 'content' => 'You responded with text instead of calling ' . $submitToolName . '. You MUST call ' . $submitToolName . ' now with all required fields. Use the information you already gathered.',
             ];
 
-            $retry = $client->chat(
-                messages: $retryMessages,
-                tools: $tools,
-                toolChoice: null,
-                temperature: $temperature,
-                useServerTools: false,
-                timeout: $timeout,
-            );
+            SubagentLogger::write([
+                'event' => 'attempt',
+                'call_id' => $this->currentCallId,
+                'conversation_id' => $this->conversationId,
+                'agent' => static::class,
+                'attempt_number' => 2,
+                'reason' => 'first attempt returned text only',
+            ]);
+            $this->lastAttempts = 2;
+            $retryStart = microtime(true);
+
+            try {
+                $retry = $client->chat(
+                    messages: $retryMessages,
+                    tools: $tools,
+                    toolChoice: null,
+                    temperature: $temperature,
+                    useServerTools: false,
+                    timeout: $timeout,
+                );
+            } catch (\Throwable $e) {
+                $this->lastTransportError = mb_substr($e->getMessage(), 0, 1000);
+                SubagentLogger::write([
+                    'event' => 'attempt_failed',
+                    'call_id' => $this->currentCallId,
+                    'conversation_id' => $this->conversationId,
+                    'agent' => static::class,
+                    'attempt_number' => 2,
+                    'duration_ms' => (int) round((microtime(true) - $retryStart) * 1000),
+                    'error' => $this->lastTransportError,
+                    'exception_class' => get_class($e),
+                ]);
+                $this->lastTextResponse = is_string($result->data) ? $result->data : null;
+                return null;
+            }
+
+            SubagentLogger::write([
+                'event' => 'attempt_done',
+                'call_id' => $this->currentCallId,
+                'conversation_id' => $this->conversationId,
+                'agent' => static::class,
+                'attempt_number' => 2,
+                'duration_ms' => (int) round((microtime(true) - $retryStart) * 1000),
+                'got_tool_call' => is_array($retry->data),
+            ]);
 
             $this->lastInputTokens += $retry->inputTokens;
             $this->lastOutputTokens += $retry->outputTokens;

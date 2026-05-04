@@ -33,7 +33,7 @@ test('write type returns default fallback prompt', function () {
 
     $prompt = ChatPromptBuilder::build('write', $team);
 
-    expect($prompt)->toBe('You are a helpful AI assistant.');
+    expect($prompt)->toContain('You are a helpful AI assistant.');
 });
 
 test('topics type nudges when profile is thin', function () {

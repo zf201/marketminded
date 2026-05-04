@@ -27,6 +27,7 @@ class CreateOutlineToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new EditorAgent($extraContext) : ($this->agent ?? new EditorAgent);
+        $agent->conversationId = $conversationId;
 
         try {
             $result = $agent->execute($brief, $team);
