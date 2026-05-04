@@ -94,7 +94,7 @@ document.addEventListener('alpine:init', () => {
                         if (i.type === 'subagent' && i.status === 'working') i.status = 'done';
                     });
                     this.live = false;
-                    this.$wire.loadMessages();
+                    this.$wire.finishTurn();
                     break;
             }
         },

@@ -3,22 +3,7 @@
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Team;
-use App\Services\BrandIntelligenceToolHandler;
-use App\Services\ChatPromptBuilder;
-use App\Services\CreateOutlineToolHandler;
-use App\Services\FetchStyleReferenceToolHandler;
-use App\Services\OpenRouterClient;
-use App\Services\PickAudienceToolHandler;
-use App\Services\ResearchTopicToolHandler;
-use App\Services\BraveSearchClient;
-use App\Services\ConversationBus;
-use App\Services\StreamResult;
-use App\Services\TurnStoppedException;
-use App\Services\TopicToolHandler;
-use App\Services\ProofreadBlogPostToolHandler;
-use App\Services\SocialPostToolHandler;
-use App\Services\UrlFetcher;
-use App\Services\WriteBlogPostToolHandler;
+use App\Jobs\RunConversationTurn;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -149,65 +134,6 @@ new class extends Component
         \Illuminate\Support\Facades\Cache::put('conv-stop:' . $this->conversation->id, true, 60);
     }
 
-    private function persistTurn(
-        ConversationBus $bus,
-        ?StreamResult $streamResult,
-        bool $interrupted,
-    ): void {
-        $metadata = [];
-
-        $events = $bus->events();
-        if (! empty($events)) {
-            $metadata['events'] = $events;
-        }
-
-        if ($streamResult && $streamResult->webSearchRequests > 0) {
-            $metadata['web_searches'] = $streamResult->webSearchRequests;
-        }
-
-        $reasoning = $streamResult?->reasoningContent ?: '';
-        if ($reasoning !== '') {
-            $metadata['reasoning'] = $reasoning;
-        }
-
-        if ($streamResult && $streamResult->reasoningTokens > 0) {
-            $metadata['reasoning_tokens'] = $streamResult->reasoningTokens;
-        }
-
-        if ($interrupted) {
-            $metadata['interrupted'] = true;
-        }
-
-        // cleanContent() is called once on the full accumulated string (not per-chunk).
-        $content = $this->cleanContent($bus->text());
-
-        if ($content === '' && empty($metadata)) {
-            return;
-        }
-
-        $message = Message::create([
-            'conversation_id' => $this->conversation->id,
-            'role'            => 'assistant',
-            'content'         => $content,
-            'model'           => $this->teamModel->fast_model,
-            'input_tokens'    => $streamResult?->inputTokens ?? 0,
-            'output_tokens'   => $streamResult?->outputTokens ?? 0,
-            'cost'            => $streamResult?->cost ?? 0,
-            'metadata'        => ! empty($metadata) ? $metadata : null,
-        ]);
-
-        if ($message) {
-            $this->messages[] = [
-                'role'          => 'assistant',
-                'content'       => $message->content,
-                'metadata'      => $message->metadata,
-                'input_tokens'  => $message->input_tokens,
-                'output_tokens' => $message->output_tokens,
-                'cost'          => (float) $message->cost,
-            ];
-        }
-    }
-
     public function submitPrompt(): void
     {
         $content = trim($this->prompt);
@@ -258,293 +184,22 @@ new class extends Component
         $this->prompt = '';
         $this->isStreaming = true;
 
-        $this->js('$wire.ask()');
+        RunConversationTurn::dispatch($this->teamModel->id, $this->conversation->id)
+            ->onConnection('database_writer')
+            ->onQueue('writer');
     }
 
-    public function ask(): void
+    public function finishTurn(): void
     {
-        set_time_limit(900);
-        ignore_user_abort(true);
-
-        $type = $this->conversation->type;
-        $this->teamModel->refresh();
-        $this->conversation->load('topic');
-
-        if ($type === 'writer' && $this->conversation->topic && empty(($this->conversation->brief ?? [])['topic'])) {
-            $topic = $this->conversation->topic;
-            $brief = $this->conversation->brief ?? [];
-            $brief['topic'] = [
-                'id'      => $topic->id,
-                'title'   => $topic->title,
-                'angle'   => $topic->angle,
-                'sources' => $topic->sources ?? [],
-            ];
-            $this->conversation->update(['brief' => $brief]);
-            $this->conversation->refresh();
-        }
-
-        $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel, $this->conversation);
-        $tools        = ChatPromptBuilder::tools($type);
-
-        // Stamp interrupted assistant turns with an explicit note so the model
-        // knows the previous response was cut short by the user — instead of
-        // hallucinating reasons or trying to silently continue.
-        $apiMessages = collect($this->messages)
-            ->filter(fn ($m) => empty($m['is_live']))
-            ->map(function ($m) {
-                $content = $m['content'] ?? '';
-                if ($m['role'] === 'assistant' && ! empty($m['metadata']['interrupted'])) {
-                    $content = trim($content) === ''
-                        ? '[The previous response was interrupted by the user before it completed.]'
-                        : $content . "\n\n[The previous response was interrupted by the user before it completed.]";
-                }
-                return ['role' => $m['role'], 'content' => $content];
-            })
-            ->values()
-            ->toArray();
-
-        $webSearchProvider = $this->teamModel->web_search_provider ?? 'openrouter_builtin';
-        $braveClient = ($webSearchProvider === 'brave' && $this->teamModel->brave_api_key)
-            ? new BraveSearchClient($this->teamModel->brave_api_key)
-            : null;
-
-        $client = new OpenRouterClient(
-            apiKey: $this->teamModel->ai_api_key,
-            model: $this->teamModel->fast_model,
-            urlFetcher: new UrlFetcher,
-            maxIterations: 8,
-            baseUrl: $this->teamModel->ai_api_url ?? 'https://openrouter.ai/api/v1',
-            provider: $this->teamModel->ai_provider ?? 'openrouter',
-            braveSearchClient: $braveClient,
-        );
-
-        $brandHandler     = new BrandIntelligenceToolHandler;
-        $topicHandler     = new TopicToolHandler;
-        $researchHandler  = new ResearchTopicToolHandler;
-        $audienceHandler  = new PickAudienceToolHandler;
-        $outlineHandler   = new CreateOutlineToolHandler;
-        $styleRefHandler  = new FetchStyleReferenceToolHandler;
-        $writeHandler     = new WriteBlogPostToolHandler;
-        $proofreadHandler = new ProofreadBlogPostToolHandler;
-        $socialHandler    = new SocialPostToolHandler;
-        $team             = $this->teamModel;
-        $conversation     = $this->conversation;
-
-        $priorTurnTools = [];
-
-        $bus = new ConversationBus($this->conversation->id);
-        session()->save();
-
-        $toolExecutor = function (string $name, array $args) use (
-            $brandHandler, $topicHandler, $researchHandler, $audienceHandler, $outlineHandler,
-            $styleRefHandler, $writeHandler, $proofreadHandler, $socialHandler,
-            $team, $conversation, $bus, &$priorTurnTools
-        ): string {
-            if ($name === 'update_brand_intelligence') {
-                $bus->publish('subagent_started', ['agent' => 'brand', 'title' => __('Updating brand profile'), 'color' => 'sky']);
-                $result = $brandHandler->execute($team, $args);
-                $decoded = json_decode($result, true) ?? [];
-                if (($decoded['status'] ?? '') === 'saved') {
-                    $bus->publish('subagent_completed', ['agent' => 'brand', 'card' => [
-                        'kind' => 'brand_update',
-                        'summary' => __('Brand profile updated'),
-                        'sections' => $decoded['sections'] ?? [],
-                    ]]);
-                } else {
-                    $bus->publish('subagent_error', ['agent' => 'brand', 'message' => $decoded['message'] ?? __('Failed to update brand profile.')]);
-                }
-                return $result;
-            }
-            if ($name === 'save_topics') {
-                $bus->publish('subagent_started', ['agent' => 'topics', 'title' => __('Saving topics'), 'color' => 'teal']);
-                $result = $topicHandler->execute($team, $conversation->id, $args);
-                $decoded = json_decode($result, true) ?? [];
-                $titles = $decoded['titles'] ?? [];
-                $bus->publish('subagent_completed', ['agent' => 'topics', 'card' => [
-                    'kind'       => 'topics',
-                    'summary'    => count($titles) . ' ' . __('topic(s) saved to backlog'),
-                    'titles'     => $titles,
-                    'topics_url' => route('topics', ['current_team' => $team]),
-                ]]);
-                return $result;
-            }
-            if ($name === 'fetch_url') {
-                $url = $args['url'] ?? '';
-                $pillId = bin2hex(random_bytes(8));
-                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'fetch', 'id' => $pillId, 'status' => 'running', 'detail' => $url]);
-                $result = (new UrlFetcher)->fetch($url);
-                $failed = str_starts_with($result, 'Error fetching');
-                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $failed ? 'error' : 'ok']);
-                return $result;
-            }
-            if ($name === 'research_topic') {
-                $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
-                return $result;
-            }
-            if ($name === 'pick_audience') {
-                $result = $audienceHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
-                return $result;
-            }
-            if ($name === 'create_outline') {
-                $result = $outlineHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
-                return $result;
-            }
-            if ($name === 'fetch_style_reference') {
-                $result = $styleRefHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
-                return $result;
-            }
-            if ($name === 'write_blog_post') {
-                $result = $writeHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
-                return $result;
-            }
-            if ($name === 'proofread_blog_post') {
-                $result = $proofreadHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
-                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
-                return $result;
-            }
-            if ($name === 'propose_posts' || $name === 'replace_all_posts') {
-                $piece = $conversation->contentPiece;
-                if (! $piece) {
-                    return json_encode(['status' => 'error', 'message' => 'No content piece is associated with this conversation.']);
-                }
-                $title = $name === 'propose_posts' ? __('Proposing posts') : __('Replacing posts');
-                $bus->publish('subagent_started', ['agent' => 'social', 'title' => $title, 'color' => 'pink']);
-                $result = $name === 'propose_posts'
-                    ? $socialHandler->propose($team, $conversation->id, $piece, $args)
-                    : $socialHandler->replaceAll($team, $conversation->id, $piece, $args);
-                $decoded = json_decode($result, true) ?? [];
-                if (($decoded['status'] ?? '') === 'saved') {
-                    $ids = $decoded['ids'] ?? [];
-                    $posts = collect($args['posts'] ?? [])->values()->map(fn ($p, $i) => [
-                        'id'       => $ids[$i] ?? null,
-                        'platform' => $p['platform'] ?? '',
-                        'hook'     => $p['hook'] ?? '',
-                        'preview'  => mb_substr(strip_tags($p['body'] ?? ''), 0, 160),
-                    ])->all();
-                    $verb = $name === 'propose_posts' ? __('created') : __('replaced');
-                    $bus->publish('subagent_completed', ['agent' => 'social', 'card' => [
-                        'kind'    => 'social_posts',
-                        'summary' => count($posts) . ' ' . __('posts') . ' ' . $verb,
-                        'social_url' => route('social.show', ['current_team' => $team, 'contentPiece' => $piece->id]),
-                        'posts'   => $posts,
-                    ]]);
-                } else {
-                    $bus->publish('subagent_error', ['agent' => 'social', 'message' => $decoded['message'] ?? 'Failed to save posts.']);
-                }
-                return $result;
-            }
-            if ($name === 'update_post') {
-                $pillId = bin2hex(random_bytes(8));
-                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'update post', 'id' => $pillId, 'status' => 'running']);
-                $result = $socialHandler->update($team, $conversation->id, $args);
-                $status = (json_decode($result, true)['status'] ?? '') === 'saved' ? 'ok' : 'error';
-                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $status]);
-                return $result;
-            }
-            if ($name === 'delete_post') {
-                $pillId = bin2hex(random_bytes(8));
-                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'delete post', 'id' => $pillId, 'status' => 'running']);
-                $result = $socialHandler->delete($team, $args);
-                $status = (json_decode($result, true)['status'] ?? '') === 'deleted' ? 'ok' : 'error';
-                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $status]);
-                return $result;
-            }
-            return "Unknown tool: {$name}";
-        };
-
-        $useServerTools = $this->teamModel->ai_provider !== 'custom'
-            && $webSearchProvider === 'openrouter_builtin';
-        $chatTools = $tools;
-        if ($braveClient !== null) {
-            $chatTools[] = BraveSearchClient::toolSchema();
-        }
-
-        try {
-            $streamResult = $client->streamChatWithTools(
-                systemPrompt: $systemPrompt,
-                messages: $apiMessages,
-                tools: $chatTools,
-                toolExecutor: $toolExecutor,
-                temperature: 0.7,
-                useServerTools: $useServerTools,
-                bus: $bus,
-            );
-
-            $this->writeChatDebugLog($systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), $streamResult, false);
-            $this->persistTurn($bus, $streamResult, interrupted: false);
-            $bus->publish('turn_complete');
-
-        } catch (TurnStoppedException) {
-            $this->writeChatDebugLog($systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true);
-            $this->persistTurn($bus, streamResult: null, interrupted: true);
-            try {
-                $bus->publish('turn_interrupted');
-            } catch (TurnStoppedException) {
-                broadcast(new \App\Events\ConversationEvent($this->conversation->id, 'turn_interrupted', []));
-            }
-
-        } catch (\Throwable $e) {
-            $this->writeChatDebugLog($systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true);
-            $this->persistTurn($bus, streamResult: null, interrupted: true);
-            \Log::error('ask() failed', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
-            try {
-                $bus->publish('turn_error', ['message' => $e->getMessage()]);
-            } catch (TurnStoppedException) {
-                broadcast(new \App\Events\ConversationEvent($this->conversation->id, 'turn_error', ['message' => $e->getMessage()]));
-            }
-        }
-
-        $this->loadMessages();
-        $this->isStreaming = false;
-    }
-
-    private function writeChatDebugLog(
-        string $systemPrompt,
-        array $tools,
-        array $apiMessages,
-        string $responseContent,
-        array $busEvents,
-        ?StreamResult $streamResult,
-        bool $interrupted,
-    ): void {
-        if (! env('CHAT_DEBUG_LOG', false)) {
+        if (! $this->conversation) {
+            $this->isStreaming = false;
             return;
         }
 
-        $entry = [
-            'ts'               => now()->toIso8601String(),
-            'conversation_id'  => $this->conversation->id,
-            'type'             => $this->conversation->type,
-            'topic_id'         => $this->conversation->topic_id,
-            'team_id'          => $this->teamModel->id,
-            'model'            => $this->teamModel->fast_model,
-            'system_prompt'    => $systemPrompt,
-            'tool_schemas'     => array_map(fn ($t) => $t['function']['name'] ?? ($t['type'] ?? 'unknown'), $tools),
-            'history_sent'     => $apiMessages,
-            'response_content' => $responseContent,
-            'bus_events'       => array_map(fn ($e) => ['type' => $e['type'], 'agent' => $e['payload']['agent'] ?? null], $busEvents),
-            'input_tokens'     => $streamResult?->inputTokens ?? 0,
-            'output_tokens'    => $streamResult?->outputTokens ?? 0,
-            'cost'             => (float) ($streamResult?->cost ?? 0),
-            'web_searches'     => (int) ($streamResult?->webSearchRequests ?? 0),
-            'interrupted'      => $interrupted,
-        ];
-
-        try {
-            $path = storage_path('logs/chat-debug.log');
-            file_put_contents(
-                $path,
-                json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n",
-                FILE_APPEND | LOCK_EX,
-            );
-        } catch (\Throwable $e) {
-            \Log::warning('chat-debug log write failed', ['error' => $e->getMessage()]);
-        }
+        $this->conversation->refresh();
+        $this->conversation->load('messages');
+        $this->loadMessages();
+        $this->isStreaming = false;
     }
 
     public function getConversationStatsProperty(): array
@@ -1258,4 +913,3 @@ new class extends Component
         </div>
     @endif
 </div>
-
