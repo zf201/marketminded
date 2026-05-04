@@ -152,25 +152,59 @@ new class extends Component
      * updated $messages array to the DOM in the response, so the partial
      * renders inline — no reload needed.
      */
+    /**
+     * Called when the user clicks Stop. The streaming request runs in another
+     * PHP-FPM worker; this request blocks until that worker has persisted its
+     * (interrupted) assistant message, then returns. Livewire applies the
+     * updated $messages array to the DOM in the response, so the partial
+     * renders inline — no reload needed.
+     */
     public function stopAndWait(): void
     {
         if (! $this->conversation) {
             $this->isStreaming = false;
             return;
         }
-        $lastUserId = $this->conversation->messages()->where('role', 'user')->latest('id')->value('id') ?? 0;
+
+        $convId = $this->conversation->id;
+
+        // Use raw queries (no relation) to avoid any Eloquent relation caching.
+        $lastUserId = (int) (Message::where('conversation_id', $convId)
+            ->where('role', 'user')
+            ->latest('id')
+            ->value('id') ?? 0);
+
+        $latestAssistantBefore = (int) (Message::where('conversation_id', $convId)
+            ->where('role', 'assistant')
+            ->latest('id')
+            ->value('id') ?? 0);
+
+        \Log::info('stopAndWait poll start', [
+            'conversation_id' => $convId,
+            'last_user_id' => $lastUserId,
+            'latest_assistant_before' => $latestAssistantBefore,
+        ]);
+
         $deadline = microtime(true) + 20.0;
+        $iterations = 0;
         while (microtime(true) < $deadline) {
-            $latest = $this->conversation->messages()
+            $iterations++;
+            $latestNow = (int) (Message::where('conversation_id', $convId)
                 ->where('role', 'assistant')
-                ->where('id', '>', $lastUserId)
                 ->latest('id')
-                ->first();
-            if ($latest) {
+                ->value('id') ?? 0);
+            if ($latestNow > $latestAssistantBefore) {
                 break;
             }
             usleep(300_000);
         }
+
+        \Log::info('stopAndWait poll end', [
+            'conversation_id' => $convId,
+            'iterations' => $iterations,
+            'elapsed_s' => round(microtime(true) - ($deadline - 20.0), 2),
+        ]);
+
         $this->loadMessages();
         $this->isStreaming = false;
     }
