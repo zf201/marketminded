@@ -11,7 +11,7 @@ class ResearchTopicToolHandler
 {
     public function __construct(private ?ResearchAgent $agent = null) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         $callsSoFar = collect($priorTurnTools)->where('name', 'research_topic')->where('status', 'ok')->count();
         if ($callsSoFar >= 1) {
@@ -27,6 +27,7 @@ class ResearchTopicToolHandler
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new ResearchAgent($extraContext) : ($this->agent ?? new ResearchAgent);
         $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);

@@ -12,7 +12,7 @@ class ProofreadBlogPostToolHandler
 {
     public function __construct(private ?Agent $agent = null) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         $conversation = Conversation::findOrFail($conversationId);
 
@@ -54,6 +54,7 @@ class ProofreadBlogPostToolHandler
         $extraContext = $args['extra_context'] ?? null;
         $agent = $this->agent ?? new ProofreadAgent($feedback, $extraContext);
         $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);

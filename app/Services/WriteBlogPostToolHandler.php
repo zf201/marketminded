@@ -13,7 +13,7 @@ class WriteBlogPostToolHandler
 {
     public function __construct(private ?Agent $agent = null) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         $conversation = Conversation::findOrFail($conversationId);
 
@@ -50,6 +50,7 @@ class WriteBlogPostToolHandler
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new WriterAgent($extraContext) : ($this->agent ?? new WriterAgent);
         $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);

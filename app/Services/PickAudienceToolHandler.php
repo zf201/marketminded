@@ -12,7 +12,7 @@ class PickAudienceToolHandler
 {
     public function __construct(private ?Agent $agent = null) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         if (! $team->audiencePersonas()->exists()) {
             return json_encode([
@@ -44,6 +44,7 @@ class PickAudienceToolHandler
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new AudiencePickerAgent($extraContext) : ($this->agent ?? new AudiencePickerAgent);
         $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);
