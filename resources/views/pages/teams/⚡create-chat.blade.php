@@ -628,7 +628,7 @@ new class extends Component
         // Writer sub-agents get dedicated full-width cards instead of small pills.
         // Suppress the pill spinner for them but keep $activeTool intact so the
         // activeSubAgentCard() at the bottom still renders.
-        $writerTools = ['research_topic', 'pick_audience', 'create_outline', 'fetch_style_reference', 'write_blog_post', 'proofread_blog_post'];
+        $writerTools = ['research_topic', 'pick_audience', 'create_outline', 'fetch_style_reference', 'write_blog_post', 'proofread_blog_post', 'propose_posts', 'update_post', 'delete_post', 'replace_all_posts'];
         $isWriterTool = $activeTool && in_array($activeTool->name, $writerTools, true);
 
         if ($activeTool && ! $isWriterTool) {
@@ -662,6 +662,7 @@ new class extends Component
         // Saved topic cards
         $html .= $this->savedTopicCards($completedTools);
         $html .= $this->contentPieceCards($completedTools);
+        $html .= $this->socialPostCards($completedTools);
         // Processing card for the currently-running sub-agent, if any
         if ($activeTool !== null) {
             $html .= $this->activeSubAgentCard($activeTool);
@@ -685,6 +686,10 @@ new class extends Component
             'fetch_style_reference' => ['title' => 'Style sub-agent', 'hint' => 'Finding style reference posts…', 'color' => 'violet'],
             'write_blog_post' => ['title' => 'Writer sub-agent', 'hint' => 'Composing the blog post from the outline…', 'color' => 'green'],
             'proofread_blog_post' => ['title' => 'Proofread sub-agent', 'hint' => 'Applying the requested revisions…', 'color' => 'green'],
+            'propose_posts' => ['title' => 'Funnel sub-agent', 'hint' => 'Drafting social posts for the funnel…', 'color' => 'pink'],
+            'update_post' => ['title' => 'Funnel sub-agent', 'hint' => 'Updating one of the social posts…', 'color' => 'pink'],
+            'delete_post' => ['title' => 'Funnel sub-agent', 'hint' => 'Removing a post from the funnel…', 'color' => 'pink'],
+            'replace_all_posts' => ['title' => 'Funnel sub-agent', 'hint' => 'Rebuilding the social posts from scratch…', 'color' => 'pink'],
         ];
 
         if (! isset($agentMap[$activeTool->name])) {
@@ -782,6 +787,22 @@ new class extends Component
                 $r = json_decode($tool->result ?? '{}', true);
                 return ($r['status'] ?? null) === 'ok' ? 'Revised' : 'Proofread failed';
             })(),
+            'propose_posts' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'saved' ? 'Saved ' . ($r['count'] ?? 0) . ' posts' : 'Funnel failed';
+            })(),
+            'update_post' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'saved' ? 'Updated post' : 'Update failed';
+            })(),
+            'delete_post' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'deleted' ? 'Deleted post' : 'Delete failed';
+            })(),
+            'replace_all_posts' => (function () use ($tool) {
+                $r = json_decode($tool->result ?? '{}', true);
+                return ($r['status'] ?? null) === 'saved' ? 'Rebuilt funnel (' . ($r['count'] ?? 0) . ' posts)' : 'Rebuild failed';
+            })(),
             default => $tool->name,
         };
 
@@ -793,6 +814,59 @@ new class extends Component
         $icon = $active ? '<span class="animate-spin">&#8635;</span>' : '&#10003;';
 
         return "<span class=\"{$classes}\">{$icon} " . e($label) . '</span>';
+    }
+
+    private function socialPostCards(array $completedTools): string
+    {
+        $html = '';
+        $piece = $this->conversation?->contentPiece;
+        $socialUrl = $piece
+            ? route('social.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece])
+            : route('social.index', ['current_team' => $this->teamModel]);
+
+        foreach ($completedTools as $tool) {
+            $result = json_decode($tool->result ?? '{}', true);
+            if ($tool->name === 'propose_posts' || $tool->name === 'replace_all_posts') {
+                if (($result['status'] ?? null) !== 'saved') {
+                    continue;
+                }
+                $posts = $tool->arguments['posts'] ?? [];
+                $verb = $tool->name === 'replace_all_posts' ? 'Rebuilt funnel' : 'Saved funnel';
+                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
+                $html .= '<div class="flex items-center justify-between mb-2">';
+                $html .= '<span class="text-xs text-pink-400">&#10003; ' . e($verb) . ' &middot; ' . count($posts) . ' posts</span>';
+                $html .= '<a href="' . e($socialUrl) . '" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-300">Open in Social &rarr;</a>';
+                $html .= '</div>';
+                foreach ($posts as $p) {
+                    $platform = $p['platform'] ?? '';
+                    $platformLabel = match ($platform) {
+                        'linkedin' => 'LinkedIn',
+                        'facebook' => 'Facebook',
+                        'instagram' => 'Instagram',
+                        'short_video' => 'Short-form Video',
+                        default => $platform,
+                    };
+                    $html .= '<div class="mt-2 rounded-md border border-zinc-800 bg-zinc-950/50 p-2">';
+                    $html .= '<div class="flex items-center gap-2 text-xs text-zinc-400"><span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] uppercase">' . e($platformLabel) . '</span></div>';
+                    $html .= '<div class="mt-1 text-sm font-semibold text-zinc-200">' . e($p['hook'] ?? '') . '</div>';
+                    $html .= '<div class="mt-1 text-xs text-zinc-400 line-clamp-2 whitespace-pre-line">' . e($p['body'] ?? '') . '</div>';
+                    $html .= '</div>';
+                }
+                $html .= '</div>';
+            } elseif ($tool->name === 'update_post') {
+                if (($result['status'] ?? null) !== 'saved') continue;
+                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">';
+                $html .= '<span class="text-pink-400">&#10003;</span> Updated post #' . (int) ($result['id'] ?? 0);
+                $html .= ' &middot; <a href="' . e($socialUrl) . '" wire:navigate class="text-zinc-500 hover:text-zinc-300">Open in Social &rarr;</a>';
+                $html .= '</div>';
+            } elseif ($tool->name === 'delete_post') {
+                if (($result['status'] ?? null) !== 'deleted') continue;
+                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">';
+                $html .= '<span class="text-pink-400">&#10003;</span> Deleted post #' . (int) ($result['id'] ?? 0);
+                $html .= '</div>';
+            }
+        }
+        return $html;
     }
 
     private function savedTopicCards(array $completedTools): string
@@ -1060,6 +1134,14 @@ new class extends Component
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated profile</span>
                                     @elseif ($tool['name'] === 'save_topics')
                                         <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Saved {{ count($tool['args']['topics'] ?? []) }} topics</span>
+                                    @elseif ($tool['name'] === 'propose_posts')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Saved {{ count($tool['args']['posts'] ?? []) }} posts</span>
+                                    @elseif ($tool['name'] === 'replace_all_posts')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Rebuilt funnel ({{ count($tool['args']['posts'] ?? []) }} posts)</span>
+                                    @elseif ($tool['name'] === 'update_post')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Updated post</span>
+                                    @elseif ($tool['name'] === 'delete_post')
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-xs text-zinc-500">&#10003; Deleted post</span>
                                     @endif
                                 @endforeach
                                 @if (!empty($message['metadata']['interrupted']))
@@ -1090,6 +1172,52 @@ new class extends Component
                                         <div class="mt-1 text-xs text-zinc-400">{{ $topic['angle'] ?? '' }}</div>
                                     </div>
                                 @endforeach
+                            @endif
+                        @endforeach
+
+                        {{-- Funnel social-post cards from history --}}
+                        @foreach ($message['metadata']['tools'] ?? [] as $tool)
+                            @php
+                                $piece = $conversation?->contentPiece;
+                                $socialUrl = $piece
+                                    ? route('social.show', ['current_team' => $teamModel, 'contentPiece' => $piece])
+                                    : route('social.index', ['current_team' => $teamModel]);
+                            @endphp
+                            @if (in_array($tool['name'] ?? '', ['propose_posts', 'replace_all_posts'], true) && ($tool['status'] ?? '') !== 'error')
+                                @php $posts = $tool['args']['posts'] ?? []; @endphp
+                                @if (! empty($posts))
+                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="text-xs text-pink-400">&#10003; {{ $tool['name'] === 'replace_all_posts' ? __('Rebuilt funnel') : __('Saved funnel') }} &middot; {{ count($posts) }} {{ __('posts') }}</span>
+                                            <a href="{{ $socialUrl }}" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-300">{{ __('Open in Social') }} &rarr;</a>
+                                        </div>
+                                        @foreach ($posts as $p)
+                                            @php
+                                                $platformLabel = match ($p['platform'] ?? '') {
+                                                    'linkedin' => 'LinkedIn',
+                                                    'facebook' => 'Facebook',
+                                                    'instagram' => 'Instagram',
+                                                    'short_video' => 'Short-form Video',
+                                                    default => $p['platform'] ?? '',
+                                                };
+                                            @endphp
+                                            <div class="mt-2 rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                                                <span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] uppercase text-zinc-400">{{ $platformLabel }}</span>
+                                                <div class="mt-1 text-sm font-semibold text-zinc-200">{{ $p['hook'] ?? '' }}</div>
+                                                <div class="mt-1 text-xs text-zinc-400 line-clamp-2 whitespace-pre-line">{{ $p['body'] ?? '' }}</div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            @elseif ($tool['name'] === 'update_post' && ($tool['status'] ?? '') === 'saved')
+                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">
+                                    <span class="text-pink-400">&#10003;</span> {{ __('Updated post') }}
+                                    &middot; <a href="{{ $socialUrl }}" wire:navigate class="text-zinc-500 hover:text-zinc-300">{{ __('Open in Social') }} &rarr;</a>
+                                </div>
+                            @elseif ($tool['name'] === 'delete_post' && ($tool['status'] ?? '') === 'deleted')
+                                <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">
+                                    <span class="text-pink-400">&#10003;</span> {{ __('Deleted post') }}
+                                </div>
                             @endif
                         @endforeach
 
