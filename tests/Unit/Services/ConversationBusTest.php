@@ -31,10 +31,16 @@ test('ConversationBus stores non-text events', function () {
 test('ConversationBus throws TurnStoppedException when stop flag set', function () {
     Cache::put('conv-stop:42', true, 60);
 
+    $broadcastFired = false;
     $bus = new class(42) extends ConversationBus {
-        protected function doBroadcast(string $type, array $payload): void {}
+        public bool $broadcastFired = false;
+        protected function doBroadcast(string $type, array $payload): void
+        {
+            $this->broadcastFired = true;
+        }
     };
 
     expect(fn () => $bus->publish('text_chunk', ['content' => 'x']))->toThrow(TurnStoppedException::class);
-    expect(Cache::get('conv-stop:42'))->toBeNull(); // flag consumed
+    expect($bus->broadcastFired)->toBeFalse();
+    expect(Cache::get('conv-stop:42'))->toBeNull();
 });
