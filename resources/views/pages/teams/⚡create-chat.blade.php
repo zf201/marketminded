@@ -168,22 +168,16 @@ new class extends Component
 
         $convId = $this->conversation->id;
 
-        // Use raw queries (no relation) to avoid any Eloquent relation caching.
-        $lastUserId = (int) (Message::where('conversation_id', $convId)
-            ->where('role', 'user')
-            ->latest('id')
-            ->value('id') ?? 0);
+        // Signal the streaming worker to break out of its foreach. The worker
+        // checks this flag each iteration alongside connection_aborted(); the
+        // flag is more reliable when reasoning chunks are slow or the browser
+        // hasn't actually closed the SSE.
+        \Illuminate\Support\Facades\Cache::put('streaming-stop:'.$convId, 1, 60);
 
         $latestAssistantBefore = (int) (Message::where('conversation_id', $convId)
             ->where('role', 'assistant')
             ->latest('id')
             ->value('id') ?? 0);
-
-        \Log::info('stopAndWait poll start', [
-            'conversation_id' => $convId,
-            'last_user_id' => $lastUserId,
-            'latest_assistant_before' => $latestAssistantBefore,
-        ]);
 
         $deadline = microtime(true) + 20.0;
         $iterations = 0;
@@ -203,6 +197,7 @@ new class extends Component
             'conversation_id' => $convId,
             'iterations' => $iterations,
             'elapsed_s' => round(microtime(true) - ($deadline - 20.0), 2),
+            'message_landed' => $iterations > 0 && microtime(true) < $deadline,
         ]);
 
         $this->loadMessages();
@@ -451,7 +446,7 @@ new class extends Component
                     $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
                 }
 
-                if (connection_aborted()) {
+                if (connection_aborted() || \Illuminate\Support\Facades\Cache::pull('streaming-stop:'.$this->conversation->id)) {
                     $interrupted = true;
                     break;
                 }
@@ -1547,15 +1542,12 @@ new class extends Component
                         x-bind:disabled="stopping"
                         x-on:click="
                             stopping = true;
-                            // Abort the in-flight streaming fetch in this tab — closes the
-                            // SSE so the server's foreach sees connection_aborted() and
-                            // breaks out of the loop. window.stop() doesn't kill our
-                            // pending stopAndWait fetch (different request, fired below).
-                            try { window.stop(); } catch(e) {}
-                            // stopAndWait runs in a separate worker, polls the DB until
-                            // the streaming worker has written the partial message, then
-                            // returns with $messages refreshed. Livewire applies the diff
-                            // and the partial renders inline — no reload required.
+                            // stopAndWait sets a cache flag the streaming worker polls
+                            // each iteration, so it breaks out of the foreach promptly
+                            // (no waiting on connection_aborted slow path). Then it
+                            // polls the DB until the partial is persisted and returns
+                            // with $messages refreshed — Livewire renders the partial
+                            // inline. No reload required.
                             $wire.stopAndWait();">
                         <span x-show="!stopping">{{ __('Stop generating') }}</span>
                         <span x-show="stopping" x-cloak>{{ __('Saving partial…') }}</span>
