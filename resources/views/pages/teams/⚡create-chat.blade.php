@@ -139,6 +139,35 @@ new class extends Component
         $this->topicTitle = null;
     }
 
+    /**
+     * Called when the user clicks Stop. The streaming request runs in another
+     * PHP-FPM worker; this request blocks until that worker has persisted its
+     * (interrupted) assistant message, so the client can reload to a DB state
+     * that already contains the partial.
+     */
+    public function stopAndWait(): void
+    {
+        if (! $this->conversation) {
+            $this->isStreaming = false;
+            return;
+        }
+        $lastUserId = $this->conversation->messages()->where('role', 'user')->latest('id')->value('id') ?? 0;
+        $deadline = microtime(true) + 8.0;
+        while (microtime(true) < $deadline) {
+            $latest = $this->conversation->messages()
+                ->where('role', 'assistant')
+                ->where('id', '>', $lastUserId)
+                ->latest('id')
+                ->first();
+            if ($latest) {
+                break;
+            }
+            usleep(250_000);
+        }
+        $this->loadMessages();
+        $this->isStreaming = false;
+    }
+
     public function submitPrompt(): void
     {
         $content = trim($this->prompt);
@@ -1477,15 +1506,13 @@ new class extends Component
                         x-bind:disabled="stopping"
                         x-on:click="
                             stopping = true;
-                            // Abort any in-flight Livewire fetches — closes the SSE so the
-                            // server's foreach loop sees connection_aborted() and breaks
-                            // out of the stream.
-                            try { Livewire.all().forEach(c => c.commit && c.commit({ cancel: true })); } catch(e) {}
-                            // ignore_user_abort(true) on the server keeps PHP running so
-                            // the finally block + shutdown_function persist the partial.
-                            // Give it up to 3s before reloading; the reload triggers a
-                            // fresh DB read which will include the new message row.
-                            setTimeout(() => window.location.reload(), 3000);">
+                            // Abort the in-flight streaming fetch — closes the SSE so the
+                            // server's foreach loop sees connection_aborted() and breaks.
+                            // Then ask the server to wait until the partial is persisted,
+                            // and only then reload (so DB has the row before re-render).
+                            try { window.Livewire.dispatch('cancel-streams'); } catch(e) {}
+                            try { window.stop(); } catch(e) {}
+                            $wire.stopAndWait().then(() => window.location.reload());">
                         <span x-show="!stopping">{{ __('Stop generating') }}</span>
                         <span x-show="stopping" x-cloak>{{ __('Saving partial…') }}</span>
                     </flux:button>
