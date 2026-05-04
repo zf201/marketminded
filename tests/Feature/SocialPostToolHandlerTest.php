@@ -125,6 +125,40 @@ it('delete() soft-deletes', function () {
     expect($post->fresh()->status)->toBe('deleted');
 });
 
+it('funnel prompt includes content piece and platform guidance', function () {
+    $team = Team::factory()->create();
+    $piece = ContentPiece::factory()->create(['team_id' => $team->id, 'title' => 'My Post Title', 'body' => 'Body here.']);
+    $conv = Conversation::factory()->create(['team_id' => $team->id, 'content_piece_id' => $piece->id, 'type' => 'funnel']);
+
+    $prompt = ChatPromptBuilder::build('funnel', $team, $conv);
+
+    expect($prompt)
+        ->toContain('My Post Title')
+        ->toContain('[POST_URL]')
+        ->toContain('LinkedIn')
+        ->toContain('short_video')
+        ->toContain('propose_posts');
+});
+
+it('funnel prompt lists existing active posts when present', function () {
+    $team = Team::factory()->create();
+    $piece = ContentPiece::factory()->create(['team_id' => $team->id]);
+    $conv = Conversation::factory()->create(['team_id' => $team->id, 'content_piece_id' => $piece->id, 'type' => 'funnel']);
+    SocialPost::factory()->create([
+        'team_id' => $team->id, 'content_piece_id' => $piece->id,
+        'hook' => 'EXISTING HOOK', 'platform' => 'linkedin',
+    ]);
+
+    $prompt = ChatPromptBuilder::build('funnel', $team, $conv);
+    expect($prompt)->toContain('EXISTING HOOK')->toContain('Current funnel');
+});
+
+it('tools(funnel) returns the four social tool schemas plus fetch_url', function () {
+    $tools = ChatPromptBuilder::tools('funnel');
+    $names = array_map(fn ($t) => $t['function']['name'], $tools);
+    expect($names)->toContain('propose_posts', 'update_post', 'delete_post', 'replace_all_posts', 'fetch_url');
+});
+
 it('replaceAll() soft-deletes existing and creates new set', function () {
     $team = Team::factory()->create();
     $piece = ContentPiece::factory()->create(['team_id' => $team->id]);
