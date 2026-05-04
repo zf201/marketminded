@@ -26,6 +26,7 @@ class ResearchTopicToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new ResearchAgent($extraContext) : ($this->agent ?? new ResearchAgent);
+        $agent->conversationId = $conversationId;
 
         try {
             $result = $agent->execute($brief, $team);

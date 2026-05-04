@@ -53,6 +53,7 @@ class ProofreadBlogPostToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $this->agent ?? new ProofreadAgent($feedback, $extraContext);
+        $agent->conversationId = $conversationId;
 
         try {
             $result = $agent->execute($brief, $team);

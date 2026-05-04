@@ -53,6 +53,7 @@ class FetchStyleReferenceToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new StyleReferenceAgent($extraContext) : ($this->agent ?? new StyleReferenceAgent);
+        $agent->conversationId = $conversationId;
 
         try {
             $result = $agent->execute($brief, $team);
