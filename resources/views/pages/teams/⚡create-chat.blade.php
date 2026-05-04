@@ -688,14 +688,65 @@ new class extends Component
         "
     >
         <div class="mx-auto flex w-full max-w-5xl flex-col-reverse px-6 py-4">
-            {{-- Streaming response --}}
+            {{-- Streaming response (Echo/Alpine) --}}
             @if ($isStreaming)
-                <div class="mb-6">
+                <div class="mb-6"
+                    x-data="conversationStream({{ $conversation->id }})"
+                    x-init="init()"
+                >
                     <div class="mb-1.5 flex items-center gap-2">
                         <flux:badge variant="pill" color="indigo" size="sm">AI</flux:badge>
-                        <flux:icon.loading class="size-3.5 text-zinc-500" />
+                        <flux:icon.loading class="size-3.5 text-zinc-500" x-show="items.length === 0" />
                     </div>
-                    <div class="text-sm" wire:stream="streamed-response"><span class="inline-flex items-center gap-1.5 text-zinc-500"><flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}</span></div>
+                    <div class="text-sm">
+                        <template x-if="items.length === 0">
+                            <span class="inline-flex items-center gap-1.5 text-zinc-500">
+                                <flux:icon.loading class="size-3.5" /> {{ __('Thinking...') }}
+                            </span>
+                        </template>
+                        <template x-for="(item, idx) in items" :key="idx">
+                            <div class="mb-1">
+                                <template x-if="item.type === 'text'">
+                                    <p class="whitespace-pre-wrap text-sm" x-text="item.content"></p>
+                                </template>
+                                <template x-if="item.type === 'subagent' && item.status === 'working'">
+                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                        <div class="flex items-center gap-2">
+                                            <flux:icon.loading class="size-3.5" :class="'text-' + item.color + '-400'" />
+                                            <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'" x-text="item.title"></span>
+                                            <span class="text-xs text-zinc-500">working…</span>
+                                        </div>
+                                        <template x-if="item.pills.length > 0">
+                                            <div class="mt-2 flex flex-wrap gap-1">
+                                                <template x-for="(pill, pi) in item.pills" :key="pi">
+                                                    <span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700">
+                                                        <svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                                                        <span x-text="pill"></span>
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="item.type === 'subagent' && item.status === 'done'">
+                                    <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'">&#10003; <span x-text="item.title"></span></span>
+                                        </div>
+                                        <template x-if="item.card && item.card.summary">
+                                            <p class="mt-1 text-xs text-zinc-400" x-text="item.card.summary"></p>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="item.type === 'subagent' && item.status === 'error'">
+                                    <div class="mt-2 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
+                                        <span class="text-xs text-red-400">&#9888; <span x-text="item.title"></span> failed</span>
+                                        <p class="mt-1 text-xs text-zinc-500" x-text="item.message || ''"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             @endif
 
@@ -1089,3 +1140,70 @@ new class extends Component
         </div>
     @endif
 </div>
+
+<script>
+function conversationStream(conversationId) {
+    return {
+        items: [],
+
+        init() {
+            if (typeof Echo === 'undefined') return;
+            window.Echo
+                .private('conversation.' + conversationId)
+                .listen('.ConversationEvent', e => this.handle(e));
+        },
+
+        handle(e) {
+            const p = e.payload;
+            switch (e.type) {
+                case 'text_chunk': {
+                    const last = this.items[this.items.length - 1];
+                    if (last && last.type === 'text') {
+                        last.content += p.content;
+                    } else {
+                        this.items.push({ type: 'text', content: p.content });
+                    }
+                    break;
+                }
+                case 'subagent_started':
+                    this.items.push({
+                        type: 'subagent', agent: p.agent,
+                        title: p.title, color: p.color,
+                        status: 'working', pills: [], card: null, message: null,
+                    });
+                    break;
+                case 'subagent_tool_call': {
+                    const sa = this.findLastAgent(p.agent);
+                    if (sa) sa.pills.push(p.name.replace(/_/g, ' '));
+                    break;
+                }
+                case 'subagent_completed': {
+                    const done = this.findLastAgent(p.agent);
+                    if (done) { done.status = 'done'; done.card = p.card; }
+                    break;
+                }
+                case 'subagent_error': {
+                    const err = this.findLastAgent(p.agent);
+                    if (err) { err.status = 'error'; err.message = p.message; }
+                    break;
+                }
+                case 'turn_complete':
+                case 'turn_interrupted':
+                case 'turn_error':
+                    this.items = [];
+                    $wire.loadMessages();
+                    break;
+            }
+        },
+
+        findLastAgent(agent) {
+            for (let i = this.items.length - 1; i >= 0; i--) {
+                if (this.items[i].type === 'subagent' && this.items[i].agent === agent) {
+                    return this.items[i];
+                }
+            }
+            return null;
+        },
+    };
+}
+</script>
