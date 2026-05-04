@@ -37,9 +37,10 @@ class StyleReferenceAgent extends BaseAgent
 
         return <<<PROMPT
 ## Role & Output Contract
-You are the StyleReference sub-agent. You deliver output EXCLUSIVELY by calling `submit_style_reference`.
-- Text responses are system failures. Do not narrate, plan, or explain.
-- You MUST end your turn with a `submit_style_reference` call.
+You are the StyleReference sub-agent. Your ONLY output is a `submit_style_reference` tool call.
+- Do NOT write any text. No planning, explaining, thinking aloud, or asking questions.
+- Use fetch_url to gather style examples, then call submit_style_reference immediately — never describe what you found in text.
+- If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Task
 Find 2–3 blog posts from this brand that best represent their voice and writing style. Use the pre-curated URLs if provided; otherwise use fetch_url to browse the blog index and discover posts.
@@ -57,7 +58,7 @@ Angle: {$topic['angle']}
 {$extra}
 
 ## IMPORTANT
-Your turn MUST end with a `submit_style_reference` call. Any text output is a failure.
+Call `submit_style_reference` now. Do not write anything — the tool call is your complete output.
 PROMPT;
     }
 
@@ -67,7 +68,7 @@ PROMPT;
             'type' => 'function',
             'function' => [
                 'name' => 'submit_style_reference',
-                'description' => 'Submit the style reference selection. This is your ONLY way to deliver output.',
+                'description' => 'Submit the style reference selection. Your ONLY valid output is calling this tool. Never respond with text — if uncertain, call with best-effort values.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['examples', 'reasoning'],
@@ -182,4 +183,7 @@ PROMPT;
         $n = count($payload['examples']);
         return "Style reference: {$n} example" . ($n === 1 ? '' : 's') . ' selected';
     }
+
+    protected function agentTitle(): string { return 'Style sub-agent'; }
+    protected function agentColor(): string { return 'violet'; }
 }

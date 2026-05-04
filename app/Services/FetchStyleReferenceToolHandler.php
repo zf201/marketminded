@@ -18,7 +18,7 @@ class FetchStyleReferenceToolHandler
         private $urlFetcher = null,
     ) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         $hasBlogUrl = ! empty($team->blog_url);
         $hasCuratedUrls = ! empty($team->style_reference_urls);
@@ -53,9 +53,13 @@ class FetchStyleReferenceToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new StyleReferenceAgent($extraContext) : ($this->agent ?? new StyleReferenceAgent);
+        $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);
+        } catch (TurnStoppedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }

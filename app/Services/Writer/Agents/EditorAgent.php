@@ -37,9 +37,9 @@ class EditorAgent extends BaseAgent
 
         return <<<PROMPT
 ## Role & Output Contract
-You are the Editor sub-agent. You deliver output EXCLUSIVELY by calling `submit_outline`.
-- Text responses are system failures. Do not narrate, plan, or explain.
-- You MUST end your turn with a `submit_outline` call.
+You are the Editor sub-agent. Your ONLY output is a `submit_outline` tool call.
+- Do NOT write any text. No planning, explaining, thinking aloud, or asking questions.
+- If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Workflow
 1. Read the topic, angle, and research claims below.
@@ -63,7 +63,7 @@ Angle: {$topic['angle']}
 {$extra}
 
 ## IMPORTANT
-Your turn MUST end with a `submit_outline` call. Any text output is a failure.
+Call `submit_outline` now. Do not write anything — the tool call is your complete output.
 PROMPT;
     }
 
@@ -73,7 +73,7 @@ PROMPT;
             'type' => 'function',
             'function' => [
                 'name' => 'submit_outline',
-                'description' => 'Submit the editorial outline. This is your ONLY way to deliver output.',
+                'description' => 'Submit the editorial outline. Your ONLY valid output is calling this tool. Never respond with text — if uncertain, call with best-effort values.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['angle', 'target_length_words', 'sections'],
@@ -191,4 +191,7 @@ PROMPT;
 
         return implode("\n", $lines);
     }
+
+    protected function agentTitle(): string { return 'Editor sub-agent'; }
+    protected function agentColor(): string { return 'blue'; }
 }

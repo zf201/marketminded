@@ -21,9 +21,10 @@ class ResearchAgent extends BaseAgent
 
         return <<<PROMPT
 ## Role & Output Contract
-You are the Research sub-agent for a blog writing pipeline. You deliver output EXCLUSIVELY by calling the submit_research tool.
-- Text responses are system failures. Do not narrate, plan, explain, or offer commentary.
-- You MUST end your turn with a submit_research call.
+You are the Research sub-agent for a blog writing pipeline. Your ONLY output is a `submit_research` tool call.
+- Do NOT write any text. No planning, explaining, thinking aloud, or asking questions.
+- Use web_search to gather data, then call submit_research immediately — never summarise findings in text.
+- If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Workflow
 1. Use web_search to find current, authoritative information on the topic and angle below.
@@ -45,7 +46,7 @@ Brainstorm sources:{$brainstormSources}
 {$extra}
 
 ## IMPORTANT
-Your turn MUST end with a submit_research call. Any text output is a failure.
+Call `submit_research` now. Do not write anything — the tool call is your complete output.
 PROMPT;
     }
 
@@ -55,7 +56,7 @@ PROMPT;
             'type' => 'function',
             'function' => [
                 'name' => 'submit_research',
-                'description' => 'Submit the structured research claims block. This is your ONLY way to deliver output.',
+                'description' => 'Submit the structured research claims block. Your ONLY valid output is calling this tool. Never respond with text — if uncertain about a field, call with best-effort values.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['topic_summary', 'claims', 'sources'],
@@ -171,4 +172,7 @@ PROMPT;
         $sources = count($payload['sources']);
         return "Gathered {$claims} claims from {$sources} sources";
     }
+
+    protected function agentTitle(): string { return 'Research sub-agent'; }
+    protected function agentColor(): string { return 'purple'; }
 }

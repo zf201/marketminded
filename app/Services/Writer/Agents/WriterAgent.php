@@ -71,9 +71,10 @@ class WriterAgent extends BaseAgent
 
         return <<<PROMPT
 ## Role & Output Contract
-You are the Writer sub-agent. You deliver output EXCLUSIVELY by calling `submit_blog_post`.
-- Text responses are system failures. Do not narrate, plan, or explain.
-- You MUST end your turn with a `submit_blog_post` call.
+You are the Writer sub-agent. Your ONLY output is a `submit_blog_post` tool call containing the complete post.
+- Do NOT write the blog post as text. Write it inside the tool call's `body` field.
+- No preamble, no commentary, no "here is the post" — just call the tool.
+- If uncertain about any aspect, write your best version and call the tool — never refuse or ask for clarification.
 
 ## Workflow
 1. Read the outline, research claims, and brand profile below.
@@ -113,7 +114,7 @@ Angle: {$topic['angle']}
 {$extra}
 
 ## IMPORTANT
-Your turn MUST end with a `submit_blog_post` call. Any text output is a failure.
+Call `submit_blog_post` now with the complete title and body. Do not write anything outside the tool call.
 PROMPT;
     }
 
@@ -123,7 +124,7 @@ PROMPT;
             'type' => 'function',
             'function' => [
                 'name' => 'submit_blog_post',
-                'description' => 'Submit the finished blog post. This is your ONLY way to deliver output.',
+                'description' => 'Submit the finished blog post. Your ONLY valid output is calling this tool. Never respond with text — call this with the full title and body when done.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['title', 'body'],
@@ -307,4 +308,7 @@ PROMPT;
 
         return implode("\n", $lines);
     }
+
+    protected function agentTitle(): string { return 'Writer sub-agent'; }
+    protected function agentColor(): string { return 'green'; }
 }

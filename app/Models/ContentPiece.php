@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,6 +22,8 @@ use Illuminate\Support\Facades\DB;
 ])]
 class ContentPiece extends Model
 {
+    use HasFactory;
+
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
@@ -39,6 +42,11 @@ class ContentPiece extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(ContentPieceVersion::class)->orderByDesc('version');
+    }
+
+    public function socialPosts(): HasMany
+    {
+        return $this->hasMany(SocialPost::class)->where('status', 'active')->orderBy('position');
     }
 
     /**

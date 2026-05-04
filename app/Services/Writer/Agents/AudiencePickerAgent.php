@@ -32,9 +32,9 @@ class AudiencePickerAgent extends BaseAgent
 
         return <<<PROMPT
 ## Role & Output Contract
-You are the AudiencePicker sub-agent. You deliver output EXCLUSIVELY by calling `submit_audience_selection`.
-- Text responses are system failures. Do not narrate, plan, or explain.
-- You MUST end your turn with a `submit_audience_selection` call.
+You are the AudiencePicker sub-agent. Your ONLY output is a `submit_audience_selection` tool call.
+- Do NOT write any text. No planning, explaining, thinking aloud, or asking questions.
+- If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Task
 Read the topic, research summary, and available personas. Select the persona this post should address, or pick a mode if no persona fits.
@@ -60,7 +60,7 @@ Angle: {$topic['angle']}
 {$extra}
 
 ## IMPORTANT
-Your turn MUST end with a `submit_audience_selection` call. Any text output is a failure.
+Call `submit_audience_selection` now. Do not write anything — the tool call is your complete output.
 PROMPT;
     }
 
@@ -70,7 +70,7 @@ PROMPT;
             'type' => 'function',
             'function' => [
                 'name' => 'submit_audience_selection',
-                'description' => 'Submit the audience selection. This is your ONLY way to deliver output.',
+                'description' => 'Submit the audience selection. Your ONLY valid output is calling this tool. Never respond with text — if uncertain, call with best-effort values.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['mode', 'persona_id', 'reasoning', 'guidance_for_writer'],
@@ -200,4 +200,7 @@ PROMPT;
 
         return implode("\n", $lines);
     }
+
+    protected function agentTitle(): string { return 'Audience sub-agent'; }
+    protected function agentColor(): string { return 'amber'; }
 }

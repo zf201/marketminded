@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\ConversationBus;
+use App\Services\StreamResult;
 use Illuminate\Support\Facades\Http;
 
 class OpenRouterClient
@@ -28,7 +30,7 @@ class OpenRouterClient
         return $this->model;
     }
 
-    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120): ChatResult
+    public function chat(array $messages, array $tools = [], string|array|null $toolChoice = null, float $temperature = 0.3, bool $useServerTools = true, int $timeout = 120, ?callable $onToolCall = null, ?callable $stopCheck = null, ?callable $onReasoningChunk = null): ChatResult
     {
         $allTools = $useServerTools ? array_merge(self::SERVER_TOOLS, $tools) : $tools;
         $iteration = 0;
@@ -42,6 +44,10 @@ class OpenRouterClient
 
         while ($iteration < $this->maxIterations) {
             $iteration++;
+
+            if ($stopCheck !== null) {
+                ($stopCheck)();
+            }
 
             $body = [
                 'model'       => $this->model,
@@ -68,7 +74,17 @@ class OpenRouterClient
                 $body['tool_choice'] = $toolChoice;
             }
 
-            $response = $this->sendWithRetry($body, $timeout);
+            if ($onReasoningChunk !== null) {
+                $body['stream'] = true;
+                $response = $this->streamCollect($body, $timeout, $onReasoningChunk, $stopCheck);
+            } else {
+                $response = $this->sendWithRetry($body, $timeout);
+            }
+
+            if ($stopCheck !== null) {
+                ($stopCheck)();
+            }
+
             $usage = $response['usage'] ?? [];
             $totalInputTokens      += $usage['prompt_tokens'] ?? 0;
             $totalOutputTokens     += $usage['completion_tokens'] ?? 0;
@@ -136,6 +152,10 @@ class OpenRouterClient
                     ];
 
                     continue;
+                }
+
+                if ($onToolCall !== null) {
+                    ($onToolCall)($functionName, $arguments);
                 }
 
                 if ($functionName === 'fetch_url') {
@@ -258,9 +278,8 @@ class OpenRouterClient
 
     /**
      * Stream a chat completion with tool support.
-     * Yields string chunks, ToolEvent objects, and a final StreamResult.
-     *
-     * @return \Generator<int, string|ToolEvent|StreamResult>
+     * Publishes text_chunk events to the bus as they arrive.
+     * Returns a StreamResult with token counts and final content.
      */
     public function streamChatWithTools(
         string $systemPrompt,
@@ -269,7 +288,8 @@ class OpenRouterClient
         ?callable $toolExecutor = null,
         float $temperature = 0.7,
         bool $useServerTools = true,
-    ): \Generator {
+        ?ConversationBus $bus = null,
+    ): StreamResult {
         $allMessages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
             $messages,
@@ -353,22 +373,13 @@ class OpenRouterClient
                             continue;
                         }
 
-                        yield new ToolEvent($fnName, $fnArgs, null, 'started');
-
                         if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
-                            $toolResult = $this->braveSearchClient->search(
-                                $fnArgs['query'] ?? '',
-                                $fnArgs['country'] ?? null,
-                            );
+                            $toolResult = $this->runBraveSearch($fnArgs, $bus);
                         } elseif ($toolExecutor) {
                             $toolResult = $toolExecutor($fnName, $fnArgs);
-                        } elseif ($fnName === 'fetch_url') {
-                            $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
                         } else {
                             $toolResult = "Unknown tool: {$fnName}";
                         }
-
-                        yield new ToolEvent($fnName, $fnArgs, $toolResult, 'completed');
 
                         $allMessages[] = [
                             'role' => 'tool',
@@ -383,7 +394,7 @@ class OpenRouterClient
                 $content = $this->normalizeContent($choice['content'] ?? '');
                 if ($content !== '') {
                     $fullContent .= $content;
-                    yield $content;
+                    $bus?->publish('text_chunk', ['content' => $content]);
                 }
 
                 break;
@@ -422,13 +433,14 @@ class OpenRouterClient
 
                     if (isset($delta['reasoning_content']) && $delta['reasoning_content'] !== '') {
                         $streamReasoningContent .= $delta['reasoning_content'];
+                        $bus?->publish('reasoning_chunk', ['content' => $delta['reasoning_content']]);
                     }
 
                     $content = $this->normalizeContent($delta['content'] ?? '');
                     if ($content !== '') {
                         $fullContent .= $content;
                         $streamContent .= $content;
-                        yield $content;
+                        $bus?->publish('text_chunk', ['content' => $content]);
                     }
 
                     if (isset($delta['tool_calls'])) {
@@ -494,22 +506,13 @@ class OpenRouterClient
                         continue;
                     }
 
-                    yield new ToolEvent($fnName, $fnArgs, null, 'started');
-
                     if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
-                        $toolResult = $this->braveSearchClient->search(
-                            $fnArgs['query'] ?? '',
-                            $fnArgs['country'] ?? null,
-                        );
+                        $toolResult = $this->runBraveSearch($fnArgs, $bus);
                     } elseif ($toolExecutor) {
                         $toolResult = $toolExecutor($fnName, $fnArgs);
-                    } elseif ($fnName === 'fetch_url') {
-                        $toolResult = $this->urlFetcher->fetch($fnArgs['url'] ?? '');
                     } else {
                         $toolResult = "Unknown tool: {$fnName}";
                     }
-
-                    yield new ToolEvent($fnName, $fnArgs, $toolResult, 'completed');
 
                     $allMessages[] = [
                         'role' => 'tool',
@@ -524,7 +527,7 @@ class OpenRouterClient
             break;
         }
 
-        yield new StreamResult(
+        return new StreamResult(
             content: $fullContent,
             inputTokens: $totalInputTokens,
             outputTokens: $totalOutputTokens,
@@ -535,6 +538,122 @@ class OpenRouterClient
             cacheWriteTokens: $totalCacheWriteTokens,
             reasoningContent: $totalReasoningContent,
         );
+    }
+
+    /**
+     * Run brave_web_search with paired pill events. Used by both the non-streaming
+     * and streaming branches of streamChatWithTools.
+     */
+    private function runBraveSearch(array $args, ?ConversationBus $bus): string
+    {
+        $pillId = bin2hex(random_bytes(8));
+        $bus?->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'web search', 'id' => $pillId, 'status' => 'running', 'detail' => $args['query'] ?? null]);
+        try {
+            $result = $this->braveSearchClient->search($args['query'] ?? '', $args['country'] ?? null);
+            $bus?->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => 'ok']);
+            return $result;
+        } catch (\Throwable $e) {
+            $bus?->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => 'error', 'error' => $e->getMessage()]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Stream a non-loop request, accumulate chunks, return a response shape
+     * compatible with the JSON path (choices[0].message + usage). Used by
+     * chat() when a reasoning callback is provided so sub-agents can show
+     * live thinking.
+     */
+    private function streamCollect(array $body, int $timeout, callable $onReasoningChunk, ?callable $stopCheck): array
+    {
+        $response = Http::timeout($timeout)
+            ->withHeader('Authorization', "Bearer {$this->apiKey}")
+            ->withOptions(['stream' => true])
+            ->post($this->baseUrl . '/chat/completions', $body);
+
+        if ($response->status() >= 400) {
+            throw new \RuntimeException("API error {$response->status()}: " . $response->body());
+        }
+
+        $contentType = $response->header('Content-Type') ?? '';
+        if (! str_contains($contentType, 'text/event-stream')) {
+            return $response->json();
+        }
+
+        $buffer = '';
+        $streamBody = $response->getBody();
+        $content = '';
+        $reasoning = '';
+        $toolCalls = [];
+        $usage = [];
+
+        while (! $streamBody->eof()) {
+            if ($stopCheck !== null) {
+                ($stopCheck)();
+            }
+            $buffer .= $streamBody->read(1024);
+
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = trim(substr($buffer, 0, $pos));
+                $buffer = substr($buffer, $pos + 1);
+
+                if ($line === '' || $line === 'data: [DONE]' || ! str_starts_with($line, 'data: ')) {
+                    continue;
+                }
+
+                $json = json_decode(substr($line, 6), true);
+                if (! $json) {
+                    continue;
+                }
+
+                $delta = $json['choices'][0]['delta'] ?? [];
+
+                if (isset($delta['reasoning_content']) && $delta['reasoning_content'] !== '') {
+                    $reasoning .= $delta['reasoning_content'];
+                    ($onReasoningChunk)($delta['reasoning_content']);
+                }
+
+                $deltaContent = $this->normalizeContent($delta['content'] ?? '');
+                if ($deltaContent !== '') {
+                    $content .= $deltaContent;
+                }
+
+                if (isset($delta['tool_calls'])) {
+                    foreach ($delta['tool_calls'] as $tc) {
+                        $idx = $tc['index'] ?? 0;
+                        if (! isset($toolCalls[$idx])) {
+                            $toolCalls[$idx] = ['id' => '', 'type' => 'function', 'function' => ['name' => '', 'arguments' => '']];
+                        }
+                        if (isset($tc['id']) && $tc['id'] !== '') {
+                            $toolCalls[$idx]['id'] = $tc['id'];
+                        }
+                        if (isset($tc['function']['name']) && $tc['function']['name'] !== '') {
+                            $toolCalls[$idx]['function']['name'] = $tc['function']['name'];
+                        }
+                        if (isset($tc['function']['arguments'])) {
+                            $toolCalls[$idx]['function']['arguments'] .= $tc['function']['arguments'];
+                        }
+                    }
+                }
+
+                if (isset($json['usage'])) {
+                    $usage = $json['usage'];
+                }
+            }
+        }
+
+        $message = ['role' => 'assistant', 'content' => $content];
+        if ($reasoning !== '') {
+            $message['reasoning_content'] = $reasoning;
+        }
+        if (! empty($toolCalls)) {
+            $message['tool_calls'] = array_values($toolCalls);
+        }
+
+        return [
+            'choices' => [['message' => $message]],
+            'usage' => $usage,
+        ];
     }
 
     /**

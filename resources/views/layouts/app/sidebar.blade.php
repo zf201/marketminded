@@ -29,6 +29,9 @@
                     <flux:sidebar.item icon="document-text" :href="route('content.index')" :current="request()->routeIs('content.*')" wire:navigate>
                         {{ __('Content') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="megaphone" :href="route('social.index')" :current="request()->routeIs('social.*')" wire:navigate>
+                        {{ __('Social') }}
+                    </flux:sidebar.item>
                     <flux:sidebar.item icon="chat-bubble-left-right" :href="route('create')" :current="request()->routeIs('create')" wire:navigate>
                         {{ __('History') }}
                     </flux:sidebar.item>

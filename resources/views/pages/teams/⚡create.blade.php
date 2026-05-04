@@ -81,6 +81,7 @@ new class extends Component
                                                 'brand' => __('Brand'),
                                                 'topics' => __('Topics'),
                                                 'writer' => __('Writer'),
+                                                'funnel' => __('Funnel'),
                                                 default => $conversation->type,
                                             } }}</flux:badge>
                                         @endif

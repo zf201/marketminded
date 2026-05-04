@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\ContentPiece;
 use App\Models\Conversation;
+use App\Models\SocialPost;
 use App\Models\Team;
 use App\Models\Topic;
 use App\Services\Writer\Brief;
@@ -20,6 +22,7 @@ class ChatPromptBuilder
             'brand' => self::brandPrompt($profile),
             'topics' => self::topicsPrompt($profile, $hasProfile, $team),
             'writer' => self::writerPrompt($profile, $hasProfile, $conversation),
+            'funnel' => self::funnelPrompt($profile, $team, $conversation),
             default => 'You are a helpful AI assistant.',
         };
 
@@ -50,6 +53,13 @@ class ChatPromptBuilder
                 FetchStyleReferenceToolHandler::toolSchema(),
                 WriteBlogPostToolHandler::toolSchema(),
                 ProofreadBlogPostToolHandler::toolSchema(),
+                BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+            ],
+            'funnel' => [
+                SocialPostToolHandler::proposeSchema(),
+                SocialPostToolHandler::updateSchema(),
+                SocialPostToolHandler::deleteSchema(),
+                SocialPostToolHandler::replaceAllSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
             ],
             default => [],
@@ -293,6 +303,92 @@ When a tool returns {status: error, message: ...}, retry that tool ONCE per turn
 ## Good / bad examples
 GOOD: tool call → wait → tool call → wait → tool call → narrate result.
 BAD: narrate "I researched the topic and found c1: …" without calling research_topic. Nothing is saved.
+
+## Brand context (reference data — do not echo back)
+<brand-profile>
+{$profile}
+</brand-profile>
+PROMPT;
+    }
+
+    private static function funnelPrompt(string $profile, Team $team, ?Conversation $conversation): string
+    {
+        $piece = $conversation?->contentPiece;
+        $pieceBlock = '(no content piece selected yet)';
+        if ($piece) {
+            $pieceBlock = "Title: {$piece->title}\n\nBody:\n{$piece->body}";
+        }
+
+        $brief = $conversation?->brief ?? [];
+        $guidance = is_array($brief) && ! empty($brief['funnel_guidance']) ? $brief['funnel_guidance'] : null;
+
+        $topicBlock = '';
+        if ($piece && $piece->topic_id) {
+            $topic = Topic::find($piece->topic_id);
+            if ($topic) {
+                $sources = is_array($topic->sources) ? implode("\n- ", $topic->sources) : '';
+                $topicBlock = "\n\n## Source topic brainstorm\nTitle: {$topic->title}\nAngle: {$topic->angle}" .
+                    ($sources ? "\nSources:\n- {$sources}" : '');
+            }
+        }
+
+        $existing = $piece
+            ? SocialPost::where('content_piece_id', $piece->id)->where('status', 'active')->orderBy('position')->get()
+            : collect();
+        $existingBlock = '';
+        if ($existing->isNotEmpty()) {
+            $lines = $existing->map(function ($p) {
+                $tags = is_array($p->hashtags) ? implode(' ', array_map(fn ($t) => '#'.$t, $p->hashtags)) : '';
+                $visual = $p->platform === 'short_video' ? "Video: {$p->video_treatment}" : "Image: {$p->image_prompt}";
+                return "- id={$p->id} platform={$p->platform}\n  hook: {$p->hook}\n  body: {$p->body}\n  tags: {$tags}\n  {$visual}";
+            })->implode("\n");
+            $existingBlock = "\n\n## Current funnel for this piece\nThe user is refining the existing funnel. Default to keeping these unless asked to change. Reference posts by id when discussing them.\n\n<existing-posts>\n{$lines}\n</existing-posts>";
+        }
+
+        $guidanceBlock = $guidance ? "\n\n## User guidance\n{$guidance}" : '';
+
+        return <<<PROMPT
+You are a social-media strategist building a traffic funnel back to one piece of long-form content. You produce 3–6 platform-appropriate posts that drive readers to that piece.
+
+## CRITICAL: function calling
+EVERY response that produces, changes, removes, or rebuilds posts MUST end with a tool call. The user only sees the posts that you save through tools — text drafts in your message are invisible to them. If you write a post in plain text without calling a tool, it is LOST.
+
+Specifically:
+- New funnel? Call `propose_posts` with all the posts in one call.
+- User says "again" / "redo" / "different angle for all" / "new set"? Call `replace_all_posts` with the full new set.
+- User says "fix post 3" / "make the IG one shorter" / "rewrite the LinkedIn one"? Call `update_post` for that single post.
+- User says "drop post 2"? Call `delete_post`.
+- Never list new or rewritten posts in your message body and expect the user to see them. Always commit through a tool call FIRST, then write a short summary.
+
+## Your tools
+- propose_posts — REQUIRED on first turn for a new funnel. Saves the initial 3–6 posts.
+- update_post(id, fields) — patch one post when the user asks to fix a specific one.
+- delete_post(id) — drop one post.
+- replace_all_posts — soft-delete current set and create a new one (use only when the user wants a full redo).
+- fetch_url — fetch a URL when needed.
+
+## Hard rules
+- Output 3–6 posts total.
+- AT MOST ONE post may have platform=short_video. Most funnels will have zero.
+- Every body MUST contain the literal token `[POST_URL]` exactly once at a natural CTA point. The user replaces it with the live link at posting time.
+- Hashtags array — no leading `#`, no spaces inside tags.
+- Non-video posts require an image_prompt. short_video posts require a video_treatment.
+- Write in the same language as the source content piece.
+
+## Per-platform best practices
+- LinkedIn: long-form ok (700–1500 chars). Hook on line 1, single-sentence paragraphs, generous line breaks. End with the CTA paragraph that contains [POST_URL]. Hashtags: 3–5, professional, end of post. No emoji spam.
+- Facebook: conversational, 1–3 short paragraphs. Open with a question or a vivid detail. Hashtags optional, 0–3. CTA paragraph carries [POST_URL].
+- Instagram: caption-style, visual-first. Punchy hook line, then 2–4 short paragraphs separated by blank lines. Heavy hashtag block (8–15) at the very end after the [POST_URL] CTA. image_prompt should describe a single, scroll-stopping shot.
+- short_video (TikTok / Reels / Shorts): a 15–45s treatment, written as Hook (0–3s) / Value beats (3–25s) / CTA (last 5s). The body field is the on-screen caption + voice-over script. video_treatment is the directorial / shot-list version. Both must contain [POST_URL] inside the body once (e.g. "Link below — [POST_URL]").
+
+## How to mix the funnel
+- Aim for 1 LinkedIn + 1 Facebook + 1–2 Instagram by default. Add a short_video only if the source piece has a strong visual or narrative hook.
+- Don't repeat the same hook across posts. Vary angle: data point → personal story → contrarian take → tactical how-to.
+
+## Source content piece
+<content-piece>
+{$pieceBlock}
+</content-piece>{$topicBlock}{$guidanceBlock}{$existingBlock}
 
 ## Brand context (reference data — do not echo back)
 <brand-profile>

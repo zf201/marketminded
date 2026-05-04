@@ -12,7 +12,7 @@ class CreateOutlineToolHandler
 {
     public function __construct(private ?Agent $agent = null) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         $callsSoFar = collect($priorTurnTools)->where('name', 'create_outline')->where('status', 'ok')->count();
         if ($callsSoFar >= 1) {
@@ -27,9 +27,13 @@ class CreateOutlineToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new EditorAgent($extraContext) : ($this->agent ?? new EditorAgent);
+        $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);
+        } catch (TurnStoppedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }

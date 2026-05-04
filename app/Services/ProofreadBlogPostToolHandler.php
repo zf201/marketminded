@@ -12,7 +12,7 @@ class ProofreadBlogPostToolHandler
 {
     public function __construct(private ?Agent $agent = null) {}
 
-    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = []): string
+    public function execute(Team $team, int $conversationId, array $args, array $priorTurnTools = [], ?ConversationBus $bus = null): string
     {
         $conversation = Conversation::findOrFail($conversationId);
 
@@ -33,6 +33,7 @@ class ProofreadBlogPostToolHandler
                             'title' => $piece->title,
                             'preview' => mb_substr(strip_tags($piece->body), 0, 200),
                             'change_description' => 'already applied this turn',
+                            'piece_id' => $piece->id,
                         ],
                         'piece_id' => $piece->id,
                     ]);
@@ -53,9 +54,13 @@ class ProofreadBlogPostToolHandler
 
         $extraContext = $args['extra_context'] ?? null;
         $agent = $this->agent ?? new ProofreadAgent($feedback, $extraContext);
+        $agent->conversationId = $conversationId;
+        $agent->bus = $bus;
 
         try {
             $result = $agent->execute($brief, $team);
+        } catch (TurnStoppedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
