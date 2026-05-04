@@ -56,6 +56,14 @@ new class extends Component
         </flux:button>
     </div>
 
+    @if ($this->topics->isNotEmpty())
+        <div class="mx-auto w-full max-w-5xl px-6 pb-2">
+            <flux:subheading>
+                {{ __('Score topics 1–10 to teach the AI what good looks like — this directly improves your next brainstorm. Delete topics that aren\'t relevant. Score topics with weak or missing sources lower.') }}
+            </flux:subheading>
+        </div>
+    @endif
+
     <div class="mx-auto max-w-5xl px-6 py-4">
         @if ($this->topics->isEmpty())
             <div class="py-20 text-center">

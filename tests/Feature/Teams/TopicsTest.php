@@ -102,3 +102,29 @@ test('topics page embeds markdown payload without sources block when sources are
         ->assertSee('# A bare topic', false)
         ->assertDontSee('## Sources');
 });
+
+test('topics page shows scoring guidance when at least one topic exists', function () {
+    [$user, $team] = makeOwnerWithTeam();
+
+    Topic::create([
+        'team_id' => $team->id,
+        'title' => 'Some topic',
+        'angle' => 'Angle.',
+        'status' => 'available',
+    ]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::teams.topics', ['current_team' => $team])
+        ->assertSee('Score topics 1–10')
+        ->assertSee("Delete topics that aren't relevant");
+});
+
+test('topics page omits scoring guidance on an empty backlog', function () {
+    [$user, $team] = makeOwnerWithTeam();
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::teams.topics', ['current_team' => $team])
+        ->assertDontSee('Score topics 1–10');
+});
