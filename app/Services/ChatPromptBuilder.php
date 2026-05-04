@@ -192,21 +192,30 @@ The brand profile is mostly empty. Before brainstorming topics, suggest the user
 NUDGE;
         }
 
-        // Add existing backlog to avoid duplicates
-        $existingTopics = Topic::where('team_id', $team->id)
+        // Past topics, scored. Calibration signal for the next brainstorm.
+        $pastTopics = Topic::where('team_id', $team->id)
             ->whereIn('status', ['available', 'used'])
-            ->pluck('title')
-            ->toArray();
+            ->orderByDesc('created_at')
+            ->limit(25)
+            ->get(['title', 'score']);
 
-        if (! empty($existingTopics)) {
-            $topicList = implode("\n", array_map(fn ($t) => "- {$t}", $existingTopics));
+        if ($pastTopics->isNotEmpty()) {
+            $topicList = $pastTopics
+                ->map(fn ($t) => '- '.$t->title.' — score: '.($t->score === null ? 'not yet rated' : $t->score.'/10'))
+                ->implode("\n");
             $prompt .= <<<BACKLOG
 
 
-## Existing topics in backlog (do not propose duplicates)
-<existing-topics>
+## Your past topics for this team (most recent 25)
+These are topics you proposed in earlier sessions. The "score" is the user's quality rating (1–10) — it's how the user tells you what good looks like. Use it to recalibrate.
+
+- Treat unrated topics ("not yet rated") as average (≈5/10).
+- Do not propose duplicates of these.
+- Lean toward topic shapes that scored 7+. Avoid shapes that scored ≤4.
+
+<past-topics>
 {$topicList}
-</existing-topics>
+</past-topics>
 BACKLOG;
         }
 
