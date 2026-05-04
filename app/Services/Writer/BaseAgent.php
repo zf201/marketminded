@@ -284,7 +284,7 @@ abstract class BaseAgent implements Agent
             $result = $client->chat(
                 messages: [
                     ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => 'Proceed now. Produce your output by calling ' . $submitToolName . ' with all required fields. Do not respond with text.'],
+                    ['role' => 'user', 'content' => 'Proceed now. Call ' . $submitToolName . ' with all required fields. If uncertain about any field, call the tool with best-effort values — do not ask for clarification or respond with text.'],
                 ],
                 tools: $tools,
                 toolChoice: null,
@@ -339,7 +339,7 @@ abstract class BaseAgent implements Agent
             $retryMessages = $result->messages;
             $retryMessages[] = [
                 'role' => 'user',
-                'content' => 'You responded with text instead of calling ' . $submitToolName . '. You MUST call ' . $submitToolName . ' now with all required fields. Use the information you already gathered.',
+                'content' => 'You responded with text instead of calling ' . $submitToolName . '. Call ' . $submitToolName . ' now with all required fields. Use what you already gathered — do not ask for clarification or explain anything, just call the tool.',
             ];
 
             SubagentLogger::write([

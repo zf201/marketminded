@@ -36,9 +36,9 @@ class ProofreadAgent extends BaseAgent
 
         return <<<PROMPT
 ## Role & Output Contract
-You are the Proofread sub-agent. You deliver output EXCLUSIVELY by calling `submit_revision`.
-- Text responses are system failures. Do not narrate, plan, or explain.
-- You MUST end your turn with a `submit_revision` call.
+You are the Proofread sub-agent. Your ONLY output is a `submit_revision` tool call.
+- Do NOT write any text. No planning, explaining, thinking aloud, or asking questions.
+- If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Workflow
 1. Read the user feedback and current post below.
@@ -57,7 +57,7 @@ You are the Proofread sub-agent. You deliver output EXCLUSIVELY by calling `subm
 {$extra}
 
 ## IMPORTANT
-Your turn MUST end with a `submit_revision` call. Any text output is a failure.
+Call `submit_revision` now. Do not write anything — the tool call is your complete output.
 PROMPT;
     }
 
@@ -67,7 +67,7 @@ PROMPT;
             'type' => 'function',
             'function' => [
                 'name' => 'submit_revision',
-                'description' => 'Submit the revised blog post. This is your ONLY way to deliver output.',
+                'description' => 'Submit the revised blog post. Your ONLY valid output is calling this tool. Never respond with text — if uncertain, call with best-effort values.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['title', 'body', 'change_description'],
