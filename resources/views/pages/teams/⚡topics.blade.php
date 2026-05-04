@@ -131,6 +131,12 @@ new class extends Component
                             </div>
                         @endif
 
+                        @if ($topic->status === 'used')
+                            <div class="mt-3 flex justify-end">
+                                <flux:badge variant="pill" size="sm" color="green">{{ __('Used') }}</flux:badge>
+                            </div>
+                        @endif
+
                         <div class="mt-auto flex items-center gap-2 pt-3">
                             <flux:text class="shrink-0 text-xs text-zinc-500">{{ __('Score') }}</flux:text>
                             <input
@@ -167,10 +173,6 @@ new class extends Component
                                     <flux:icon name="chat-bubble-left" variant="mini" class="size-3.5" />
                                     {{ __('Chat') }}
                                 </a>
-                            @endif
-
-                            @if ($topic->status === 'used')
-                                <flux:badge variant="pill" size="sm" color="green" class="ml-2">{{ __('Used') }}</flux:badge>
                             @endif
                         </div>
                     </flux:card>
