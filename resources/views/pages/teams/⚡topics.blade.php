@@ -84,6 +84,36 @@ new class extends Component
                             </flux:modal.trigger>
                         </div>
 
+                        @if (!empty($topic->sources))
+                            <div class="mt-3 text-xs text-zinc-500" x-data="{ open: false }">
+                                <button
+                                    type="button"
+                                    @click="open = !open"
+                                    class="inline-flex items-center gap-1 hover:text-zinc-300 transition-colors"
+                                >
+                                    {{ __('Sources') }} ({{ count($topic->sources) }})
+                                    <svg x-bind:class="open ? 'rotate-180' : ''" class="size-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+                                <ul x-show="open" x-cloak class="mt-2 space-y-1 rounded-md border border-zinc-700 bg-zinc-900/50 p-2 text-xs text-zinc-400">
+                                    @foreach ($topic->sources as $source)
+                                        <li class="break-all">
+                                            @if (filter_var($source, FILTER_VALIDATE_URL))
+                                                @php
+                                                    $host = parse_url($source, PHP_URL_HOST) ?: $source;
+                                                    $host = preg_replace('/^www\./', '', $host);
+                                                @endphp
+                                                <a href="{{ $source }}" target="_blank" rel="noopener noreferrer" title="{{ $source }}" class="hover:text-zinc-200 underline decoration-dotted">{{ $host }}</a>
+                                            @else
+                                                {{ $source }}
+                                            @endif
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
                         <div class="mt-auto flex items-center gap-2 pt-3">
                             <flux:text class="shrink-0 text-xs text-zinc-500">{{ __('Score') }}</flux:text>
                             <input
