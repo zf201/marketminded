@@ -16,12 +16,20 @@ class ChatPromptBuilder
         $profile = self::buildProfileText($team);
         $hasProfile = $team->homepage_url || $team->brandPositioning || $team->audiencePersonas()->exists();
 
-        return match ($type) {
+        $body = match ($type) {
             'brand' => self::brandPrompt($profile),
             'topics' => self::topicsPrompt($profile, $hasProfile, $team),
             'writer' => self::writerPrompt($profile, $hasProfile, $conversation),
             default => 'You are a helpful AI assistant.',
         };
+
+        return self::dateHeader() . $body;
+    }
+
+    private static function dateHeader(): string
+    {
+        $today = now()->format('l, F j, Y');
+        return "Today's date is {$today}. Use this when reasoning about recency, freshness, or anything time-sensitive.\n\n";
     }
 
     public static function tools(string $type): array
