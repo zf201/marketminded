@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\ConversationBus;
+use App\Services\StreamResult;
 use Illuminate\Support\Facades\Http;
 
 class OpenRouterClient
@@ -272,8 +274,8 @@ class OpenRouterClient
         ?callable $toolExecutor = null,
         float $temperature = 0.7,
         bool $useServerTools = true,
-        ?\App\Services\ConversationBus $bus = null,
-    ): \App\Services\StreamResult {
+        ?ConversationBus $bus = null,
+    ): StreamResult {
         $allMessages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
             $messages,
