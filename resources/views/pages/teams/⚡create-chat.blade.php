@@ -11,9 +11,9 @@ use App\Services\OpenRouterClient;
 use App\Services\PickAudienceToolHandler;
 use App\Services\ResearchTopicToolHandler;
 use App\Services\BraveSearchClient;
-use App\Services\ReasoningChunk;
+use App\Services\ConversationBus;
 use App\Services\StreamResult;
-use App\Services\ToolEvent;
+use App\Services\TurnStoppedException;
 use App\Services\TopicToolHandler;
 use App\Services\ProofreadBlogPostToolHandler;
 use App\Services\SocialPostToolHandler;
@@ -139,69 +139,73 @@ new class extends Component
         $this->topicTitle = null;
     }
 
-    /**
-     * Called when the user clicks Stop. The streaming request runs in another
-     * PHP-FPM worker; this request blocks until that worker has persisted its
-     * (interrupted) assistant message, so the client can reload to a DB state
-     * that already contains the partial.
-     */
-    /**
-     * Called when the user clicks Stop. The streaming request runs in another
-     * PHP-FPM worker; this request blocks until that worker has persisted its
-     * (interrupted) assistant message, then returns. Livewire applies the
-     * updated $messages array to the DOM in the response, so the partial
-     * renders inline — no reload needed.
-     */
-    /**
-     * Called when the user clicks Stop. The streaming request runs in another
-     * PHP-FPM worker; this request blocks until that worker has persisted its
-     * (interrupted) assistant message, then returns. Livewire applies the
-     * updated $messages array to the DOM in the response, so the partial
-     * renders inline — no reload needed.
-     */
-    public function stopAndWait(): void
+    public function stop(): void
     {
         if (! $this->conversation) {
             $this->isStreaming = false;
             return;
         }
 
-        $convId = $this->conversation->id;
+        \Illuminate\Support\Facades\Cache::put('conv-stop:' . $this->conversation->id, true, 60);
+    }
 
-        // Signal the streaming worker to break out of its foreach. The worker
-        // checks this flag each iteration alongside connection_aborted(); the
-        // flag is more reliable when reasoning chunks are slow or the browser
-        // hasn't actually closed the SSE.
-        \Illuminate\Support\Facades\Cache::put('streaming-stop:'.$convId, 1, 60);
+    private function persistTurn(
+        ConversationBus $bus,
+        ?StreamResult $streamResult,
+        bool $interrupted,
+    ): void {
+        $metadata = [];
 
-        $latestAssistantBefore = (int) (Message::where('conversation_id', $convId)
-            ->where('role', 'assistant')
-            ->latest('id')
-            ->value('id') ?? 0);
-
-        $deadline = microtime(true) + 20.0;
-        $iterations = 0;
-        while (microtime(true) < $deadline) {
-            $iterations++;
-            $latestNow = (int) (Message::where('conversation_id', $convId)
-                ->where('role', 'assistant')
-                ->latest('id')
-                ->value('id') ?? 0);
-            if ($latestNow > $latestAssistantBefore) {
-                break;
-            }
-            usleep(300_000);
+        $events = $bus->events();
+        if (! empty($events)) {
+            $metadata['events'] = $events;
         }
 
-        \Log::info('stopAndWait poll end', [
-            'conversation_id' => $convId,
-            'iterations' => $iterations,
-            'elapsed_s' => round(microtime(true) - ($deadline - 20.0), 2),
-            'message_landed' => $iterations > 0 && microtime(true) < $deadline,
+        if ($streamResult && $streamResult->webSearchRequests > 0) {
+            $metadata['web_searches'] = $streamResult->webSearchRequests;
+        }
+
+        $reasoning = $streamResult?->reasoningContent ?: '';
+        if ($reasoning !== '') {
+            $metadata['reasoning'] = $reasoning;
+        }
+
+        if ($streamResult && $streamResult->reasoningTokens > 0) {
+            $metadata['reasoning_tokens'] = $streamResult->reasoningTokens;
+        }
+
+        if ($interrupted) {
+            $metadata['interrupted'] = true;
+        }
+
+        // cleanContent() is called once on the full accumulated string (not per-chunk).
+        $content = $this->cleanContent($bus->text());
+
+        if ($content === '' && empty($metadata)) {
+            return;
+        }
+
+        $message = Message::create([
+            'conversation_id' => $this->conversation->id,
+            'role'            => 'assistant',
+            'content'         => $content,
+            'model'           => $this->teamModel->fast_model,
+            'input_tokens'    => $streamResult?->inputTokens ?? 0,
+            'output_tokens'   => $streamResult?->outputTokens ?? 0,
+            'cost'            => $streamResult?->cost ?? 0,
+            'metadata'        => ! empty($metadata) ? $metadata : null,
         ]);
 
-        $this->loadMessages();
-        $this->isStreaming = false;
+        if ($message) {
+            $this->messages[] = [
+                'role'          => 'assistant',
+                'content'       => $message->content,
+                'metadata'      => $message->metadata,
+                'input_tokens'  => $message->input_tokens,
+                'output_tokens' => $message->output_tokens,
+                'cost'          => (float) $message->cost,
+            ];
+        }
     }
 
     public function submitPrompt(): void
@@ -253,28 +257,20 @@ new class extends Component
 
     public function ask(): void
     {
-        // 15 minutes: a full autopilot run (research + outline + write) can
-        // take a few minutes each step with a large brand profile + big model.
         set_time_limit(900);
-        // Let the PHP process run to completion even if the client stops the
-        // stream — otherwise the finally block (which persists the message
-        // and writes chat-debug.log) may be killed mid-flight, losing the
-        // debug trace for aborted attempts.
         ignore_user_abort(true);
 
         $type = $this->conversation->type;
         $this->teamModel->refresh();
         $this->conversation->load('topic');
 
-        // Hydrate brief.topic on first writer turn if missing (also covers
-        // conversations created before the brief column existed).
         if ($type === 'writer' && $this->conversation->topic && empty(($this->conversation->brief ?? [])['topic'])) {
             $topic = $this->conversation->topic;
             $brief = $this->conversation->brief ?? [];
             $brief['topic'] = [
-                'id' => $topic->id,
-                'title' => $topic->title,
-                'angle' => $topic->angle,
+                'id'      => $topic->id,
+                'title'   => $topic->title,
+                'angle'   => $topic->angle,
                 'sources' => $topic->sources ?? [],
             ];
             $this->conversation->update(['brief' => $brief]);
@@ -282,7 +278,7 @@ new class extends Component
         }
 
         $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel, $this->conversation);
-        $tools = ChatPromptBuilder::tools($type);
+        $tools        = ChatPromptBuilder::tools($type);
 
         $apiMessages = collect($this->messages)
             ->map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']])
@@ -303,27 +299,27 @@ new class extends Component
             braveSearchClient: $braveClient,
         );
 
-        $brandHandler = new BrandIntelligenceToolHandler;
-        $topicHandler = new TopicToolHandler;
-        $researchHandler = new ResearchTopicToolHandler;
-        $audienceHandler = new PickAudienceToolHandler;
-        $outlineHandler = new CreateOutlineToolHandler;
-        $styleRefHandler = new FetchStyleReferenceToolHandler;
-        $writeHandler = new WriteBlogPostToolHandler;
+        $brandHandler     = new BrandIntelligenceToolHandler;
+        $topicHandler     = new TopicToolHandler;
+        $researchHandler  = new ResearchTopicToolHandler;
+        $audienceHandler  = new PickAudienceToolHandler;
+        $outlineHandler   = new CreateOutlineToolHandler;
+        $styleRefHandler  = new FetchStyleReferenceToolHandler;
+        $writeHandler     = new WriteBlogPostToolHandler;
         $proofreadHandler = new ProofreadBlogPostToolHandler;
-        $socialHandler = new SocialPostToolHandler;
-        $team = $this->teamModel;
-        $conversation = $this->conversation;
+        $socialHandler    = new SocialPostToolHandler;
+        $team             = $this->teamModel;
+        $conversation     = $this->conversation;
 
-        // Tool calls completed earlier in this ask() turn. The writer's gate
-        // checks this first so research_topic results are visible to
-        // create_outline and write_blog_post within the same turn (before the
-        // assistant message is persisted).
         $priorTurnTools = [];
+
+        $bus = new ConversationBus($this->conversation->id);
+        session()->save();
 
         $toolExecutor = function (string $name, array $args) use (
             $brandHandler, $topicHandler, $researchHandler, $audienceHandler, $outlineHandler,
-            $styleRefHandler, $writeHandler, $proofreadHandler, $socialHandler, $team, $conversation, &$priorTurnTools
+            $styleRefHandler, $writeHandler, $proofreadHandler, $socialHandler,
+            $team, $conversation, $bus, &$priorTurnTools
         ): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
@@ -335,32 +331,32 @@ new class extends Component
                 return (new UrlFetcher)->fetch($args['url'] ?? '');
             }
             if ($name === 'research_topic') {
-                $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'pick_audience') {
-                $result = $audienceHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $result = $audienceHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'create_outline') {
-                $result = $outlineHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $result = $outlineHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'fetch_style_reference') {
-                $result = $styleRefHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $result = $styleRefHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'write_blog_post') {
-                $result = $writeHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $result = $writeHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
             if ($name === 'proofread_blog_post') {
-                $result = $proofreadHandler->execute($team, $conversation->id, $args, $priorTurnTools);
+                $result = $proofreadHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
@@ -387,226 +383,78 @@ new class extends Component
             return "Unknown tool: {$name}";
         };
 
-        $fullContent = '';
-        $streamResult = null;
-        $completedTools = [];
-        $interrupted = false;
-        $saved = false;
-        $partialReasoning = '';
-
-        // Backstop: if the request dies before the finally block runs (PHP-FPM
-        // request_terminate_timeout, OOM, fatal error after streaming starts,
-        // etc.), persist whatever work has accumulated. Idempotent — the
-        // happy-path finally flips $saved=true so this becomes a no-op.
-        // Captures by reference so it sees the latest state at shutdown time.
-        $teamId = $this->teamModel->id;
-        $conversationId = $this->conversation->id;
-        $fastModel = $this->teamModel->fast_model;
-        register_shutdown_function(function () use (
-            &$fullContent, &$completedTools, &$streamResult, &$interrupted, &$saved, &$partialReasoning,
-            $conversationId, $fastModel
-        ) {
-            if ($saved) return;
-            try {
-                self::persistAssistantMessage(
-                    conversationId: $conversationId,
-                    model: $fastModel,
-                    fullContent: $fullContent,
-                    completedTools: $completedTools,
-                    streamResult: $streamResult,
-                    interrupted: true,
-                    cleanContent: false,
-                    partialReasoning: $partialReasoning,
-                );
-            } catch (\Throwable $e) {
-                \Log::error('Shutdown save failed', ['error' => $e->getMessage()]);
-            }
-        });
+        $useServerTools = $this->teamModel->ai_provider !== 'custom'
+            && $webSearchProvider === 'openrouter_builtin';
+        $chatTools = $tools;
+        if ($braveClient !== null) {
+            $chatTools[] = BraveSearchClient::toolSchema();
+        }
 
         try {
-            $useServerTools = $this->teamModel->ai_provider !== 'custom'
-                && $webSearchProvider === 'openrouter_builtin';
-            $chatTools = $tools;
-            if ($braveClient !== null) {
-                $chatTools[] = BraveSearchClient::toolSchema();
-            }
-            // Release the PHP session lock so concurrent Livewire poll requests
-            // (e.g. pollSubagentTools) can read session data without blocking.
-            session()->save();
-            foreach ($client->streamChatWithTools($systemPrompt, $apiMessages, $chatTools, $toolExecutor, temperature: 0.7, useServerTools: $useServerTools) as $item) {
-                if ($item instanceof ToolEvent) {
-                    if ($item->status === 'completed') {
-                        $completedTools[] = $item;
-                    }
-                    $activeTool = $item->status === 'started' ? $item : null;
-                    $this->streamUI($this->cleanContent($fullContent), $completedTools, $activeTool);
-                } elseif ($item instanceof StreamResult) {
-                    $streamResult = $item;
-                } elseif ($item instanceof ReasoningChunk) {
-                    $partialReasoning .= $item->text;
-                } else {
-                    $fullContent .= $item;
-                    $this->streamUI($this->cleanContent($fullContent), $completedTools, null);
-                }
-
-                if (connection_aborted() || \Illuminate\Support\Facades\Cache::pull('streaming-stop:'.$this->conversation->id)) {
-                    $interrupted = true;
-                    break;
-                }
-            }
-        } catch (\Throwable $e) {
-            $interrupted = true;
-            \Log::error('Chat streaming error', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
-            $errorLine = 'Error: ' . $e->getMessage();
-            $fullContent = $fullContent ? $fullContent . "\n\n" . $errorLine : $errorLine;
-        } finally {
-            ignore_user_abort(true);
-
-            $fullContent = $this->cleanContent($fullContent);
-
-            $message = self::persistAssistantMessage(
-                conversationId: $this->conversation->id,
-                model: $this->teamModel->fast_model,
-                fullContent: $fullContent,
-                completedTools: $completedTools,
-                streamResult: $streamResult,
-                interrupted: $interrupted,
-                cleanContent: false,
-                partialReasoning: $partialReasoning,
-            );
-
-            if ($message) {
-                $this->messages[] = [
-                    'role' => 'assistant',
-                    'content' => $message->content,
-                    'metadata' => $message->metadata,
-                    'input_tokens' => $message->input_tokens,
-                    'output_tokens' => $message->output_tokens,
-                    'cost' => (float) $message->cost,
-                ];
-            }
-
-            $saved = true;
-
-            $this->writeChatDebugLog(
+            $streamResult = $client->streamChatWithTools(
                 systemPrompt: $systemPrompt,
+                messages: $apiMessages,
                 tools: $chatTools,
-                apiMessages: $apiMessages,
-                responseContent: $fullContent,
-                completedTools: $completedTools,
-                streamResult: $streamResult,
-                interrupted: $interrupted,
+                toolExecutor: $toolExecutor,
+                temperature: 0.7,
+                useServerTools: $useServerTools,
+                bus: $bus,
             );
 
-            $this->isStreaming = false;
+            $this->writeChatDebugLog($systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), $streamResult, false);
+            $this->persistTurn($bus, $streamResult, interrupted: false);
+            $bus->publish('turn_complete');
+
+        } catch (TurnStoppedException) {
+            $this->writeChatDebugLog($systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true);
+            $this->persistTurn($bus, streamResult: null, interrupted: true);
+            try {
+                $bus->publish('turn_interrupted');
+            } catch (TurnStoppedException) {
+                broadcast(new \App\Events\ConversationEvent($this->conversation->id, 'turn_interrupted', []));
+            }
+
+        } catch (\Throwable $e) {
+            $this->writeChatDebugLog($systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true);
+            $this->persistTurn($bus, streamResult: null, interrupted: true);
+            \Log::error('ask() failed', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
+            try {
+                $bus->publish('turn_error', ['message' => $e->getMessage()]);
+            } catch (TurnStoppedException) {
+                broadcast(new \App\Events\ConversationEvent($this->conversation->id, 'turn_error', ['message' => $e->getMessage()]));
+            }
         }
+
+        $this->loadMessages();
+        $this->isStreaming = false;
     }
 
-    /**
-     * Build metadata + create the assistant Message row. Used by both the
-     * happy-path finally block and the shutdown backstop. Static so the
-     * shutdown closure doesn't need to capture $this — a Livewire component's
-     * lifecycle is unpredictable at shutdown time.
-     *
-     * @param array<int, ToolEvent> $completedTools
-     */
-    private static function persistAssistantMessage(
-        int $conversationId,
-        string $model,
-        string $fullContent,
-        array $completedTools,
-        ?StreamResult $streamResult,
-        bool $interrupted,
-        bool $cleanContent,
-        string $partialReasoning = '',
-    ): ?Message {
-        $metadata = [];
-        if (! empty($completedTools)) {
-            $metadata['tools'] = collect($completedTools)->map(function (ToolEvent $t) {
-                $entry = [
-                    'name' => $t->name,
-                    'args' => $t->arguments,
-                ];
-                $result = json_decode($t->result ?? '{}', true);
-                if (isset($result['card'])) {
-                    $entry['card'] = $result['card'];
-                }
-                if (isset($result['piece_id'])) {
-                    $entry['piece_id'] = $result['piece_id'];
-                }
-                if (isset($result['status'])) {
-                    $entry['status'] = $result['status'];
-                }
-                return $entry;
-            })->toArray();
-        }
-        if ($streamResult && $streamResult->webSearchRequests > 0) {
-            $metadata['web_searches'] = $streamResult->webSearchRequests;
-        }
-        $reasoning = $streamResult?->reasoningContent ?: $partialReasoning;
-        if ($reasoning !== '') {
-            $metadata['reasoning'] = $reasoning;
-        }
-        if ($streamResult && $streamResult->reasoningTokens > 0) {
-            $metadata['reasoning_tokens'] = $streamResult->reasoningTokens;
-        }
-        if ($interrupted) {
-            $metadata['interrupted'] = true;
-        }
-
-        if ($fullContent === '' && empty($metadata)) {
-            return null;
-        }
-
-        return Message::create([
-            'conversation_id' => $conversationId,
-            'role' => 'assistant',
-            'content' => $fullContent,
-            'model' => $model,
-            'input_tokens' => $streamResult?->inputTokens ?? 0,
-            'output_tokens' => $streamResult?->outputTokens ?? 0,
-            'cost' => $streamResult?->cost ?? 0,
-            'metadata' => ! empty($metadata) ? $metadata : null,
-        ]);
-    }
-
-    /**
-     * Append a structured JSON line to storage/logs/chat-debug.log for each
-     * completed ask() turn. Captures everything needed to diagnose why a model
-     * did or did not call tools: full system prompt, registered tool schemas,
-     * conversation history sent, raw response, every tool invocation with args
-     * and result, plus token/cost/web-search metrics.
-     */
     private function writeChatDebugLog(
         string $systemPrompt,
         array $tools,
         array $apiMessages,
         string $responseContent,
-        array $completedTools,
+        array $busEvents,
         ?StreamResult $streamResult,
         bool $interrupted,
     ): void {
         $entry = [
-            'ts' => now()->toIso8601String(),
-            'conversation_id' => $this->conversation->id,
-            'type' => $this->conversation->type,
-            'topic_id' => $this->conversation->topic_id,
-            'team_id' => $this->teamModel->id,
-            'model' => $this->teamModel->fast_model,
-            'system_prompt' => $systemPrompt,
-            'tool_schemas' => array_map(fn ($t) => $t['function']['name'] ?? ($t['type'] ?? 'unknown'), $tools),
-            'history_sent' => $apiMessages,
+            'ts'               => now()->toIso8601String(),
+            'conversation_id'  => $this->conversation->id,
+            'type'             => $this->conversation->type,
+            'topic_id'         => $this->conversation->topic_id,
+            'team_id'          => $this->teamModel->id,
+            'model'            => $this->teamModel->fast_model,
+            'system_prompt'    => $systemPrompt,
+            'tool_schemas'     => array_map(fn ($t) => $t['function']['name'] ?? ($t['type'] ?? 'unknown'), $tools),
+            'history_sent'     => $apiMessages,
             'response_content' => $responseContent,
-            'tool_calls' => array_map(fn (ToolEvent $t) => [
-                'name' => $t->name,
-                'args' => $t->arguments,
-                'result' => mb_substr((string) ($t->result ?? ''), 0, 2000),
-            ], $completedTools),
-            'input_tokens' => $streamResult?->inputTokens ?? 0,
-            'output_tokens' => $streamResult?->outputTokens ?? 0,
-            'cost' => (float) ($streamResult?->cost ?? 0),
-            'web_searches' => (int) ($streamResult?->webSearchRequests ?? 0),
-            'interrupted' => $interrupted,
+            'bus_events'       => array_map(fn ($e) => ['type' => $e['type'], 'agent' => $e['payload']['agent'] ?? null], $busEvents),
+            'input_tokens'     => $streamResult?->inputTokens ?? 0,
+            'output_tokens'    => $streamResult?->outputTokens ?? 0,
+            'cost'             => (float) ($streamResult?->cost ?? 0),
+            'web_searches'     => (int) ($streamResult?->webSearchRequests ?? 0),
+            'interrupted'      => $interrupted,
         ];
 
         try {
@@ -619,24 +467,6 @@ new class extends Component
         } catch (\Throwable $e) {
             \Log::warning('chat-debug log write failed', ['error' => $e->getMessage()]);
         }
-    }
-
-    /**
-     * Called by Alpine.js polling on the active sub-agent card.
-     * Returns the list of intermediate tool calls made so far for the currently
-     * running sub-agent, or an empty array if no agent is active.
-     */
-    public function pollSubagentTools(): array
-    {
-        if (! $this->conversation) {
-            return [];
-        }
-        $conversationId = $this->conversation->id;
-        $callId = \Illuminate\Support\Facades\Cache::get("subagent-active:{$conversationId}");
-        if ($callId === null) {
-            return [];
-        }
-        return \Illuminate\Support\Facades\Cache::get("subagent-tools:{$callId}:{$conversationId}", []);
     }
 
     public function getConversationStatsProperty(): array
@@ -661,7 +491,7 @@ new class extends Component
         return $this->view()->title($this->conversation?->title ?? __('New conversation'));
     }
 
-    private function loadMessages(): void
+    public function loadMessages(): void
     {
         $this->messages = $this->conversation->messages
             ->map(fn (Message $m) => [
@@ -703,372 +533,6 @@ new class extends Component
         $content = preg_replace("/\n{3,}/", "\n\n", $content);
 
         return trim($content);
-    }
-
-    /**
-     * Stream UI: text content first, then tools below as pills, then active tool.
-     */
-    private function streamUI(string $content, array $completedTools, ?ToolEvent $activeTool): void
-    {
-        $html = '';
-
-        // Text content first
-        if ($content !== '') {
-            $isError = str_starts_with($content, 'Error:');
-            $textClass = $isError ? 'whitespace-pre-wrap text-red-400' : 'whitespace-pre-wrap';
-            $html .= '<div class="' . $textClass . '">' . e($content) . '</div>';
-        }
-
-        // Writer sub-agents get dedicated full-width cards instead of small pills.
-        // Suppress the pill spinner for them but keep $activeTool intact so the
-        // activeSubAgentCard() at the bottom still renders.
-        $writerTools = ['research_topic', 'pick_audience', 'create_outline', 'fetch_style_reference', 'write_blog_post', 'proofread_blog_post', 'propose_posts', 'update_post', 'delete_post', 'replace_all_posts'];
-        $isWriterTool = $activeTool && in_array($activeTool->name, $writerTools, true);
-
-        if ($activeTool && ! $isWriterTool) {
-            $label = match ($activeTool->name) {
-                'fetch_url' => 'Reading ' . ($activeTool->arguments['url'] ?? ''),
-                'brave_web_search' => 'Searching: ' . ($activeTool->arguments['query'] ?? ''),
-                'update_brand_intelligence' => 'Updating brand profile',
-                'save_topics' => 'Saving topics...',
-                default => $activeTool->name,
-            };
-            $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
-            foreach ($completedTools as $tool) {
-                $html .= $this->toolPill($tool, false);
-            }
-            $html .= '<span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs text-indigo-400"><svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ' . e($label) . '</span>';
-            $html .= '</div>';
-        } elseif (! empty($completedTools)) {
-            // All tools done — show completed pills (excludes writer tools; those get their own cards)
-            $pills = array_filter($completedTools, fn ($t) => ! in_array($t->name, $writerTools, true));
-            if (! empty($pills)) {
-                $html .= '<div class="mt-2 flex flex-wrap items-center gap-1.5">';
-                foreach ($pills as $tool) {
-                    $html .= $this->toolPill($tool, false);
-                }
-                $html .= '</div>';
-            }
-        } elseif ($content === '') {
-            $html .= '<span class="inline-flex items-center gap-1.5 text-zinc-500"><svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Thinking...</span>';
-        }
-
-        // Saved topic cards
-        $html .= $this->savedTopicCards($completedTools);
-        $html .= $this->contentPieceCards($completedTools);
-        $html .= $this->socialPostCards($completedTools);
-        // Processing card for the currently-running sub-agent, if any
-        if ($activeTool !== null) {
-            $html .= $this->activeSubAgentCard($activeTool);
-        }
-
-        $this->stream(to: 'streamed-response', content: $html, replace: true);
-    }
-
-    /**
-     * Render a full-width "working" card while a sub-agent tool is in flight.
-     * Gives the user a visible dedicated area per dispatched agent (rather
-     * than just the small pill), with a note that the agent's output will
-     * replace this card when it finishes.
-     */
-    private function activeSubAgentCard(ToolEvent $activeTool): string
-    {
-        $agentMap = [
-            'research_topic' => ['title' => 'Research sub-agent', 'hint' => 'Searching the web and extracting structured claims…', 'color' => 'purple'],
-            'pick_audience' => ['title' => 'Audience sub-agent', 'hint' => 'Selecting the best audience persona…', 'color' => 'amber'],
-            'create_outline' => ['title' => 'Editor sub-agent', 'hint' => 'Building an outline from the research claims…', 'color' => 'blue'],
-            'fetch_style_reference' => ['title' => 'Style sub-agent', 'hint' => 'Finding style reference posts…', 'color' => 'violet'],
-            'write_blog_post' => ['title' => 'Writer sub-agent', 'hint' => 'Composing the blog post from the outline…', 'color' => 'green'],
-            'proofread_blog_post' => ['title' => 'Proofread sub-agent', 'hint' => 'Applying the requested revisions…', 'color' => 'green'],
-            'propose_posts' => ['title' => 'Funnel sub-agent', 'hint' => 'Drafting social posts for the funnel…', 'color' => 'pink'],
-            'update_post' => ['title' => 'Funnel sub-agent', 'hint' => 'Updating one of the social posts…', 'color' => 'pink'],
-            'delete_post' => ['title' => 'Funnel sub-agent', 'hint' => 'Removing a post from the funnel…', 'color' => 'pink'],
-            'replace_all_posts' => ['title' => 'Funnel sub-agent', 'hint' => 'Rebuilding the social posts from scratch…', 'color' => 'pink'],
-        ];
-
-        if (! isset($agentMap[$activeTool->name])) {
-            return '';
-        }
-
-        $meta = $agentMap[$activeTool->name];
-        $colorText = "text-{$meta['color']}-400";
-
-        $spinner = '<svg class="size-3.5 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-
-        // Alpine.js polls pollSubagentTools() every 2 s and renders tool pills
-        // as the sub-agent works. Pills disappear once the card is replaced by
-        // the completed card (which carries intermediate_tools in its payload).
-        return sprintf(
-            '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3"'
-            . ' x-data="{ tools: [] }"'
-            . ' x-init="() => { const poll = () => $wire.pollSubagentTools().then(r => { tools = r; }); poll(); const id = setInterval(poll, 2000); $once(() => clearInterval(id)); }">'
-            . '<div class="flex items-center gap-2">'
-            . '<span class="%s">%s</span>'
-            . '<span class="text-xs font-semibold %s">%s</span>'
-            . '<span class="text-xs text-zinc-500">working…</span>'
-            . '</div>'
-            . '<div class="mt-1 text-xs text-zinc-400">%s</div>'
-            . '<div class="mt-2 flex flex-wrap gap-1" x-show="tools.length > 0">'
-            . '<template x-for="(tool, i) in tools" :key="i">'
-            . '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700">'
-            . '<svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>'
-            . '<span x-text="tool.name.replace(/_/g, \' \')"></span>'
-            . '</span>'
-            . '</template>'
-            . '</div>'
-            . '</div>',
-            $colorText,
-            $spinner,
-            $colorText,
-            e($meta['title']),
-            e($meta['hint']),
-        );
-    }
-
-    /**
-     * Pills row showing the intermediate tool calls the sub-agent made (web_search, fetch_url, …).
-     * Returns empty string if the card carries no intermediate_tools.
-     */
-    private function intermediateToolsPills(array $card): string
-    {
-        $tools = $card['intermediate_tools'] ?? [];
-        if (empty($tools)) {
-            return '';
-        }
-
-        $pills = '';
-        foreach ($tools as $t) {
-            $label = str_replace('_', ' ', $t['name'] ?? '');
-            $pills .= '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-400 border border-zinc-700">'
-                . '<svg class="size-3 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>'
-                . e($label)
-                . '</span>';
-        }
-
-        return '<div class="mt-2 flex flex-wrap gap-1">' . $pills . '</div>';
-    }
-
-    /**
-     * Small cost/tokens footer appended to a completed sub-agent card.
-     */
-    private function cardMetricsFooter(array $card): string
-    {
-        $cost = (float) ($card['cost'] ?? 0);
-        $inTok = (int) ($card['input_tokens'] ?? 0);
-        $outTok = (int) ($card['output_tokens'] ?? 0);
-        $reasoningTok = (int) ($card['reasoning_tokens'] ?? 0);
-        $reasoning = (string) ($card['reasoning'] ?? '');
-
-        if ($cost === 0.0 && $inTok === 0 && $outTok === 0 && $reasoning === '') {
-            return '';
-        }
-
-        $parts = [];
-        if ($inTok > 0 || $outTok > 0) {
-            $parts[] = number_format($inTok + $outTok) . ' tokens';
-        }
-        if ($reasoningTok > 0) {
-            $parts[] = number_format($reasoningTok) . ' reasoning';
-        }
-        if ($cost > 0) {
-            $parts[] = '$' . number_format($cost, 4);
-        }
-
-        $wrapAttr = $reasoning !== '' ? ' x-data="{ open: false }"' : '';
-        $html = '<div class="mt-2 border-t border-zinc-700 pt-2 text-xs text-zinc-500"' . $wrapAttr . '>';
-        $html .= '<div class="flex items-center justify-between gap-2">';
-        $html .= '<span>' . e(implode(' · ', $parts)) . '</span>';
-        if ($reasoning !== '') {
-            $html .= '<button @click="open = !open" class="inline-flex items-center gap-1 hover:text-zinc-300 transition-colors">';
-            $html .= 'reasoning';
-            $html .= '<svg x-bind:class="open ? \'rotate-180\' : \'\'" class="size-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
-            $html .= '</button>';
-        }
-        $html .= '</div>';
-        if ($reasoning !== '') {
-            $html .= '<div x-show="open" x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-2 text-xs text-zinc-400 whitespace-pre-wrap">' . e($reasoning) . '</div>';
-        }
-        $html .= '</div>';
-        return $html;
-    }
-
-    private function toolPill(ToolEvent $tool, bool $active): string
-    {
-        $label = match ($tool->name) {
-            'fetch_url' => 'Read ' . ($tool->arguments['url'] ?? ''),
-            'brave_web_search' => 'Searched: ' . ($tool->arguments['query'] ?? ''),
-            'update_brand_intelligence' => 'Updated profile: ' . implode(', ', json_decode($tool->result ?? '{}', true)['sections'] ?? []),
-            'save_topics' => 'Saved ' . (json_decode($tool->result ?? '{}', true)['count'] ?? 0) . ' topics',
-            'research_topic' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'ok'
-                    ? 'Gathered ' . count($r['card']['claims'] ?? []) . ' claims'
-                    : 'Research failed';
-            })(),
-            'create_outline' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'ok' ? 'Outline ready' : 'Outline failed';
-            })(),
-            'write_blog_post' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'ok' ? 'Draft created' : 'Draft failed';
-            })(),
-            'proofread_blog_post' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'ok' ? 'Revised' : 'Proofread failed';
-            })(),
-            'propose_posts' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'saved' ? 'Saved ' . ($r['count'] ?? 0) . ' posts' : 'Funnel failed';
-            })(),
-            'update_post' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'saved' ? 'Updated post' : 'Update failed';
-            })(),
-            'delete_post' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'deleted' ? 'Deleted post' : 'Delete failed';
-            })(),
-            'replace_all_posts' => (function () use ($tool) {
-                $r = json_decode($tool->result ?? '{}', true);
-                return ($r['status'] ?? null) === 'saved' ? 'Rebuilt funnel (' . ($r['count'] ?? 0) . ' posts)' : 'Rebuild failed';
-            })(),
-            default => $tool->name,
-        };
-
-        $classes = 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs';
-        $classes .= $active
-            ? ' bg-indigo-500/10 text-indigo-400'
-            : ' bg-zinc-500/10 text-zinc-500';
-
-        $icon = $active ? '<span class="animate-spin">&#8635;</span>' : '&#10003;';
-
-        return "<span class=\"{$classes}\">{$icon} " . e($label) . '</span>';
-    }
-
-    private function socialPostCards(array $completedTools): string
-    {
-        $html = '';
-        $piece = $this->conversation?->contentPiece;
-        $socialUrl = $piece
-            ? route('social.show', ['current_team' => $this->teamModel, 'contentPiece' => $piece])
-            : route('social.index', ['current_team' => $this->teamModel]);
-
-        foreach ($completedTools as $tool) {
-            $result = json_decode($tool->result ?? '{}', true);
-            if ($tool->name === 'propose_posts' || $tool->name === 'replace_all_posts') {
-                if (($result['status'] ?? null) !== 'saved') {
-                    continue;
-                }
-                $posts = $tool->arguments['posts'] ?? [];
-                $verb = $tool->name === 'replace_all_posts' ? 'Rebuilt funnel' : 'Saved funnel';
-                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
-                $html .= '<div class="flex items-center justify-between mb-2">';
-                $html .= '<span class="text-xs text-pink-400">&#10003; ' . e($verb) . ' &middot; ' . count($posts) . ' posts</span>';
-                $html .= '<a href="' . e($socialUrl) . '" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-300">Open in Social &rarr;</a>';
-                $html .= '</div>';
-                foreach ($posts as $p) {
-                    $platform = $p['platform'] ?? '';
-                    $platformLabel = match ($platform) {
-                        'linkedin' => 'LinkedIn',
-                        'facebook' => 'Facebook',
-                        'instagram' => 'Instagram',
-                        'short_video' => 'Short-form Video',
-                        default => $platform,
-                    };
-                    $html .= '<div class="mt-2 rounded-md border border-zinc-800 bg-zinc-950/50 p-2">';
-                    $html .= '<div class="flex items-center gap-2 text-xs text-zinc-400"><span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] uppercase">' . e($platformLabel) . '</span></div>';
-                    $html .= '<div class="mt-1 text-sm font-semibold text-zinc-200">' . e($p['hook'] ?? '') . '</div>';
-                    $html .= '<div class="mt-1 text-xs text-zinc-400 line-clamp-2 whitespace-pre-line">' . e($p['body'] ?? '') . '</div>';
-                    $html .= '</div>';
-                }
-                $html .= '</div>';
-            } elseif ($tool->name === 'update_post') {
-                if (($result['status'] ?? null) !== 'saved') continue;
-                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">';
-                $html .= '<span class="text-pink-400">&#10003;</span> Updated post #' . (int) ($result['id'] ?? 0);
-                $html .= ' &middot; <a href="' . e($socialUrl) . '" wire:navigate class="text-zinc-500 hover:text-zinc-300">Open in Social &rarr;</a>';
-                $html .= '</div>';
-            } elseif ($tool->name === 'delete_post') {
-                if (($result['status'] ?? null) !== 'deleted') continue;
-                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-400">';
-                $html .= '<span class="text-pink-400">&#10003;</span> Deleted post #' . (int) ($result['id'] ?? 0);
-                $html .= '</div>';
-            }
-        }
-        return $html;
-    }
-
-    private function savedTopicCards(array $completedTools): string
-    {
-        $html = '';
-        $topicsUrl = route('topics', ['current_team' => $this->teamModel]);
-        foreach ($completedTools as $tool) {
-            if ($tool->name !== 'save_topics') {
-                continue;
-            }
-            $topics = $tool->arguments['topics'] ?? [];
-            foreach ($topics as $topic) {
-                $html .= '<div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">';
-                $html .= '<div class="flex items-center justify-between mb-1">';
-                $html .= '<span class="text-xs text-purple-400">&#10003; Saved</span>';
-                $html .= '<a href="' . e($topicsUrl) . '" class="text-xs text-zinc-500 hover:text-zinc-300">Manage in Topics &rarr;</a>';
-                $html .= '</div>';
-                $html .= '<div class="text-sm font-semibold text-zinc-200">' . e($topic['title'] ?? '') . '</div>';
-                $html .= '<div class="mt-1 text-xs text-zinc-400">' . e($topic['angle'] ?? '') . '</div>';
-                $html .= '</div>';
-            }
-        }
-        return $html;
-    }
-
-    private function contentPieceCards(array $completedTools): string
-    {
-        $html = '';
-        $seenPieceIds = [];
-
-        $skippable = ['pick_audience', 'fetch_style_reference'];
-
-        foreach ($completedTools as $tool) {
-            $result = json_decode($tool->result ?? '{}', true);
-            $status = $result['status'] ?? '';
-
-            if ($status === 'skipped' && in_array($tool->name, $skippable, true)) {
-                $html .= $this->renderSkippedCard($tool->name, $result['reason'] ?? '');
-                continue;
-            }
-
-            if ($status !== 'ok') {
-                continue;
-            }
-
-            $card = $result['card'] ?? null;
-            $kind = $card['kind'] ?? null;
-
-            if ($tool->name === 'research_topic' && $kind === 'research') {
-                $html .= $this->renderResearchCard($card);
-            } elseif ($tool->name === 'pick_audience' && $kind === 'audience') {
-                $html .= $this->renderAudienceCard($card);
-            } elseif ($tool->name === 'create_outline' && $kind === 'outline') {
-                $html .= $this->renderOutlineCard($card);
-            } elseif ($tool->name === 'fetch_style_reference' && $kind === 'style_reference') {
-                $html .= $this->renderStyleReferenceCard($card);
-            } elseif (in_array($tool->name, ['write_blog_post', 'proofread_blog_post'], true)) {
-                $pieceId = $result['piece_id'] ?? null;
-                if ($pieceId === null || isset($seenPieceIds[$pieceId])) {
-                    continue;
-                }
-                $seenPieceIds[$pieceId] = true;
-
-                $piece = \App\Models\ContentPiece::where('id', $pieceId)
-                    ->where('team_id', $this->teamModel->id)
-                    ->first();
-                if ($piece) {
-                    $html .= $this->renderContentPieceCard($piece, $tool->name, $card ?? []);
-                }
-            }
-        }
-        return $html;
     }
 
     private function renderResearchCard(array $card): string
@@ -1601,18 +1065,8 @@ new class extends Component
             @if ($isStreaming)
                 <div class="flex justify-center" x-data="{ stopping: false }">
                     <flux:button variant="danger" size="sm" icon="stop-circle"
-                        x-bind:disabled="stopping"
-                        x-on:click="
-                            stopping = true;
-                            // stopAndWait sets a cache flag the streaming worker polls
-                            // each iteration, so it breaks out of the foreach promptly
-                            // (no waiting on connection_aborted slow path). Then it
-                            // polls the DB until the partial is persisted and returns
-                            // with $messages refreshed — Livewire renders the partial
-                            // inline. No reload required.
-                            $wire.stopAndWait();">
-                        <span x-show="!stopping">{{ __('Stop generating') }}</span>
-                        <span x-show="stopping" x-cloak>{{ __('Saving partial…') }}</span>
+                        x-on:click="$wire.stop()">
+                        {{ __('Stop generating') }}
                     </flux:button>
                 </div>
             @else
