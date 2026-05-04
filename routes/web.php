@@ -21,6 +21,8 @@ Route::prefix('{current_team}')
         Route::livewire('topics', 'pages::teams.topics')->name('topics');
         Route::livewire('content', 'pages::teams.content')->name('content.index');
         Route::livewire('content/{contentPiece}', 'pages::teams.content-piece')->name('content.show');
+        Route::livewire('social', 'pages::teams.social')->name('social.index');
+        Route::livewire('social/{contentPiece}', 'pages::teams.social-piece')->name('social.show');
     });
 
 Route::middleware(['auth'])->group(function () {
