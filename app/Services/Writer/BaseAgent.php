@@ -149,7 +149,7 @@ abstract class BaseAgent implements Agent
 
         $onToolCall = function (string $name, array $args) use ($submitToolName): void {
             if ($this->conversationId !== null && Cache::get("conv-stop:{$this->conversationId}")) {
-                throw new TurnStoppedException('Stopped by user.');
+                throw new TurnStoppedException('Stopped by the user.');
             }
             $this->bus?->publish('subagent_tool_call', [
                 'agent' => $submitToolName,
@@ -209,11 +209,15 @@ abstract class BaseAgent implements Agent
 
         if ($payload === null) {
             if ($this->lastTransportError === 'stopped') {
-                $this->bus?->publish('subagent_error', [
-                    'agent'   => $submitToolName,
-                    'message' => 'Stopped.',
-                ]);
-                return AgentResult::error('Stopped.');
+                try {
+                    $this->bus?->publish('subagent_error', [
+                        'agent'   => $submitToolName,
+                        'message' => 'Stopped by the user.',
+                    ]);
+                } catch (TurnStoppedException) {
+                    // Already consumed the stop key; swallow and re-throw below.
+                }
+                throw new TurnStoppedException('Stopped by the user.');
             }
             $hint = $this->lastTextResponse !== null
                 ? ' Model said: "' . mb_substr($this->lastTextResponse, 0, 300) . '"'
@@ -339,9 +343,19 @@ abstract class BaseAgent implements Agent
         $conversationId = $this->conversationId;
         $stopCheck = function () use ($conversationId): void {
             if ($conversationId !== null && Cache::get("conv-stop:{$conversationId}")) {
-                throw new TurnStoppedException('Stopped by user.');
+                throw new TurnStoppedException('Stopped by the user.');
             }
         };
+
+        $bus = $this->bus;
+        $onReasoningChunk = $bus !== null
+            ? function (string $chunk) use ($bus, $submitToolName): void {
+                $bus->publish('subagent_reasoning_chunk', [
+                    'agent' => $submitToolName,
+                    'content' => $chunk,
+                ]);
+            }
+            : null;
 
         try {
             $result = $client->chat(
@@ -356,6 +370,7 @@ abstract class BaseAgent implements Agent
                 timeout: $timeout,
                 onToolCall: $onToolCall,
                 stopCheck: $stopCheck,
+                onReasoningChunk: $onReasoningChunk,
             );
         } catch (TurnStoppedException) {
             SubagentLogger::write([
@@ -439,6 +454,7 @@ abstract class BaseAgent implements Agent
                     timeout: $timeout,
                     onToolCall: $onToolCall,
                     stopCheck: $stopCheck,
+                    onReasoningChunk: $onReasoningChunk,
                 );
             } catch (TurnStoppedException) {
                 SubagentLogger::write([

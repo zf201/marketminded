@@ -50,7 +50,7 @@ new class extends Component
         {{-- Quick Access --}}
         <div>
             <flux:heading size="lg" class="mb-3">{{ __('Quick Access') }}</flux:heading>
-            <div class="grid gap-4 sm:grid-cols-3">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <a href="{{ route('create.start', ['current_team' => $teamModel, 'type' => 'brand']) }}" wire:navigate>
                     <flux:card class="flex flex-col gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-700">
                         <flux:icon name="sparkles" variant="mini" />
@@ -70,6 +70,13 @@ new class extends Component
                         <flux:icon name="pencil-square" variant="mini" />
                         <flux:heading size="sm">{{ __('Write a Blog Post') }}</flux:heading>
                         <flux:text>{{ __('Start a new AI-assisted draft from a topic or brief.') }}</flux:text>
+                    </flux:card>
+                </a>
+                <a href="{{ route('create.start', ['current_team' => $teamModel, 'type' => 'funnel']) }}" wire:navigate>
+                    <flux:card class="flex flex-col gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+                        <flux:icon name="megaphone" variant="mini" />
+                        <flux:heading size="sm">{{ __('Build a Funnel') }}</flux:heading>
+                        <flux:text>{{ __('Turn a content piece into 3–6 social posts that drive traffic back.') }}</flux:text>
                     </flux:card>
                 </a>
             </div>

@@ -4,7 +4,7 @@ use App\Services\ConversationBus;
 use App\Services\TurnStoppedException;
 use Illuminate\Support\Facades\Cache;
 
-test('ConversationBus accumulates text from text_chunk events', function () {
+test('ConversationBus accumulates text and coalesces consecutive text_chunks', function () {
     $bus = new class(99) extends ConversationBus {
         protected function doBroadcast(string $type, array $payload): void {}
     };
@@ -13,7 +13,10 @@ test('ConversationBus accumulates text from text_chunk events', function () {
     $bus->publish('text_chunk', ['content' => 'world']);
 
     expect($bus->text())->toBe('Hello world');
-    expect($bus->events())->toHaveCount(0); // text_chunks not stored in events[]
+    // Consecutive text_chunks coalesce into one event for compact persistence.
+    expect($bus->events())->toHaveCount(1);
+    expect($bus->events()[0]['type'])->toBe('text_chunk');
+    expect($bus->events()[0]['payload']['content'])->toBe('Hello world');
 });
 
 test('ConversationBus stores non-text events', function () {

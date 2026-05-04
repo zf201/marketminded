@@ -286,8 +286,21 @@ new class extends Component
         $systemPrompt = ChatPromptBuilder::build($type, $this->teamModel, $this->conversation);
         $tools        = ChatPromptBuilder::tools($type);
 
+        // Stamp interrupted assistant turns with an explicit note so the model
+        // knows the previous response was cut short by the user — instead of
+        // hallucinating reasons or trying to silently continue.
         $apiMessages = collect($this->messages)
-            ->map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']])
+            ->filter(fn ($m) => empty($m['is_live']))
+            ->map(function ($m) {
+                $content = $m['content'] ?? '';
+                if ($m['role'] === 'assistant' && ! empty($m['metadata']['interrupted'])) {
+                    $content = trim($content) === ''
+                        ? '[The previous response was interrupted by the user before it completed.]'
+                        : $content . "\n\n[The previous response was interrupted by the user before it completed.]";
+                }
+                return ['role' => $m['role'], 'content' => $content];
+            })
+            ->values()
             ->toArray();
 
         $webSearchProvider = $this->teamModel->web_search_provider ?? 'openrouter_builtin';
@@ -328,17 +341,41 @@ new class extends Component
             $team, $conversation, $bus, &$priorTurnTools
         ): string {
             if ($name === 'update_brand_intelligence') {
-                return $brandHandler->execute($team, $args);
+                $bus->publish('subagent_started', ['agent' => 'brand', 'title' => __('Updating brand profile'), 'color' => 'sky']);
+                $result = $brandHandler->execute($team, $args);
+                $decoded = json_decode($result, true) ?? [];
+                if (($decoded['status'] ?? '') === 'saved') {
+                    $bus->publish('subagent_completed', ['agent' => 'brand', 'card' => [
+                        'kind' => 'brand_update',
+                        'summary' => __('Brand profile updated'),
+                        'sections' => $decoded['sections'] ?? [],
+                    ]]);
+                } else {
+                    $bus->publish('subagent_error', ['agent' => 'brand', 'message' => $decoded['message'] ?? __('Failed to update brand profile.')]);
+                }
+                return $result;
             }
             if ($name === 'save_topics') {
-                $bus->publish('subagent_started', ['agent' => 'topics', 'title' => 'Saving topics', 'color' => 'teal']);
+                $bus->publish('subagent_started', ['agent' => 'topics', 'title' => __('Saving topics'), 'color' => 'teal']);
                 $result = $topicHandler->execute($team, $conversation->id, $args);
-                $saved = json_decode($result, true)['count'] ?? 0;
-                $bus->publish('subagent_completed', ['agent' => 'topics', 'card' => ['summary' => "Saved {$saved} topic(s) to backlog"]]);
+                $decoded = json_decode($result, true) ?? [];
+                $titles = $decoded['titles'] ?? [];
+                $bus->publish('subagent_completed', ['agent' => 'topics', 'card' => [
+                    'kind'       => 'topics',
+                    'summary'    => count($titles) . ' ' . __('topic(s) saved to backlog'),
+                    'titles'     => $titles,
+                    'topics_url' => route('topics', ['current_team' => $team]),
+                ]]);
                 return $result;
             }
             if ($name === 'fetch_url') {
-                return (new UrlFetcher)->fetch($args['url'] ?? '');
+                $url = $args['url'] ?? '';
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'fetch', 'id' => $pillId, 'status' => 'running', 'detail' => $url]);
+                $result = (new UrlFetcher)->fetch($url);
+                $failed = str_starts_with($result, 'Error fetching');
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $failed ? 'error' : 'ok']);
+                return $result;
             }
             if ($name === 'research_topic') {
                 $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
@@ -370,25 +407,52 @@ new class extends Component
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
             }
-            if ($name === 'propose_posts') {
+            if ($name === 'propose_posts' || $name === 'replace_all_posts') {
                 $piece = $conversation->contentPiece;
                 if (! $piece) {
                     return json_encode(['status' => 'error', 'message' => 'No content piece is associated with this conversation.']);
                 }
-                return $socialHandler->propose($team, $conversation->id, $piece, $args);
+                $title = $name === 'propose_posts' ? __('Proposing posts') : __('Replacing posts');
+                $bus->publish('subagent_started', ['agent' => 'social', 'title' => $title, 'color' => 'pink']);
+                $result = $name === 'propose_posts'
+                    ? $socialHandler->propose($team, $conversation->id, $piece, $args)
+                    : $socialHandler->replaceAll($team, $conversation->id, $piece, $args);
+                $decoded = json_decode($result, true) ?? [];
+                if (($decoded['status'] ?? '') === 'saved') {
+                    $ids = $decoded['ids'] ?? [];
+                    $posts = collect($args['posts'] ?? [])->values()->map(fn ($p, $i) => [
+                        'id'       => $ids[$i] ?? null,
+                        'platform' => $p['platform'] ?? '',
+                        'hook'     => $p['hook'] ?? '',
+                        'preview'  => mb_substr(strip_tags($p['body'] ?? ''), 0, 160),
+                    ])->all();
+                    $verb = $name === 'propose_posts' ? __('created') : __('replaced');
+                    $bus->publish('subagent_completed', ['agent' => 'social', 'card' => [
+                        'kind'    => 'social_posts',
+                        'summary' => count($posts) . ' ' . __('posts') . ' ' . $verb,
+                        'social_url' => route('social.show', ['current_team' => $team, 'contentPiece' => $piece->id]),
+                        'posts'   => $posts,
+                    ]]);
+                } else {
+                    $bus->publish('subagent_error', ['agent' => 'social', 'message' => $decoded['message'] ?? 'Failed to save posts.']);
+                }
+                return $result;
             }
             if ($name === 'update_post') {
-                return $socialHandler->update($team, $conversation->id, $args);
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'update post', 'id' => $pillId, 'status' => 'running']);
+                $result = $socialHandler->update($team, $conversation->id, $args);
+                $status = (json_decode($result, true)['status'] ?? '') === 'saved' ? 'ok' : 'error';
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $status]);
+                return $result;
             }
             if ($name === 'delete_post') {
-                return $socialHandler->delete($team, $args);
-            }
-            if ($name === 'replace_all_posts') {
-                $piece = $conversation->contentPiece;
-                if (! $piece) {
-                    return json_encode(['status' => 'error', 'message' => 'No content piece is associated with this conversation.']);
-                }
-                return $socialHandler->replaceAll($team, $conversation->id, $piece, $args);
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'delete post', 'id' => $pillId, 'status' => 'running']);
+                $result = $socialHandler->delete($team, $args);
+                $status = (json_decode($result, true)['status'] ?? '') === 'deleted' ? 'ok' : 'error';
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $status]);
+                return $result;
             }
             return "Unknown tool: {$name}";
         };
@@ -448,6 +512,10 @@ new class extends Component
         ?StreamResult $streamResult,
         bool $interrupted,
     ): void {
+        if (! env('CHAT_DEBUG_LOG', false)) {
+            return;
+        }
+
         $entry = [
             'ts'               => now()->toIso8601String(),
             'conversation_id'  => $this->conversation->id,
@@ -504,14 +572,27 @@ new class extends Component
     public function loadMessages(): void
     {
         $this->messages = $this->conversation->messages
-            ->map(fn (Message $m) => [
-                'role' => $m->role,
-                'content' => $this->cleanContent($m->content),
-                'metadata' => $m->metadata,
-                'input_tokens' => $m->input_tokens,
-                'output_tokens' => $m->output_tokens,
-                'cost' => (float) $m->cost,
-            ])
+            ->map(function (Message $m) {
+                $meta = $m->metadata;
+                if (is_array($meta) && ! empty($meta['events'])) {
+                    $meta['events'] = array_values(array_filter(
+                        $meta['events'],
+                        fn ($ev) => ! in_array(
+                            $ev['type'] ?? '',
+                            ['reasoning_chunk', 'subagent_reasoning_chunk'],
+                            true,
+                        ),
+                    ));
+                }
+                return [
+                    'role' => $m->role,
+                    'content' => $this->cleanContent($m->content),
+                    'metadata' => $meta,
+                    'input_tokens' => $m->input_tokens,
+                    'output_tokens' => $m->output_tokens,
+                    'cost' => (float) $m->cost,
+                ];
+            })
             ->toArray();
     }
 
@@ -524,11 +605,13 @@ new class extends Component
             $items[] = ['type' => 'reasoning', 'content' => $meta['reasoning']];
         }
 
-        if (! empty($message['content'])) {
-            $items[] = ['type' => 'text', 'content' => $message['content']];
+        $events = $meta['events'] ?? [];
+        $hasTextChunks = false;
+        foreach ($events as $ev) {
+            if (($ev['type'] ?? '') === 'text_chunk') { $hasTextChunks = true; break; }
         }
 
-        $findLastAgent = function (array &$items, string $agent): ?int {
+        $findLastSubagent = function (array $items, string $agent): ?int {
             for ($i = count($items) - 1; $i >= 0; $i--) {
                 if (($items[$i]['type'] ?? '') === 'subagent' && ($items[$i]['agent'] ?? '') === $agent) {
                     return $i;
@@ -536,42 +619,74 @@ new class extends Component
             }
             return null;
         };
+        $findPillById = function (array $items, string $id): ?int {
+            for ($i = count($items) - 1; $i >= 0; $i--) {
+                if (($items[$i]['type'] ?? '') === 'tool_pill' && ($items[$i]['id'] ?? '') === $id) {
+                    return $i;
+                }
+            }
+            return null;
+        };
 
-        foreach ($meta['events'] ?? [] as $event) {
+        foreach ($events as $event) {
             $type = $event['type'] ?? '';
             $p = $event['payload'] ?? [];
             $agent = $p['agent'] ?? '';
 
-            if ($type === 'subagent_started') {
+            if ($type === 'text_chunk') {
+                $content = $p['content'] ?? '';
+                $lastIdx = count($items) - 1;
+                if ($lastIdx >= 0 && ($items[$lastIdx]['type'] ?? '') === 'text') {
+                    $items[$lastIdx]['content'] .= $content;
+                } else {
+                    $items[] = ['type' => 'text', 'content' => $content];
+                }
+            } elseif ($type === 'subagent_started') {
                 $items[] = [
                     'type' => 'subagent', 'agent' => $agent,
                     'title' => $p['title'] ?? '', 'color' => $p['color'] ?? 'zinc',
                     'status' => 'working', 'pills' => [], 'card' => null, 'message' => null,
                 ];
             } elseif ($type === 'subagent_tool_call') {
-                $idx = $findLastAgent($items, $agent);
-                if ($idx === null) {
+                if ($agent === 'main') {
                     $items[] = [
-                        'type' => 'subagent', 'agent' => $agent,
-                        'title' => 'Tools used', 'color' => 'zinc',
-                        'status' => 'working', 'pills' => [], 'card' => null, 'message' => null,
+                        'type' => 'tool_pill',
+                        'id' => $p['id'] ?? '',
+                        'name' => str_replace('_', ' ', $p['name'] ?? '?'),
+                        'status' => $p['status'] ?? 'running',
+                        'detail' => $p['detail'] ?? null,
                     ];
-                    $idx = count($items) - 1;
+                } else {
+                    $idx = $findLastSubagent($items, $agent);
+                    if ($idx !== null) {
+                        $items[$idx]['pills'][] = str_replace('_', ' ', $p['name'] ?? '?');
+                    }
                 }
-                $items[$idx]['pills'][] = str_replace('_', ' ', $p['name'] ?? '?');
+            } elseif ($type === 'subagent_tool_call_status') {
+                $idx = $findPillById($items, $p['id'] ?? '');
+                if ($idx !== null) {
+                    $items[$idx]['status'] = $p['status'] ?? 'ok';
+                    if (! empty($p['error'])) $items[$idx]['error'] = $p['error'];
+                }
             } elseif ($type === 'subagent_completed') {
-                $idx = $findLastAgent($items, $agent);
+                $idx = $findLastSubagent($items, $agent);
                 if ($idx !== null) {
                     $items[$idx]['status'] = 'done';
                     $items[$idx]['card'] = $p['card'] ?? null;
                 }
             } elseif ($type === 'subagent_error') {
-                $idx = $findLastAgent($items, $agent);
+                $idx = $findLastSubagent($items, $agent);
                 if ($idx !== null) {
                     $items[$idx]['status'] = 'error';
                     $items[$idx]['message'] = $p['message'] ?? '';
                 }
             }
+        }
+
+        // Backwards compat: messages from before we persisted text_chunk events
+        // won't have inline text. Append the full content as one text item.
+        if (! $hasTextChunks && ! empty($message['content'])) {
+            $items[] = ['type' => 'text', 'content' => $message['content']];
         }
 
         foreach ($items as &$it) {
@@ -664,10 +779,13 @@ new class extends Component
         x-data
         x-init="
             const el = $el;
-            const shouldScroll = () => $wire.isStreaming || ($wire.messages && $wire.messages.length > 0);
+            let stick = true;
+            const atBottom = () => (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
             const scroll = () => el.scrollTop = el.scrollHeight;
-            if (shouldScroll()) scroll();
-            new MutationObserver(() => { if (shouldScroll()) scroll(); }).observe(el, { childList: true, subtree: true, characterData: true });
+            el.addEventListener('scroll', () => { stick = atBottom(); });
+            scroll();
+            stick = true;
+            new MutationObserver(() => { if (stick) scroll(); }).observe(el, { childList: true, subtree: true, characterData: true });
         "
     >
         @php
@@ -713,6 +831,12 @@ new class extends Component
                                                 <svg x-bind:class="open ? 'rotate-180' : ''" class="size-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                                 {{ __('Reasoning') }}
                                             </button>
+                                            <template x-if="item.streaming && item.content && !open">
+                                                <div class="mt-1 rounded-md border border-zinc-700 bg-zinc-900/50 px-2.5 py-1.5">
+                                                    <p class="truncate text-xs italic text-zinc-500"
+                                                       x-text="(item.content.split('\n').filter(l => l.trim()).pop() || '')"></p>
+                                                </div>
+                                            </template>
                                             <div x-show="open" x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-400 whitespace-pre-wrap" x-text="item.content"></div>
                                         </div>
                                     </template>
@@ -724,13 +848,45 @@ new class extends Component
                                            x-text="item.content"></p>
                                     </template>
 
+                                    {{-- Inline tool pill (main agent) --}}
+                                    <template x-if="item.type === 'tool_pill'">
+                                        <span class="my-1 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs border"
+                                              :class="{
+                                                'bg-zinc-800 text-zinc-300 border-zinc-700': item.status === 'running' || item.status === 'ok',
+                                                'bg-red-500/10 text-red-300 border-red-500/30': item.status === 'error',
+                                              }">
+                                            <template x-if="item.status === 'running'">
+                                                <flux:icon.loading class="size-3" />
+                                            </template>
+                                            <template x-if="item.status === 'ok'">
+                                                <span class="text-emerald-400">&#10003;</span>
+                                            </template>
+                                            <template x-if="item.status === 'error'">
+                                                <span class="text-red-400">&#9888;</span>
+                                            </template>
+                                            <span x-text="item.name"></span>
+                                            <template x-if="item.detail">
+                                                <span class="text-zinc-500 truncate max-w-xs">: <span x-text="item.detail"></span></span>
+                                            </template>
+                                        </span>
+                                    </template>
+
                                     {{-- Subagent: working --}}
                                     <template x-if="item.type === 'subagent' && item.status === 'working'">
-                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
-                                            <div class="flex items-center gap-2">
-                                                <span :class="'text-' + item.color + '-400'"><flux:icon.loading class="size-3.5" /></span>
-                                                <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'" x-text="item.title"></span>
-                                                <span class="text-xs text-zinc-500">working…</span>
+                                        <div class="mt-2 mb-4 rounded-lg border border-zinc-700 bg-zinc-900 p-3"
+                                             x-data="{ reasoningOpen: false }">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <div class="flex items-center gap-2">
+                                                    <span :class="'text-' + item.color + '-400'"><flux:icon.loading class="size-3.5" /></span>
+                                                    <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'" x-text="item.title"></span>
+                                                    <span class="text-xs text-zinc-500">working…</span>
+                                                </div>
+                                                <template x-if="item.reasoning">
+                                                    <button @click="reasoningOpen = !reasoningOpen" class="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+                                                        <svg x-bind:class="reasoningOpen ? 'rotate-180' : ''" class="size-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                                        {{ __('Reasoning') }}
+                                                    </button>
+                                                </template>
                                             </div>
                                             <template x-if="item.pills && item.pills.length > 0">
                                                 <div class="mt-2 flex flex-wrap gap-1">
@@ -742,18 +898,44 @@ new class extends Component
                                                     </template>
                                                 </div>
                                             </template>
+                                            <template x-if="item.reasoning && !reasoningOpen">
+                                                <p class="mt-2 truncate text-xs italic text-zinc-500"
+                                                   x-text="(item.reasoning.split('\n').filter(l => l.trim()).pop() || '')"></p>
+                                            </template>
+                                            <template x-if="item.reasoning && reasoningOpen">
+                                                <div x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-400 whitespace-pre-wrap" x-text="item.reasoning"></div>
+                                            </template>
                                         </div>
                                     </template>
 
                                     {{-- Subagent: done --}}
                                     <template x-if="item.type === 'subagent' && item.status === 'done'">
-                                        <div class="mt-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
+                                        <div class="mt-2 mb-4 rounded-lg border border-zinc-700 bg-zinc-900 p-3"
+                                             x-data="{ reasoningOpen: false }">
                                             <div class="flex items-center justify-between gap-2">
                                                 <span class="text-xs font-semibold" :class="'text-' + item.color + '-400'">&#10003; <span x-text="item.title"></span></span>
-                                                <template x-if="item.card && item.card.piece_id">
-                                                    <a :href="pieceUrl(item.card.piece_id)" class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
-                                                </template>
+                                                <div class="flex items-center gap-2">
+                                                    <template x-if="item.card && item.card.reasoning">
+                                                        <button @click="reasoningOpen = !reasoningOpen" class="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+                                                            <svg x-bind:class="reasoningOpen ? 'rotate-180' : ''" class="size-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                                            {{ __('Reasoning') }}
+                                                        </button>
+                                                    </template>
+                                                    <template x-if="item.card && item.card.piece_id">
+                                                        <a :href="pieceUrl(item.card.piece_id)" class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('Open') }} &rarr;</a>
+                                                    </template>
+                                                    <template x-if="item.card && item.card.social_url">
+                                                        <a :href="item.card.social_url" class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('View posts') }} &rarr;</a>
+                                                    </template>
+                                                    <template x-if="item.card && item.card.topics_url">
+                                                        <a :href="item.card.topics_url" class="text-xs text-indigo-400 hover:text-indigo-300">{{ __('View topics') }} &rarr;</a>
+                                                    </template>
+                                                </div>
                                             </div>
+
+                                            <template x-if="item.card && item.card.reasoning && reasoningOpen">
+                                                <div x-cloak class="mt-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-400 whitespace-pre-wrap" x-text="item.card.reasoning"></div>
+                                            </template>
 
                                             {{-- Pills (top-level "Tools used" rolled up) --}}
                                             <template x-if="item.pills && item.pills.length > 0">
@@ -764,8 +946,8 @@ new class extends Component
                                                 </div>
                                             </template>
 
-                                            {{-- Generic summary --}}
-                                            <template x-if="item.card && item.card.summary && item.card.kind !== 'content_piece'">
+                                            {{-- Generic summary (only when card has no rich kind) --}}
+                                            <template x-if="item.card && item.card.summary && !item.card.kind">
                                                 <p class="mt-1 text-xs text-zinc-400" x-text="item.card.summary"></p>
                                             </template>
 
@@ -812,12 +994,53 @@ new class extends Component
                                                     </template>
                                                 </ul>
                                             </template>
+
+                                            {{-- topics card --}}
+                                            <template x-if="item.card && item.card.kind === 'topics'">
+                                                <div class="mt-1">
+                                                    <div class="text-xs text-zinc-500" x-text="item.card.summary"></div>
+                                                    <ul class="mt-1 list-disc pl-5">
+                                                        <template x-for="(title, ti) in (item.card.titles || [])" :key="ti">
+                                                            <li class="text-xs text-zinc-300" x-text="title"></li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
+                                            </template>
+
+                                            {{-- brand_update card --}}
+                                            <template x-if="item.card && item.card.kind === 'brand_update'">
+                                                <div class="mt-1">
+                                                    <div class="text-xs text-zinc-500" x-text="item.card.summary"></div>
+                                                    <template x-if="(item.card.sections || []).length > 0">
+                                                        <div class="mt-1 flex flex-wrap gap-1">
+                                                            <template x-for="(section, si) in item.card.sections" :key="si">
+                                                                <span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-sky-500/10 text-sky-300 border border-sky-500/30 capitalize" x-text="section"></span>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+
+                                            {{-- social_posts card --}}
+                                            <template x-if="item.card && item.card.kind === 'social_posts'">
+                                                <div class="mt-2 space-y-2">
+                                                    <template x-for="(post, pi) in (item.card.posts || [])" :key="pi">
+                                                        <div class="rounded-md border border-zinc-700 bg-zinc-900/50 p-2">
+                                                            <div class="flex items-center gap-2 mb-1">
+                                                                <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-pink-500/10 text-pink-300 border border-pink-500/30" x-text="post.platform"></span>
+                                                                <span class="text-xs font-semibold text-zinc-200 truncate" x-text="post.hook"></span>
+                                                            </div>
+                                                            <p class="text-xs text-zinc-400 line-clamp-2" x-text="post.preview"></p>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </div>
                                     </template>
 
                                     {{-- Subagent: error --}}
                                     <template x-if="item.type === 'subagent' && item.status === 'error'">
-                                        <div class="mt-2 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
+                                        <div class="mt-2 mb-4 rounded-lg border border-red-900/50 bg-zinc-900 p-3">
                                             <span class="text-xs text-red-400">&#9888; <span x-text="item.title || item.agent"></span> failed</span>
                                             <p class="mt-1 text-xs text-zinc-500" x-text="item.message || ''"></p>
                                         </div>

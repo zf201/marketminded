@@ -22,7 +22,19 @@ class ConversationBus
 
         if ($type === 'text_chunk') {
             $this->text .= $payload['content'];
-        } else {
+            // Persist text alongside other events so order can be reconstructed
+            // for history. Coalesce consecutive text_chunks into one event so
+            // we don't blow up the events array.
+            $lastIdx = count($this->events) - 1;
+            if ($lastIdx >= 0 && ($this->events[$lastIdx]['type'] ?? '') === 'text_chunk') {
+                $this->events[$lastIdx]['payload']['content'] .= $payload['content'];
+            } else {
+                $this->events[] = compact('type', 'payload');
+            }
+        } elseif ($type !== 'reasoning_chunk' && $type !== 'subagent_reasoning_chunk') {
+            // Reasoning chunks are transient: they fire per token and only matter
+            // for the live UI. Persisting them would balloon message metadata
+            // and overflow the Livewire snapshot.
             $this->events[] = compact('type', 'payload');
         }
     }

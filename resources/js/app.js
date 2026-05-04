@@ -30,20 +30,51 @@ document.addEventListener('alpine:init', () => {
                     }
                     break;
                 }
+                case 'reasoning_chunk': {
+                    let r = this.items.find(i => i.type === 'reasoning' && i.streaming);
+                    if (!r) {
+                        r = { type: 'reasoning', content: '', streaming: true };
+                        this.items.unshift(r);
+                    }
+                    r.content += p.content;
+                    break;
+                }
                 case 'subagent_started':
                     this.items.push({
                         type: 'subagent', agent: p.agent,
                         title: p.title, color: p.color,
                         status: 'working', pills: [], card: null, message: null,
+                        reasoning: '',
                     });
                     break;
+                case 'subagent_reasoning_chunk': {
+                    const sa = this.findLastAgent(p.agent);
+                    if (sa) sa.reasoning = (sa.reasoning || '') + p.content;
+                    break;
+                }
                 case 'subagent_tool_call': {
-                    let sa = this.findLastAgent(p.agent);
-                    if (!sa) {
-                        sa = { type: 'subagent', agent: p.agent, title: 'Tools used', color: 'zinc', status: 'working', pills: [], card: null, message: null };
-                        this.items.push(sa);
+                    if (p.agent === 'main') {
+                        this.items.push({
+                            type: 'tool_pill',
+                            id: p.id || '',
+                            name: (p.name || '?').replace(/_/g, ' '),
+                            status: p.status || 'running',
+                            detail: p.detail || null,
+                        });
+                    } else {
+                        const sa = this.findLastAgent(p.agent);
+                        if (sa) sa.pills.push((p.name || '?').replace(/_/g, ' '));
                     }
-                    sa.pills.push(p.name.replace(/_/g, ' '));
+                    break;
+                }
+                case 'subagent_tool_call_status': {
+                    for (let i = this.items.length - 1; i >= 0; i--) {
+                        if (this.items[i].type === 'tool_pill' && this.items[i].id === p.id) {
+                            this.items[i].status = p.status || 'ok';
+                            if (p.error) this.items[i].error = p.error;
+                            break;
+                        }
+                    }
                     break;
                 }
                 case 'subagent_completed': {

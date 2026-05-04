@@ -12,6 +12,10 @@ class SubagentLogger
      */
     public static function write(array $entry): void
     {
+        if (! env('SUBAGENT_DEBUG_LOG', false)) {
+            return;
+        }
+
         try {
             $entry = ['ts' => now()->toIso8601String()] + $entry;
             file_put_contents(
