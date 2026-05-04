@@ -465,13 +465,13 @@ new class extends Component
                 return $entry;
             })->toArray();
         }
-        if ($streamResult?->webSearchRequests > 0) {
+        if ($streamResult && $streamResult->webSearchRequests > 0) {
             $metadata['web_searches'] = $streamResult->webSearchRequests;
         }
-        if ($streamResult?->reasoningContent !== '') {
+        if ($streamResult && $streamResult->reasoningContent !== '') {
             $metadata['reasoning'] = $streamResult->reasoningContent;
         }
-        if ($streamResult?->reasoningTokens > 0) {
+        if ($streamResult && $streamResult->reasoningTokens > 0) {
             $metadata['reasoning_tokens'] = $streamResult->reasoningTokens;
         }
         if ($interrupted) {
