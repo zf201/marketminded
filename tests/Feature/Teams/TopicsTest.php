@@ -60,3 +60,45 @@ test('topics page omits the sources disclosure when sources are empty', function
     Livewire::test('pages::teams.topics', ['current_team' => $team])
         ->assertDontSee('Sources (');
 });
+
+test('topics page embeds markdown payload including sources block when sources are present', function () {
+    [$user, $team] = makeOwnerWithTeam();
+
+    Topic::create([
+        'team_id' => $team->id,
+        'title' => 'How to ship faster',
+        'angle' => 'Practical takes from teams that ship daily.',
+        'sources' => ['https://example.com/a', 'https://example.com/b'],
+        'status' => 'available',
+    ]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::teams.topics', ['current_team' => $team])
+        ->assertSee('aria-label="Copy as markdown"', false)
+        ->assertSee('# How to ship faster', false)
+        ->assertSee('Practical takes from teams that ship daily.', false)
+        ->assertSee('## Sources', false)
+        // URLs in @js output are JSON-encoded with escaped slashes.
+        ->assertSee('- https:\/\/example.com\/a', false)
+        ->assertSee('- https:\/\/example.com\/b', false);
+});
+
+test('topics page embeds markdown payload without sources block when sources are empty', function () {
+    [$user, $team] = makeOwnerWithTeam();
+
+    Topic::create([
+        'team_id' => $team->id,
+        'title' => 'A bare topic',
+        'angle' => 'Just an angle.',
+        'sources' => [],
+        'status' => 'available',
+    ]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::teams.topics', ['current_team' => $team])
+        ->assertSee('aria-label="Copy as markdown"', false)
+        ->assertSee('# A bare topic', false)
+        ->assertDontSee('## Sources');
+});

@@ -71,6 +71,15 @@ new class extends Component
         @else
             <div class="grid gap-2 sm:grid-cols-2">
             @foreach ($this->topics as $topic)
+                @php
+                    $markdown = '# ' . $topic->title . "\n\n" . ($topic->angle ?? '') . "\n";
+                    if (!empty($topic->sources)) {
+                        $markdown .= "\n## Sources\n";
+                        foreach ($topic->sources as $source) {
+                            $markdown .= '- ' . $source . "\n";
+                        }
+                    }
+                @endphp
                 <div class="flex flex-col">
                     <flux:card class="flex flex-1 flex-col p-4">
                         <div class="flex items-start justify-between gap-4">
@@ -125,6 +134,25 @@ new class extends Component
                                 class="h-1.5 flex-1 cursor-pointer accent-indigo-500"
                             />
                             <flux:text class="w-5 shrink-0 text-xs font-medium text-zinc-400">{{ $topic->score ?? '-' }}</flux:text>
+
+                            <div
+                                x-data="{ copied: false, md: @js($markdown) }"
+                                class="ml-2 inline-flex"
+                            >
+                                <button
+                                    type="button"
+                                    aria-label="Copy as markdown"
+                                    @click="navigator.clipboard.writeText(md).then(() => { copied = true; setTimeout(() => copied = false, 1500); })"
+                                    class="inline-flex items-center text-xs text-zinc-500 hover:text-zinc-300"
+                                >
+                                    <svg x-show="!copied" class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m9 5h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.5c0-.621.504-1.125 1.125-1.125h7.5c.621 0 1.125.504 1.125 1.125v8.625"/>
+                                    </svg>
+                                    <svg x-show="copied" x-cloak class="size-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                    </svg>
+                                </button>
+                            </div>
 
                             @if ($topic->conversation_id)
                                 <a href="{{ route('create.chat', ['current_team' => $teamModel, 'conversation' => $topic->conversation_id]) }}" wire:navigate class="ml-2 inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300">
