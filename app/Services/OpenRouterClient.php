@@ -262,9 +262,8 @@ class OpenRouterClient
 
     /**
      * Stream a chat completion with tool support.
-     * Yields string chunks, ToolEvent objects, and a final StreamResult.
-     *
-     * @return \Generator<int, string|ToolEvent|StreamResult>
+     * Publishes text_chunk events to the bus as they arrive.
+     * Returns a StreamResult with token counts and final content.
      */
     public function streamChatWithTools(
         string $systemPrompt,
@@ -273,7 +272,8 @@ class OpenRouterClient
         ?callable $toolExecutor = null,
         float $temperature = 0.7,
         bool $useServerTools = true,
-    ): \Generator {
+        ?\App\Services\ConversationBus $bus = null,
+    ): \App\Services\StreamResult {
         $allMessages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
             $messages,
@@ -357,8 +357,6 @@ class OpenRouterClient
                             continue;
                         }
 
-                        yield new ToolEvent($fnName, $fnArgs, null, 'started');
-
                         if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
                             $toolResult = $this->braveSearchClient->search(
                                 $fnArgs['query'] ?? '',
@@ -371,8 +369,6 @@ class OpenRouterClient
                         } else {
                             $toolResult = "Unknown tool: {$fnName}";
                         }
-
-                        yield new ToolEvent($fnName, $fnArgs, $toolResult, 'completed');
 
                         $allMessages[] = [
                             'role' => 'tool',
@@ -387,7 +383,7 @@ class OpenRouterClient
                 $content = $this->normalizeContent($choice['content'] ?? '');
                 if ($content !== '') {
                     $fullContent .= $content;
-                    yield $content;
+                    $bus?->publish('text_chunk', ['content' => $content]);
                 }
 
                 break;
@@ -426,14 +422,13 @@ class OpenRouterClient
 
                     if (isset($delta['reasoning_content']) && $delta['reasoning_content'] !== '') {
                         $streamReasoningContent .= $delta['reasoning_content'];
-                        yield new ReasoningChunk($delta['reasoning_content']);
                     }
 
                     $content = $this->normalizeContent($delta['content'] ?? '');
                     if ($content !== '') {
                         $fullContent .= $content;
                         $streamContent .= $content;
-                        yield $content;
+                        $bus?->publish('text_chunk', ['content' => $content]);
                     }
 
                     if (isset($delta['tool_calls'])) {
@@ -499,8 +494,6 @@ class OpenRouterClient
                         continue;
                     }
 
-                    yield new ToolEvent($fnName, $fnArgs, null, 'started');
-
                     if ($fnName === 'brave_web_search' && $this->braveSearchClient !== null) {
                         $toolResult = $this->braveSearchClient->search(
                             $fnArgs['query'] ?? '',
@@ -513,8 +506,6 @@ class OpenRouterClient
                     } else {
                         $toolResult = "Unknown tool: {$fnName}";
                     }
-
-                    yield new ToolEvent($fnName, $fnArgs, $toolResult, 'completed');
 
                     $allMessages[] = [
                         'role' => 'tool',
@@ -529,7 +520,7 @@ class OpenRouterClient
             break;
         }
 
-        yield new StreamResult(
+        return new StreamResult(
             content: $fullContent,
             inputTokens: $totalInputTokens,
             outputTokens: $totalOutputTokens,
