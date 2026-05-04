@@ -15,6 +15,7 @@ use App\Services\StreamResult;
 use App\Services\ToolEvent;
 use App\Services\TopicToolHandler;
 use App\Services\ProofreadBlogPostToolHandler;
+use App\Services\SocialPostToolHandler;
 use App\Services\UrlFetcher;
 use App\Services\WriteBlogPostToolHandler;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +41,12 @@ new class extends Component
 
     public bool $freeForm = false;
 
+    public ?int $contentPieceId = null;
+
+    public ?string $contentPieceTitle = null;
+
+    public ?string $funnelGuidance = null;
+
     public array $messages = [];
 
     public function mount(Team $current_team, ?Conversation $conversation = null): void
@@ -52,6 +59,40 @@ new class extends Component
             $this->loadMessages();
             $this->topicId = $conversation->topic_id;
             $this->topicTitle = $conversation->topic?->title;
+            $this->contentPieceId = $conversation->content_piece_id;
+            $this->contentPieceTitle = $conversation->contentPiece?->title;
+            $brief = is_array($conversation->brief ?? null) ? $conversation->brief : [];
+            $this->funnelGuidance = $brief['funnel_guidance'] ?? null;
+        }
+    }
+
+    public function selectFunnelContentPiece(int $contentPieceId): void
+    {
+        $piece = \App\Models\ContentPiece::where('team_id', $this->teamModel->id)->findOrFail($contentPieceId);
+        $this->contentPieceId = $piece->id;
+        $this->contentPieceTitle = $piece->title;
+        $this->prompt = __("Build a funnel of social posts that drive traffic back to: :title", ['title' => $piece->title]);
+
+        if ($this->conversation) {
+            $brief = is_array($this->conversation->brief) ? $this->conversation->brief : [];
+            if ($this->funnelGuidance) {
+                $brief['funnel_guidance'] = $this->funnelGuidance;
+            }
+            $this->conversation->update([
+                'content_piece_id' => $piece->id,
+                'brief' => $brief,
+            ]);
+            $this->conversation->refresh();
+        }
+    }
+
+    public function setFunnelGuidance(string $guidance): void
+    {
+        $this->funnelGuidance = trim($guidance) ?: null;
+        if ($this->conversation) {
+            $brief = is_array($this->conversation->brief) ? $this->conversation->brief : [];
+            $brief['funnel_guidance'] = $this->funnelGuidance;
+            $this->conversation->update(['brief' => $brief]);
         }
     }
 
@@ -111,12 +152,15 @@ new class extends Component
         }
 
         if (! $this->conversation) {
+            $brief = $this->funnelGuidance ? ['funnel_guidance' => $this->funnelGuidance] : [];
             $this->conversation = Conversation::create([
                 'team_id' => $this->teamModel->id,
                 'user_id' => Auth::id(),
                 'title' => mb_substr($content, 0, 80),
                 'type' => $this->type,
                 'topic_id' => $this->topicId ?: null,
+                'content_piece_id' => $this->contentPieceId ?: null,
+                'brief' => $brief,
             ]);
             $url = route('create.chat', ['current_team' => $this->teamModel, 'conversation' => $this->conversation]);
             $this->js("history.replaceState(null, '', '" . addslashes($url) . "')");
@@ -201,6 +245,7 @@ new class extends Component
         $styleRefHandler = new FetchStyleReferenceToolHandler;
         $writeHandler = new WriteBlogPostToolHandler;
         $proofreadHandler = new ProofreadBlogPostToolHandler;
+        $socialHandler = new SocialPostToolHandler;
         $team = $this->teamModel;
         $conversation = $this->conversation;
 
@@ -212,7 +257,7 @@ new class extends Component
 
         $toolExecutor = function (string $name, array $args) use (
             $brandHandler, $topicHandler, $researchHandler, $audienceHandler, $outlineHandler,
-            $styleRefHandler, $writeHandler, $proofreadHandler, $team, $conversation, &$priorTurnTools
+            $styleRefHandler, $writeHandler, $proofreadHandler, $socialHandler, $team, $conversation, &$priorTurnTools
         ): string {
             if ($name === 'update_brand_intelligence') {
                 return $brandHandler->execute($team, $args);
@@ -252,6 +297,26 @@ new class extends Component
                 $result = $proofreadHandler->execute($team, $conversation->id, $args, $priorTurnTools);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
                 return $result;
+            }
+            if ($name === 'propose_posts') {
+                $piece = $conversation->contentPiece;
+                if (! $piece) {
+                    return json_encode(['status' => 'error', 'message' => 'No content piece is associated with this conversation.']);
+                }
+                return $socialHandler->propose($team, $conversation->id, $piece, $args);
+            }
+            if ($name === 'update_post') {
+                return $socialHandler->update($team, $conversation->id, $args);
+            }
+            if ($name === 'delete_post') {
+                return $socialHandler->delete($team, $args);
+            }
+            if ($name === 'replace_all_posts') {
+                $piece = $conversation->contentPiece;
+                if (! $piece) {
+                    return json_encode(['status' => 'error', 'message' => 'No content piece is associated with this conversation.']);
+                }
+                return $socialHandler->replaceAll($team, $conversation->id, $piece, $args);
             }
             return "Unknown tool: {$name}";
         };
@@ -921,6 +986,7 @@ new class extends Component
                     'brand' => __('Brand Knowledge'),
                     'topics' => __('Brainstorm'),
                     'writer' => __('Writer'),
+                    'funnel' => __('Funnel'),
                     default => $type,
                 } }}</flux:badge>
             @endif
@@ -1123,7 +1189,7 @@ new class extends Component
                     <flux:heading size="xl" class="mb-2">{{ __('What would you like to create?') }}</flux:heading>
                     <flux:subheading class="mb-8">{{ __('Choose a mode to get started.') }}</flux:subheading>
 
-                    <div class="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
+                    <div class="grid w-full max-w-4xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <button wire:click="selectType('brand')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
                             <flux:icon name="building-storefront" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
                             <flux:heading size="sm">{{ __('Build brand knowledge') }}</flux:heading>
@@ -1140,6 +1206,12 @@ new class extends Component
                             <flux:icon name="document-text" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
                             <flux:heading size="sm">{{ __('Write a blog post') }}</flux:heading>
                             <flux:text class="mt-1 text-xs">{{ __('Produce a cornerstone blog post grounded in one of your topics') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectType('funnel')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="megaphone" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Build a Funnel') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Turn a content piece into 3–6 social posts that drive traffic back to it') }}</flux:text>
                         </button>
                     </div>
                 </div>
@@ -1201,13 +1273,46 @@ new class extends Component
                 </div>
             @endif
 
+            {{-- Funnel: Content piece picker (required before input) --}}
+            @if ($type === 'funnel' && !$contentPieceId && empty($messages))
+                @php
+                    $availablePieces = \App\Models\ContentPiece::where('team_id', $teamModel->id)
+                        ->latest()->get();
+                @endphp
+                <div class="flex flex-col items-center justify-center py-16">
+                    <flux:heading size="xl" class="mb-2">{{ __('Pick a content piece') }}</flux:heading>
+                    <flux:subheading class="mb-8">{{ __('The funnel will drive traffic back to this piece.') }}</flux:subheading>
+                    @if ($availablePieces->isEmpty())
+                        <p class="text-sm text-zinc-500">
+                            {{ __('No content pieces yet.') }}
+                            <a href="{{ route('content.index', ['current_team' => $teamModel]) }}" class="text-indigo-400 hover:underline" wire:navigate>{{ __('Browse Content') }}</a>
+                        </p>
+                    @else
+                        <div class="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
+                            @foreach ($availablePieces as $cp)
+                                <button wire:click="selectFunnelContentPiece({{ $cp->id }})" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                                    <flux:heading size="sm">{{ $cp->title }}</flux:heading>
+                                    <flux:text class="mt-1 text-xs line-clamp-2">{{ mb_substr(strip_tags($cp->body ?? ''), 0, 160) }}</flux:text>
+                                </button>
+                            @endforeach
+                        </div>
+                        <div class="mt-6 w-full max-w-2xl">
+                            <flux:input
+                                wire:model.blur="funnelGuidance"
+                                placeholder="{{ __('Optional: angle for the funnel (e.g., focus on the founder story)') }}" />
+                        </div>
+                    @endif
+                </div>
+            @endif
+
         </div>
     </div>
 
     {{-- Input (only shown after type is selected) --}}
     @if ($type
         && !($type === 'topics' && !$topicsMode && empty($messages))
-        && !($type === 'writer' && !$topicId && !$freeForm && empty($messages)))
+        && !($type === 'writer' && !$topicId && !$freeForm && empty($messages))
+        && !($type === 'funnel' && !$contentPieceId && empty($messages)))
         @if ($type === 'writer' && ($topicTitle || $freeForm))
             <div class="mx-auto w-full max-w-5xl px-6 pb-1">
                 <p class="text-xs text-zinc-400 dark:text-zinc-500">
@@ -1217,6 +1322,14 @@ new class extends Component
                     @else
                         {{ __('Writing about: :title', ['title' => $topicTitle ?? '']) }}
                     @endif
+                </p>
+            </div>
+        @endif
+        @if ($type === 'funnel' && $contentPieceTitle)
+            <div class="mx-auto w-full max-w-5xl px-6 pb-1">
+                <p class="text-xs text-zinc-400 dark:text-zinc-500">
+                    <flux:icon name="megaphone" class="inline size-3.5 -mt-0.5 mr-0.5" />
+                    {{ __('Funnel for: :title', ['title' => $contentPieceTitle]) }}
                 </p>
             </div>
         @endif
