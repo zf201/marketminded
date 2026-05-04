@@ -7,6 +7,7 @@ use App\Services\BraveSearchClient;
 use App\Services\OpenRouterClient;
 use App\Services\SubagentLogger;
 use App\Services\UrlFetcher;
+use App\Services\SubagentStoppedException;
 use Illuminate\Support\Facades\Cache;
 
 abstract class BaseAgent implements Agent
@@ -137,6 +138,9 @@ abstract class BaseAgent implements Agent
         }
 
         $onToolCall = function (string $name, array $args) use ($callId, $conversationId): void {
+            if ($conversationId !== null && Cache::get("streaming-stop:{$conversationId}")) {
+                throw new SubagentStoppedException('Stopped by user.');
+            }
             $entry = ['name' => $name, 'args' => $args, 'ts' => time()];
             $this->lastIntermediateTools[] = $entry;
             if ($conversationId !== null) {
@@ -199,6 +203,9 @@ abstract class BaseAgent implements Agent
         ]);
 
         if ($payload === null) {
+            if ($this->lastTransportError === 'stopped') {
+                return AgentResult::error('Stopped.');
+            }
             $hint = $this->lastTextResponse !== null
                 ? ' Model said: "' . mb_substr($this->lastTextResponse, 0, 300) . '"'
                 : '';
@@ -321,6 +328,17 @@ abstract class BaseAgent implements Agent
                 timeout: $timeout,
                 onToolCall: $onToolCall,
             );
+        } catch (SubagentStoppedException) {
+            SubagentLogger::write([
+                'event' => 'attempt_stopped',
+                'call_id' => $this->currentCallId ?? null,
+                'conversation_id' => $this->conversationId,
+                'agent' => static::class,
+                'attempt_number' => 1,
+                'duration_ms' => (int) round((microtime(true) - $attemptStart) * 1000),
+            ]);
+            $this->lastTransportError = 'stopped';
+            return null;
         } catch (\Throwable $e) {
             $this->lastTransportError = mb_substr($e->getMessage(), 0, 1000);
             SubagentLogger::write([
@@ -392,6 +410,17 @@ abstract class BaseAgent implements Agent
                     timeout: $timeout,
                     onToolCall: $onToolCall,
                 );
+            } catch (SubagentStoppedException) {
+                SubagentLogger::write([
+                    'event' => 'attempt_stopped',
+                    'call_id' => $this->currentCallId,
+                    'conversation_id' => $this->conversationId,
+                    'agent' => static::class,
+                    'attempt_number' => 2,
+                    'duration_ms' => (int) round((microtime(true) - $retryStart) * 1000),
+                ]);
+                $this->lastTransportError = 'stopped';
+                return null;
             } catch (\Throwable $e) {
                 $this->lastTransportError = mb_substr($e->getMessage(), 0, 1000);
                 SubagentLogger::write([
