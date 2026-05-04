@@ -1,6 +1,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+{{-- SEO: block search engine indexing site-wide. Remove this tag when ready to launch publicly. --}}
+<meta name="robots" content="noindex, nofollow" />
+
 <title>
     {{ filled($title ?? null) ? $title.' - '.config('app.name', 'Laravel') : config('app.name', 'Laravel') }}
 </title>
