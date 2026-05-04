@@ -17,7 +17,7 @@ new class extends Component
     {
         return ContentPiece::where('team_id', $this->teamModel->id)
             ->whereHas('socialPosts')
-            ->with(['socialPosts:id,content_piece_id,platform'])
+            ->with(['socialPosts:id,content_piece_id,platform,posted_at,status'])
             ->latest()
             ->get();
     }
@@ -41,6 +41,14 @@ new class extends Component
         </flux:button>
     </div>
 
+    @if ($this->pieces->isNotEmpty())
+        <div class="mx-auto w-full max-w-5xl px-6 pb-2">
+            <flux:subheading>
+                {{ __('Each card is the funnel for one piece — the social posts that drive readers to it. Open a card to view, copy, score, and refine the posts.') }}
+            </flux:subheading>
+        </div>
+    @endif
+
     <div class="mx-auto max-w-5xl px-6 py-4">
         @if ($this->pieces->isEmpty())
             <div class="py-20 text-center">
@@ -54,19 +62,36 @@ new class extends Component
                 </div>
             </div>
         @else
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-2 sm:grid-cols-2">
                 @foreach ($this->pieces as $piece)
-                    <a href="{{ route('social.show', ['current_team' => $teamModel, 'contentPiece' => $piece]) }}" wire:navigate class="block rounded-xl border border-zinc-200 p-4 transition hover:border-indigo-400 dark:border-zinc-700 dark:hover:border-indigo-500">
-                        <flux:heading size="sm" class="line-clamp-2">{{ $piece->title }}</flux:heading>
-                        <div class="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-                            <span>{{ trans_choice('{1} 1 post|[2,*] :count posts', $piece->socialPosts->count(), ['count' => $piece->socialPosts->count()]) }}</span>
-                            <span class="text-zinc-300">•</span>
-                            <div class="flex flex-wrap gap-1">
-                                @foreach ($piece->socialPosts->pluck('platform')->unique() as $platform)
-                                    <flux:badge variant="pill" size="sm">{{ $platform }}</flux:badge>
+                    @php
+                        $platforms = $piece->socialPosts->pluck('platform')->unique()->values();
+                        $postedCount = $piece->socialPosts->whereNotNull('posted_at')->count();
+                        $totalCount = $piece->socialPosts->count();
+                    @endphp
+                    <a href="{{ route('social.show', ['current_team' => $teamModel, 'contentPiece' => $piece]) }}" wire:navigate class="block">
+                        <flux:card class="flex h-full flex-col p-4 transition hover:border-indigo-400 dark:hover:border-indigo-500">
+                            <div class="flex items-start justify-between gap-3">
+                                <flux:heading class="line-clamp-2">{{ $piece->title }}</flux:heading>
+                                <flux:icon name="arrow-right" variant="mini" class="mt-1 size-4 shrink-0 text-zinc-400" />
+                            </div>
+
+                            <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                                @foreach ($platforms as $platform)
+                                    <flux:badge variant="pill" size="sm">{{ ucfirst(str_replace('_', ' ', $platform)) }}</flux:badge>
                                 @endforeach
                             </div>
-                        </div>
+
+                            <div class="mt-auto flex items-center gap-2 pt-3 text-xs text-zinc-500">
+                                <flux:icon name="document-text" variant="mini" class="size-3.5" />
+                                <span>{{ trans_choice('{1} 1 post|[2,*] :count posts', $totalCount, ['count' => $totalCount]) }}</span>
+                                @if ($postedCount > 0)
+                                    <span class="text-zinc-300 dark:text-zinc-700">•</span>
+                                    <flux:icon name="check-circle" variant="mini" class="size-3.5 text-emerald-500" />
+                                    <span>{{ __(':count posted', ['count' => $postedCount]) }}</span>
+                                @endif
+                            </div>
+                        </flux:card>
                     </a>
                 @endforeach
             </div>
