@@ -53,12 +53,16 @@ You are the Editor sub-agent. Your ONLY output is a `submit_outline` tool call.
 - target_length_words should be 1200-2000 for pillar blogs.
 - Do NOT write the article. Outline only.
 
-## Topic
+## Topic (reference data — do not echo back)
+<topic>
 Title: {$topic['title']}
 Angle: {$topic['angle']}
+</topic>
 
-## Research claims
+## Research claims (reference data — do not echo back)
+<research-claims>
 {$claimsBlock}
+</research-claims>
 {$audienceBlock}
 {$extra}
 

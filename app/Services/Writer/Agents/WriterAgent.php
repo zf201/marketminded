@@ -94,21 +94,31 @@ You are the Writer sub-agent. Your ONLY output is a `submit_blog_post` tool call
 - Short paragraphs. Scannable subheadings. Benefit-focused structure.
 - Write in the language of the brand profile.
 
-## Topic
+## Topic (reference data — do not echo back)
+<topic>
 Title: {$topic['title']}
 Angle: {$topic['angle']}
+</topic>
 
-## Outline
+## Outline (reference data — follow this structure; do not echo back as a list)
+<outline>
 {$outlineBlock}
+</outline>
 
-## Research claims (cite by id implicitly through the facts you use)
+## Research claims (cite by id implicitly through the facts you use; do not echo back)
+<research-claims>
 {$claimsBlock}
+</research-claims>
 
 ## Sources (do NOT cite inline; the platform handles attribution)
+<sources>
 {$sourcesBlock}
+</sources>
 
-## Brand profile
+## Brand profile (reference data — do not echo back)
+<brand-profile>
 {$brandProfile}
+</brand-profile>
 {$audienceBlock}
 {$styleRefBlock}
 {$extra}

@@ -46,14 +46,20 @@ You are the Proofread sub-agent. Your ONLY output is a `submit_revision` tool ca
 3. Match the existing voice. Preserve sourced facts.
 4. Call `submit_revision` with the revised title, body, and a change_description.
 
-## User feedback
+## User feedback (reference data — apply these changes; do not echo back)
+<user-feedback>
 {$this->feedback}
+</user-feedback>
 
-## Current title
+## Current title (reference data — do not echo back)
+<current-title>
 {$piece->title}
+</current-title>
 
-## Current body
+## Current body (reference data — do not echo back)
+<current-body>
 {$piece->body}
+</current-body>
 {$extra}
 
 ## IMPORTANT

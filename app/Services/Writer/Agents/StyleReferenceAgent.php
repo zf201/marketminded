@@ -51,9 +51,11 @@ Find 2–3 blog posts from this brand that best represent their voice and writin
 - Do NOT include the post body in your submission. Only url, title, why_chosen.
 - Submit exactly 2–3 examples.
 
-## Topic being written
+## Topic being written (reference data — do not echo back)
+<topic>
 Title: {$topic['title']}
 Angle: {$topic['angle']}
+</topic>
 {$curatedBlock}{$blogUrlBlock}
 {$extra}
 

@@ -48,15 +48,21 @@ Read the topic, research summary, and available personas. Select the persona thi
 - Choose `persona` only if the topic + angle clearly matches that persona's needs or pain points.
 - `guidance_for_writer` must be concrete and actionable (1–2 sentences). Do NOT echo the persona description.
 
-## Topic
+## Topic (reference data — do not echo back)
+<topic>
 Title: {$topic['title']}
 Angle: {$topic['angle']}
+</topic>
 
-## Research summary
+## Research summary (reference data — do not echo back)
+<research-summary>
 {$topicSummary}
+</research-summary>
 
-## Available personas
+## Available personas (reference data — do not echo back)
+<personas>
 {$personasBlock}
+</personas>
 {$extra}
 
 ## IMPORTANT
