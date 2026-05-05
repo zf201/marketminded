@@ -80,9 +80,10 @@ You are the Writer sub-agent. Your ONLY output is a `submit_blog_post` tool call
 1. Read the outline, research claims, and brand profile below.
 2. Write a publishable blog post following the outline.
 3. Call `submit_blog_post` with the title and full body.
+4. Do NOT count words. Do NOT pad to hit a target. Write until the outline is fully covered with substance, then stop.
 
 ## Quality rules
-- Target length: {$outline['target_length_words']} words ±10%.
+- Aim for roughly {$outline['target_length_words']} words. Anything from ~80% to ~120% of that is fine — don't count, just cover the outline. Length follows from the outline; don't pad or truncate to hit a number.
 - Follow the outline section order. Each section uses the claims listed
   in [brackets] for its claim_ids.
 - EVERY statistic, percentage, date, named entity, or quote must come
