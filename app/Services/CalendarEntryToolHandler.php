@@ -87,6 +87,61 @@ class CalendarEntryToolHandler
         ];
     }
 
+    public static function readMonthSchema(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'read_month',
+                'description' => 'List the calendar entries for a given month. Use this when the user references a month other than the one already shown in your prompt, or when you need a fresh read after edits.',
+                'parameters' => [
+                    'type' => 'object',
+                    'required' => ['month'],
+                    'properties' => [
+                        'month' => ['type' => 'string', 'description' => 'Month in YYYY-MM format.'],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    public static function readMonth(Team $team, array $args): array
+    {
+        $month = $args['month'] ?? null;
+        if (! $month || ! preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return ['status' => 'error', 'message' => 'month must be YYYY-MM.'];
+        }
+        [$year, $monthNum] = explode('-', $month);
+
+        $calendar = $team->calendar;
+        if (! $calendar) {
+            return ['status' => 'ok', 'month' => $month, 'entries' => []];
+        }
+
+        $entries = CalendarEntry::where('calendar_id', $calendar->id)
+            ->whereYear('scheduled_for', (int) $year)
+            ->whereMonth('scheduled_for', (int) $monthNum)
+            ->orderBy('scheduled_for')
+            ->orderBy('id')
+            ->get();
+
+        return [
+            'status' => 'ok',
+            'month' => $month,
+            'entries' => $entries->map(fn ($e) => [
+                'id' => $e->id,
+                'scheduled_for' => $e->scheduled_for->format('Y-m-d'),
+                'platform' => $e->platform,
+                'title' => $e->title,
+                'has_content' => ! empty($e->content),
+                'image_headline' => $e->image_headline,
+                'source_topic_id' => $e->source_topic_id,
+                'source_content_piece_id' => $e->source_content_piece_id,
+                'source_social_post_id' => $e->source_social_post_id,
+            ])->all(),
+        ];
+    }
+
     public static function moveSchema(): array
     {
         return [
