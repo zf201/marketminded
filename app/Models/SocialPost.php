@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'team_id', 'content_piece_id', 'conversation_id',
     'platform', 'hook', 'body', 'hashtags',
     'image_prompt', 'video_treatment',
-    'score', 'posted_at', 'status', 'position',
+    'score', 'posted_at', 'status', 'position', 'used',
 ])]
 class SocialPost extends Model
 {
@@ -24,6 +24,7 @@ class SocialPost extends Model
             'score' => 'integer',
             'position' => 'integer',
             'posted_at' => 'datetime',
+            'used' => 'boolean',
         ];
     }
 

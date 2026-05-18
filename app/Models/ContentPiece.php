@@ -19,10 +19,18 @@ use Illuminate\Support\Facades\DB;
     'platform',
     'format',
     'current_version',
+    'used',
 ])]
 class ContentPiece extends Model
 {
     use HasFactory;
+
+    protected function casts(): array
+    {
+        return [
+            'used' => 'boolean',
+        ];
+    }
 
     public function team(): BelongsTo
     {
