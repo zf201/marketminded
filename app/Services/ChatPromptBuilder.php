@@ -10,6 +10,10 @@ use App\Models\Topic;
 use App\Services\Writer\Brief;
 use App\Services\FetchStyleReferenceToolHandler;
 use App\Services\PickAudienceToolHandler;
+use App\Services\CalendarEntryToolHandler;
+use App\Services\MarkUsedToolHandler;
+use App\Services\ListAvailablePoolToolHandler;
+use App\Models\CalendarEntry;
 
 class ChatPromptBuilder
 {
@@ -23,6 +27,7 @@ class ChatPromptBuilder
             'topics' => self::topicsPrompt($profile, $hasProfile, $team),
             'writer' => self::writerPrompt($profile, $hasProfile, $conversation),
             'funnel' => self::funnelPrompt($profile, $team, $conversation),
+            'planner' => self::plannerPrompt($profile, $team, $conversation),
             default => 'You are a helpful AI assistant.',
         };
 
@@ -60,6 +65,14 @@ class ChatPromptBuilder
                 SocialPostToolHandler::updateSchema(),
                 SocialPostToolHandler::deleteSchema(),
                 SocialPostToolHandler::replaceAllSchema(),
+                BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+            ],
+            'planner' => [
+                CalendarEntryToolHandler::proposeSchema(),
+                CalendarEntryToolHandler::updateSchema(),
+                CalendarEntryToolHandler::deleteSchema(),
+                MarkUsedToolHandler::toolSchema(),
+                ListAvailablePoolToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
             ],
             default => [],
@@ -365,7 +378,7 @@ PROMPT;
 
         $guidanceBlock = $guidance ? "\n\n## User guidance\n{$guidance}" : '';
 
-        return <<<PROMPT
+        return <<<PROMPT_FUNNEL
 You are a social-media strategist building a traffic funnel back to one piece of long-form content. You produce 3–6 platform-appropriate posts that drive readers to that piece.
 
 ## CRITICAL: function calling
@@ -419,6 +432,88 @@ BAD: user says "rewrite all of them" → reply with new drafts and "Updated!" bu
 <brand-profile>
 {$profile}
 </brand-profile>
-PROMPT;
+PROMPT_FUNNEL;
+    }
+
+    private static function plannerPrompt(string $profile, Team $team, ?Conversation $conversation): string
+    {
+        $calendar = $team->calendar;
+        $postingDays = $calendar?->posting_days ?? $team->posting_days ?? ['mon', 'wed', 'fri'];
+        $postingDaysStr = implode(', ', array_map('ucfirst', $postingDays));
+
+        $brief = $conversation?->brief ?? [];
+        $month = is_array($brief) && ! empty($brief['planner_month']) ? $brief['planner_month'] : now()->format('Y-m');
+        [$year, $monthNum] = explode('-', $month);
+
+        $entries = $calendar
+            ? CalendarEntry::where('calendar_id', $calendar->id)
+                ->whereYear('scheduled_for', (int) $year)
+                ->whereMonth('scheduled_for', (int) $monthNum)
+                ->orderBy('scheduled_for')
+                ->get()
+            : collect();
+
+        $entriesBlock = $entries->isEmpty()
+            ? 'No entries yet for this month.'
+            : $entries->map(function ($e) {
+                $filled = collect([
+                    $e->image_headline ? 'image' : null,
+                    $e->linkedin_copy ? 'li' : null,
+                    $e->instagram_copy ? 'ig' : null,
+                    $e->facebook_copy ? 'fb' : null,
+                ])->filter()->implode('+');
+                return "- id={$e->id} {$e->scheduled_for->format('Y-m-d')} ({$filled}): {$e->title}";
+            })->implode("\n");
+
+        $topics = Topic::where('team_id', $team->id)->where('used', false)->orderByDesc('created_at')->limit(15)->get(['id', 'title']);
+        $pieces = ContentPiece::where('team_id', $team->id)->where('used', false)->latest()->limit(15)->get(['id', 'title']);
+        $posts = SocialPost::where('team_id', $team->id)->where('used', false)->where('status', 'active')->latest()->limit(15)->get(['id', 'platform', 'hook']);
+
+        $poolBlock = "Unused topics:\n" . ($topics->isEmpty() ? '(none)' : $topics->map(fn ($t) => "- topic_id={$t->id}: {$t->title}")->implode("\n"));
+        $poolBlock .= "\n\nUnused content pieces:\n" . ($pieces->isEmpty() ? '(none)' : $pieces->map(fn ($p) => "- content_piece_id={$p->id}: {$p->title}")->implode("\n"));
+        $poolBlock .= "\n\nUnused social posts:\n" . ($posts->isEmpty() ? '(none)' : $posts->map(fn ($p) => "- social_post_id={$p->id} [{$p->platform}]: {$p->hook}")->implode("\n"));
+
+        return <<<PROMPT_PLANNER
+You are a social-media content planner helping the user prepare a monthly content calendar. You pull from the team's unused topics, social posts, and content pieces, and brainstorm fresh ideas for empty posting days.
+
+## CRITICAL: function calling
+Every response that creates, changes, or removes calendar entries MUST end with a tool call. The user only sees entries saved through `propose_entries` / `update_entry` / `delete_entry`. Plain-text drafts are invisible.
+- Never say "added", "scheduled", "saved", "updated", "removed" unless the matching tool was called this turn.
+- For empty days: call `propose_entries` with all new entries in one call.
+- For fixing one day's copy: call `update_entry(id, fields)`.
+- For dropping an entry: call `delete_entry(id)`.
+
+## Your tools
+- `propose_entries(entries[])` — REQUIRED to populate empty days. Setting `source_topic_id` / `source_social_post_id` / `source_content_piece_id` flips that source to used.
+- `update_entry(id, fields)` — patch one entry.
+- `delete_entry(id)` — drop one entry. Does not unmark its source.
+- `mark_used(type, id, used)` — toggle used on a topic / social_post / content_piece.
+- `list_available_pool` — refresh the unused pool mid-conversation.
+- `fetch_url(url)` — read a web page.
+
+## How to work
+1. Look at the month's existing entries and the posting-days cadence below.
+2. Identify gaps (posting days with no entry).
+3. Suggest filling some from the unused pool and brainstorming the rest.
+4. Confirm direction with the user, then call `propose_entries` with all rows in one call.
+5. Iterate: user says "rewrite May 8 LinkedIn" → `update_entry`. User says "drop May 15" → `delete_entry`.
+
+## Calendar context
+Currently focused month: {$month}
+Posting days: {$postingDaysStr}
+
+<existing-entries>
+{$entriesBlock}
+</existing-entries>
+
+<available-pool>
+{$poolBlock}
+</available-pool>
+
+## Brand context (reference data — do not echo back)
+<brand-profile>
+{$profile}
+</brand-profile>
+PROMPT_PLANNER;
     }
 }
