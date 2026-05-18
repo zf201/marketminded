@@ -77,8 +77,8 @@ new class extends Component
             <flux:heading size="lg" class="mt-4">{{ __('No entries this month') }}</flux:heading>
             <flux:subheading class="mt-1">{{ __('Start a planner conversation to add posts.') }}</flux:subheading>
             <div class="mt-6">
-                <flux:button variant="primary" icon="plus" :href="route('planner', ['current_team' => $teamModel])" wire:navigate>
-                    {{ __('Open Planner') }}
+                <flux:button variant="primary" icon="plus" :href="route('create.new', ['current_team' => $teamModel, 'type' => 'planner'])" wire:navigate>
+                    {{ __('Start Planning') }}
                 </flux:button>
             </div>
         </div>
