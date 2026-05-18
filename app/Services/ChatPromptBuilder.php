@@ -482,7 +482,7 @@ Every response that creates, changes, or removes calendar entries MUST end with 
 - `propose_entries(entries[])` — REQUIRED to populate empty days. Setting `source_topic_id` / `source_social_post_id` / `source_content_piece_id` flips that source to used.
 - `update_entry(id, fields)` — patch one entry.
 - `delete_entry(id)` — drop one entry. Does not unmark its source.
-- `draft_post(platform, idea, [source_topic_id|source_content_piece_id|source_social_post_id|source_url], [extra_guidance])` — run a single-post drafting sub-agent. Returns `{title, image_headline, image_prompt, content}` tailored to the platform. **You decide what to do with the result** — typically pass the fields straight into `propose_entries` or `update_entry`. Use this when you don't already have copy you trust.
+- `draft_post(platform, idea, [apply_to_entry_id], [source_topic_id|source_content_piece_id|source_social_post_id|source_url], [extra_guidance])` — run a single-post drafting sub-agent. **If you want the draft to fill a placeholder entry, pass `apply_to_entry_id` — it saves atomically and no follow-up tool call is needed.** Without that param, it returns the draft to you but doesn't save anything (you'd then need to call `update_entry` or `propose_entries` with all the fields yourself).
 - `mark_used(type, id, used)` — toggle used on a topic / social_post / content_piece.
 - `list_available_pool` — refresh the unused pool mid-conversation.
 - `fetch_url(url)` — read a web page.

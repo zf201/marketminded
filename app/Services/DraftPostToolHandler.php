@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CalendarEntry;
 use App\Models\ContentPiece;
 use App\Models\SocialPost;
 use App\Models\Team;
@@ -27,6 +28,10 @@ class DraftPostToolHandler
                         'idea' => [
                             'type' => 'string',
                             'description' => 'Short description of the post idea or angle in the team language.',
+                        ],
+                        'apply_to_entry_id' => [
+                            'type' => 'integer',
+                            'description' => 'If set, the draft is saved directly into this existing calendar entry (overwrites title, image_headline, image_prompt, content). Use this whenever you want the draft to land on a specific placeholder day. Omit to just see the draft without saving.',
                         ],
                         'source_topic_id' => [
                             'type' => 'integer',
@@ -155,11 +160,32 @@ PROMPT;
             return ['status' => 'error', 'message' => 'Drafter did not submit a post.'];
         }
 
+        $applied = false;
+        $entryId = $args['apply_to_entry_id'] ?? null;
+        if ($entryId) {
+            $entry = CalendarEntry::where('id', $entryId)->where('team_id', $team->id)->first();
+            if (! $entry) {
+                $bus?->publish('subagent_error', ['agent' => 'drafter', 'message' => 'apply_to_entry_id not found for this team.']);
+                return ['status' => 'error', 'message' => 'apply_to_entry_id not found for this team.'];
+            }
+            $entry->fill([
+                'platform' => $platform,
+                'title' => $payload['title'] ?: $entry->title,
+                'image_headline' => $payload['image_headline'] ?? $entry->image_headline,
+                'image_prompt' => $payload['image_prompt'] ?? $entry->image_prompt,
+                'content' => $payload['content'],
+            ])->save();
+            $applied = true;
+        }
+
         $bus?->publish('subagent_completed', ['agent' => 'drafter', 'card' => [
             'kind' => 'draft_post',
-            'summary' => __('Drafted a :platform post', ['platform' => $platform]),
+            'summary' => $applied
+                ? __('Drafted and saved :platform post', ['platform' => $platform])
+                : __('Drafted a :platform post', ['platform' => $platform]),
             'platform' => $platform,
             'title' => $payload['title'] ?? '',
+            'applied_to_entry_id' => $entryId,
         ]]);
 
         return [
@@ -169,6 +195,10 @@ PROMPT;
             'image_headline' => $payload['image_headline'] ?? '',
             'image_prompt' => $payload['image_prompt'] ?? '',
             'content' => $payload['content'] ?? '',
+            'applied_to_entry_id' => $applied ? $entryId : null,
+            'message' => $applied
+                ? 'Draft saved into entry '.$entryId.'. No follow-up tool call needed.'
+                : 'Draft returned only. Call update_entry or propose_entries to persist.',
         ];
     }
 
