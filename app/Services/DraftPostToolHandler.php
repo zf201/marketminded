@@ -136,10 +136,10 @@ PROMPT;
             $result = $client->chat(
                 messages: [
                     ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => 'Draft the post now.'],
+                    ['role' => 'user', 'content' => 'Draft the post now by calling submit_post.'],
                 ],
                 tools: [$submitSchema],
-                toolChoice: ['type' => 'function', 'function' => ['name' => 'submit_post']],
+                toolChoice: null,
                 temperature: 0.6,
                 useServerTools: false,
                 timeout: 90,
