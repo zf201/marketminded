@@ -21,6 +21,13 @@ new class extends Component
             ->get();
     }
 
+    public function toggleUsed(int $pieceId): void
+    {
+        $piece = ContentPiece::where('team_id', $this->teamModel->id)->findOrFail($pieceId);
+        $piece->used = ! $piece->used;
+        $piece->save();
+    }
+
     public function render()
     {
         return $this->view()->title(__('Content'));
@@ -77,6 +84,14 @@ new class extends Component
                             </flux:badge>
                         </div>
                         <flux:text class="mt-2 text-sm text-zinc-400 line-clamp-3">{{ mb_substr(strip_tags($piece->body), 0, 200) }}</flux:text>
+                        <div class="mt-3 flex items-center justify-end gap-2">
+                            @if ($piece->used)
+                                <flux:badge variant="pill" size="sm" color="amber">{{ __('used') }}</flux:badge>
+                            @endif
+                            <flux:button size="xs" variant="ghost" wire:click.stop="toggleUsed({{ $piece->id }})">
+                                {{ $piece->used ? __('Unmark used') : __('Mark used') }}
+                            </flux:button>
+                        </div>
                     </flux:card>
                 </a>
             @endforeach
