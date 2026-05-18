@@ -9,8 +9,7 @@ class CalendarEntry extends Model
 {
     protected $fillable = [
         'calendar_id', 'team_id', 'scheduled_for',
-        'title', 'image_headline', 'image_prompt',
-        'linkedin_copy', 'instagram_copy', 'facebook_copy',
+        'title', 'platform', 'image_headline', 'image_prompt', 'content',
         'notes',
         'source_topic_id', 'source_social_post_id', 'source_content_piece_id',
         'status',

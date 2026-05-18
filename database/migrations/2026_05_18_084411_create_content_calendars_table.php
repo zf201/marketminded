@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('content_calendars', function (Blueprint $table) {
             $table->id();
             $table->foreignId('team_id')->unique()->constrained()->cascadeOnDelete();
-            $table->json('posting_days')->nullable();
             $table->timestamps();
         });
     }

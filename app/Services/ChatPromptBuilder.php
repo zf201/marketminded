@@ -438,8 +438,6 @@ PROMPT_FUNNEL;
     private static function plannerPrompt(string $profile, Team $team, ?Conversation $conversation): string
     {
         $calendar = $team->calendar;
-        $postingDays = $calendar?->posting_days ?? $team->posting_days ?? ['mon', 'wed', 'fri'];
-        $postingDaysStr = implode(', ', array_map('ucfirst', $postingDays));
 
         $brief = $conversation?->brief ?? [];
         $month = is_array($brief) && ! empty($brief['planner_month']) ? $brief['planner_month'] : now()->format('Y-m');
@@ -456,13 +454,8 @@ PROMPT_FUNNEL;
         $entriesBlock = $entries->isEmpty()
             ? 'No entries yet for this month.'
             : $entries->map(function ($e) {
-                $filled = collect([
-                    $e->image_headline ? 'image' : null,
-                    $e->linkedin_copy ? 'li' : null,
-                    $e->instagram_copy ? 'ig' : null,
-                    $e->facebook_copy ? 'fb' : null,
-                ])->filter()->implode('+');
-                return "- id={$e->id} {$e->scheduled_for->format('Y-m-d')} ({$filled}): {$e->title}";
+                $platform = $e->platform ?: 'no-platform';
+                return "- id={$e->id} {$e->scheduled_for->format('Y-m-d')} [{$platform}]: {$e->title}";
             })->implode("\n");
 
         $topics = Topic::where('team_id', $team->id)->where('used', false)->orderByDesc('created_at')->limit(15)->get(['id', 'title']);
@@ -491,16 +484,21 @@ Every response that creates, changes, or removes calendar entries MUST end with 
 - `list_available_pool` — refresh the unused pool mid-conversation.
 - `fetch_url(url)` — read a web page.
 
+## Entry shape
+Each calendar entry is ONE post on ONE day. Fields: `title`, `platform` (e.g. linkedin, instagram, facebook), `image_headline`, `image_prompt`, `content` (the post body), `notes`. Only `scheduled_for` and `title` are required — everything else is optional.
+
+**Placeholders are encouraged.** If the user has an idea but hasn't decided the copy, create the entry with just `scheduled_for` and `title` (and `platform` if known). Leave `content`, `image_headline`, etc. empty. The user can come back and ask you to fill them in later via `update_entry`. Don't invent copy just to fill a slot — empty fields are honest planning.
+
+Multiple entries on the same day are allowed — if the user wants the same idea on LinkedIn and Instagram, create two entries with the same date.
+
 ## How to work
-1. Look at the month's existing entries and the posting-days cadence below.
-2. Identify gaps (posting days with no entry).
-3. Suggest filling some from the unused pool and brainstorming the rest.
-4. Confirm direction with the user, then call `propose_entries` with all rows in one call.
-5. Iterate: user says "rewrite May 8 LinkedIn" → `update_entry`. User says "drop May 15" → `delete_entry`.
+1. Look at the month's existing entries below.
+2. Use the dates the user gives you. Don't impose any cadence — there is no posting-days configuration. If the user wants a cadence, they'll tell you in chat. Otherwise just take dates from the user as-is.
+3. Confirm direction with the user, then call `propose_entries` with all rows in one call.
+4. Iterate: user says "rewrite May 8" → `update_entry`. User says "drop May 15" → `delete_entry`. User says "also do an IG version of the May 6 post" → `propose_entries` with a new entry on the same date.
 
 ## Calendar context
 Currently focused month: {$month}
-Posting days: {$postingDaysStr}
 
 <existing-entries>
 {$entriesBlock}

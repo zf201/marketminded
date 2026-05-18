@@ -6,7 +6,6 @@ use App\Services\ChatPromptBuilder;
 it('builds a planner prompt with required sections', function () {
     $team = Team::factory()->create([
         'content_language' => 'sl',
-        'posting_days' => ['mon', 'wed', 'fri'],
     ]);
 
     $prompt = ChatPromptBuilder::build('planner', $team);
@@ -17,7 +16,6 @@ it('builds a planner prompt with required sections', function () {
     expect($prompt)->toContain('delete_entry');
     expect($prompt)->toContain('mark_used');
     expect($prompt)->toContain('<brand-profile>');
-    expect($prompt)->toContain('Posting days');
 });
 
 it('lists planner tools', function () {

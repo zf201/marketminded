@@ -13,8 +13,7 @@ use Illuminate\Support\Facades\DB;
 class CalendarEntryToolHandler
 {
     private const ENTRY_FIELDS = [
-        'scheduled_for', 'title', 'image_headline', 'image_prompt',
-        'linkedin_copy', 'instagram_copy', 'facebook_copy', 'notes',
+        'scheduled_for', 'title', 'platform', 'image_headline', 'image_prompt', 'content', 'notes',
         'source_topic_id', 'source_social_post_id', 'source_content_piece_id',
         'status',
     ];
@@ -84,11 +83,10 @@ class CalendarEntryToolHandler
             'properties' => [
                 'scheduled_for' => ['type' => 'string', 'description' => 'YYYY-MM-DD'],
                 'title' => ['type' => 'string'],
+                'platform' => ['type' => 'string', 'description' => 'Target platform, e.g. linkedin, instagram, facebook.'],
                 'image_headline' => ['type' => 'string'],
                 'image_prompt' => ['type' => 'string'],
-                'linkedin_copy' => ['type' => 'string'],
-                'instagram_copy' => ['type' => 'string'],
-                'facebook_copy' => ['type' => 'string'],
+                'content' => ['type' => 'string', 'description' => 'The post body for the chosen platform.'],
                 'notes' => ['type' => 'string'],
                 'source_topic_id' => ['type' => 'integer'],
                 'source_social_post_id' => ['type' => 'integer'],

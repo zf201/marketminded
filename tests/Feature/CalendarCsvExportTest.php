@@ -12,16 +12,15 @@ it('exports the visible month as CSV in CSV-sample order', function () {
     $team = Team::factory()->create(['content_language' => 'sl']);
     $team->members()->attach($user, ['role' => 'owner']);
 
-    $cal = ContentCalendar::create(['team_id' => $team->id, 'posting_days' => ['mon', 'wed', 'fri']]);
+    $cal = ContentCalendar::create(['team_id' => $team->id]);
     CalendarEntry::create([
         'calendar_id' => $cal->id,
         'team_id' => $team->id,
         'scheduled_for' => '2026-05-06',
         'title' => 'Huawei',
+        'platform' => 'linkedin',
         'image_headline' => 'Lights on the wall',
-        'linkedin_copy' => 'LI body',
-        'instagram_copy' => 'IG body',
-        'facebook_copy' => 'FB body',
+        'content' => 'LI body',
         'notes' => 'Vir: Huawei',
     ]);
 
@@ -32,7 +31,8 @@ it('exports the visible month as CSV in CSV-sample order', function () {
 
     expect($csv)->toContain('Ideja');
     expect($csv)->toContain('Grafika Copy');
-    expect($csv)->toContain('LinkedIn Copy');
+    expect($csv)->toContain('Platforma');
+    expect($csv)->toContain('Vsebina');
     expect($csv)->toContain('Huawei');
     expect($csv)->toContain('Vir: Huawei');
 });

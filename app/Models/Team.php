@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'is_personal', 'ai_api_key', 'ai_provider', 'ai_api_url', 'fast_model', 'powerful_model', 'web_search_provider', 'brave_api_key', 'countries', 'homepage_url', 'blog_url', 'brand_description', 'product_urls', 'competitor_urls', 'style_reference_urls', 'target_audience', 'tone_keywords', 'content_language', 'posting_days'])]
+#[Fillable(['name', 'slug', 'is_personal', 'ai_api_key', 'ai_provider', 'ai_api_url', 'fast_model', 'powerful_model', 'web_search_provider', 'brave_api_key', 'countries', 'homepage_url', 'blog_url', 'brand_description', 'product_urls', 'competitor_urls', 'style_reference_urls', 'target_audience', 'tone_keywords', 'content_language'])]
 #[Hidden(['ai_api_key', 'brave_api_key'])]
 class Team extends Model
 {
@@ -174,7 +174,6 @@ class Team extends Model
             'product_urls'         => 'array',
             'competitor_urls'      => 'array',
             'style_reference_urls' => 'array',
-            'posting_days'         => 'array',
         ];
     }
 

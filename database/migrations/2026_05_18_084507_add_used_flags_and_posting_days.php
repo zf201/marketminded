@@ -16,9 +16,6 @@ return new class extends Migration
                 $t->boolean('used')->default(false)->index();
             });
         }
-        Schema::table('teams', function (Blueprint $t) {
-            $t->json('posting_days')->nullable();
-        });
     }
 
     public function down(): void
@@ -28,8 +25,5 @@ return new class extends Migration
                 $t->dropColumn('used');
             });
         }
-        Schema::table('teams', function (Blueprint $t) {
-            $t->dropColumn('posting_days');
-        });
     }
 };

@@ -32,32 +32,24 @@ new class extends Component
         return ContentCalendar::firstOrCreate(['team_id' => $this->teamModel->id]);
     }
 
-    public function getRowsProperty()
+    public function getDaysProperty()
     {
         $start = Carbon::parse($this->month.'-01');
         $end = $start->copy()->endOfMonth();
 
-        $cal = $this->calendar;
-        $postingDays = $cal->posting_days ?? $this->teamModel->posting_days ?? ['mon', 'wed', 'fri'];
-        $postingDayNumbers = collect($postingDays)->map(fn ($d) => [
-            'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7,
-        ][$d] ?? null)->filter()->all();
-
-        $entries = CalendarEntry::where('calendar_id', $cal->id)
+        $entriesByDay = CalendarEntry::where('calendar_id', $this->calendar->id)
             ->whereBetween('scheduled_for', [$start, $end])
             ->orderBy('scheduled_for')
+            ->orderBy('id')
             ->get()
-            ->keyBy(fn ($e) => $e->scheduled_for->format('Y-m-d'));
+            ->groupBy(fn ($e) => $e->scheduled_for->format('Y-m-d'));
 
-        $rows = [];
-        for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
-            if (! in_array($d->isoWeekday(), $postingDayNumbers)) {
-                continue;
-            }
-            $key = $d->format('Y-m-d');
-            $rows[] = ['date' => $d->copy(), 'entry' => $entries->get($key)];
-        }
-        return $rows;
+        return $entriesByDay
+            ->map(fn ($entries, $key) => [
+                'date' => Carbon::parse($key),
+                'entries' => $entries,
+            ])
+            ->values();
     }
 
     public function render()
@@ -79,35 +71,120 @@ new class extends Component
         </div>
     </div>
 
-    <div class="mt-4 overflow-x-auto">
-        <table class="w-full border-collapse text-sm">
-            <thead class="bg-zinc-50 dark:bg-zinc-900/40">
-                <tr class="text-left">
-                    <th class="px-2 py-2">{{ __('Day') }}</th>
-                    <th class="px-2 py-2">{{ __('Weekday') }}</th>
-                    <th class="px-2 py-2">{{ __('Idea') }}</th>
-                    <th class="px-2 py-2">{{ __('Image Headline') }}</th>
-                    <th class="px-2 py-2">{{ __('LinkedIn') }}</th>
-                    <th class="px-2 py-2">{{ __('Instagram') }}</th>
-                    <th class="px-2 py-2">{{ __('Facebook') }}</th>
-                    <th class="px-2 py-2">{{ __('Notes') }}</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach ($this->rows as $r)
-                @php $e = $r['entry']; @endphp
-                <tr class="border-t border-zinc-200 align-top dark:border-zinc-700 {{ $e ? '' : 'opacity-50' }}">
-                    <td class="px-2 py-2 whitespace-nowrap">{{ $r['date']->day }}</td>
-                    <td class="px-2 py-2 whitespace-nowrap">{{ strtolower($r['date']->format('l')) }}</td>
-                    <td class="px-2 py-2">{{ $e->title ?? '—' }}</td>
-                    <td class="px-2 py-2">{{ $e->image_headline ?? '' }}</td>
-                    <td class="max-w-xs whitespace-pre-line px-2 py-2">{{ $e->linkedin_copy ?? '' }}</td>
-                    <td class="max-w-xs whitespace-pre-line px-2 py-2">{{ $e->instagram_copy ?? '' }}</td>
-                    <td class="max-w-xs whitespace-pre-line px-2 py-2">{{ $e->facebook_copy ?? '' }}</td>
-                    <td class="px-2 py-2">{{ $e->notes ?? '' }}</td>
-                </tr>
+    @if ($this->days->isEmpty())
+        <div class="mt-16 text-center">
+            <flux:icon name="calendar" class="mx-auto size-12 text-zinc-300 dark:text-zinc-600" />
+            <flux:heading size="lg" class="mt-4">{{ __('No entries this month') }}</flux:heading>
+            <flux:subheading class="mt-1">{{ __('Start a planner conversation to add posts.') }}</flux:subheading>
+            <div class="mt-6">
+                <flux:button variant="primary" icon="plus" :href="route('planner', ['current_team' => $teamModel])" wire:navigate>
+                    {{ __('Open Planner') }}
+                </flux:button>
+            </div>
+        </div>
+    @else
+        <div class="mt-6 space-y-10">
+            @foreach ($this->days as $day)
+                <section class="pt-3">
+                    <div class="flex items-baseline gap-3 border-b border-zinc-200 pb-2 dark:border-zinc-700">
+                        <flux:heading size="lg">{{ $day['date']->format('j') }}</flux:heading>
+                        <flux:text class="text-sm text-zinc-500">{{ strtolower($day['date']->format('l, F')) }}</flux:text>
+                    </div>
+
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        @foreach ($day['entries'] as $e)
+                            @php
+                                $sourceUrl = null;
+                                $sourceLabel = null;
+                                if ($e->source_content_piece_id) {
+                                    $sourceUrl = route('content.show', ['current_team' => $teamModel, 'contentPiece' => $e->source_content_piece_id]);
+                                    $sourceLabel = __('blog');
+                                } elseif ($e->source_social_post_id && $e->sourceSocialPost) {
+                                    $sourceUrl = route('social.show', ['current_team' => $teamModel, 'contentPiece' => $e->sourceSocialPost->content_piece_id]);
+                                    $sourceLabel = __('social');
+                                } elseif ($e->source_topic_id) {
+                                    $sourceUrl = route('topics', ['current_team' => $teamModel]);
+                                    $sourceLabel = __('topic');
+                                }
+                                $preview = trim((string) ($e->content ?? ''));
+                                $preview = mb_substr($preview, 0, 140) . (mb_strlen((string) $e->content) > 140 ? '…' : '');
+                            @endphp
+                            <flux:card class="flex flex-col p-4">
+                                <div class="flex items-start justify-between gap-2">
+                                    <flux:heading class="line-clamp-2 text-base">{{ $e->title }}</flux:heading>
+                                    @if ($e->platform)
+                                        <flux:badge variant="pill" size="sm">{{ ucfirst($e->platform) }}</flux:badge>
+                                    @endif
+                                </div>
+
+                                @if ($e->image_headline)
+                                    <flux:text class="mt-2 text-xs text-zinc-500">{{ __('Image:') }} {{ $e->image_headline }}</flux:text>
+                                @endif
+
+                                @if ($preview)
+                                    <flux:text class="mt-2 line-clamp-3 text-sm text-zinc-400">{{ $preview }}</flux:text>
+                                @endif
+
+                                <div class="mt-auto flex items-center justify-between pt-3 text-xs">
+                                    @if ($sourceUrl)
+                                        <a href="{{ $sourceUrl }}" wire:navigate class="inline-flex items-center gap-1 text-indigo-500 hover:underline">
+                                            <flux:icon name="link" variant="mini" class="size-3" />
+                                            {{ $sourceLabel }}
+                                        </a>
+                                    @else
+                                        <span></span>
+                                    @endif
+                                    <flux:modal.trigger :name="'entry-'.$e->id">
+                                        <flux:button size="xs" variant="ghost" icon="eye">{{ __('View') }}</flux:button>
+                                    </flux:modal.trigger>
+                                </div>
+                            </flux:card>
+                        @endforeach
+                    </div>
+                </section>
             @endforeach
-            </tbody>
-        </table>
-    </div>
+        </div>
+    @endif
+
+    @foreach ($this->days as $day)
+        @foreach ($day['entries'] as $e)
+            @php $r = ['date' => $day['date']]; @endphp
+            <flux:modal :name="'entry-'.$e->id" class="min-w-[32rem] max-w-2xl" wire:key="modal-{{ $e->id }}">
+                <div class="space-y-4">
+                    <div>
+                        <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ $r['date']->format('l, F j') }} · {{ $e->platform ?: __('no platform') }}</flux:text>
+                        <flux:heading size="lg" class="mt-1">{{ $e->title }}</flux:heading>
+                    </div>
+
+                    @if ($e->image_headline)
+                        <div>
+                            <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Image headline') }}</flux:text>
+                            <div class="mt-1 text-sm">{{ $e->image_headline }}</div>
+                        </div>
+                    @endif
+
+                    @if ($e->image_prompt)
+                        <div>
+                            <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Image prompt') }}</flux:text>
+                            <div class="mt-1 text-sm text-zinc-400">{{ $e->image_prompt }}</div>
+                        </div>
+                    @endif
+
+                    @if ($e->content)
+                        <div>
+                            <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Content') }}</flux:text>
+                            <div class="mt-1 whitespace-pre-line text-sm">{{ $e->content }}</div>
+                        </div>
+                    @endif
+
+                    @if ($e->notes)
+                        <div>
+                            <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Notes') }}</flux:text>
+                            <div class="mt-1 whitespace-pre-line text-sm text-zinc-400">{{ $e->notes }}</div>
+                        </div>
+                    @endif
+                </div>
+            </flux:modal>
+        @endforeach
+    @endforeach
 </div>

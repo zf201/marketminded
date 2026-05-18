@@ -19,13 +19,15 @@ it('propose creates entries and flips source used', function () {
             [
                 'scheduled_for' => '2026-05-06',
                 'title' => 'Huawei headlights',
-                'linkedin_copy' => 'Long LI body...',
+                'platform' => 'linkedin',
+                'content' => 'Long LI body...',
                 'source_topic_id' => $topic->id,
             ],
             [
-                'scheduled_for' => '2026-05-08',
-                'title' => 'Tesla Y prime',
-                'linkedin_copy' => 'Another...',
+                'scheduled_for' => '2026-05-06',
+                'title' => 'Huawei headlights (IG)',
+                'platform' => 'instagram',
+                'content' => 'Another...',
             ],
         ],
     ]);
@@ -61,12 +63,12 @@ it('updates a single entry by id', function () {
     $result = CalendarEntryToolHandler::update($this->team, [
         'id' => $entry->id,
         'title' => 'New title',
-        'linkedin_copy' => 'LI body',
+        'content' => 'LI body',
     ]);
 
     expect($result['status'])->toBe('ok');
     expect($entry->fresh()->title)->toBe('New title');
-    expect($entry->fresh()->linkedin_copy)->toBe('LI body');
+    expect($entry->fresh()->content)->toBe('LI body');
 });
 
 it('refuses to update an entry from another team', function () {

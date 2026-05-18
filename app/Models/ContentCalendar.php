@@ -8,14 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ContentCalendar extends Model
 {
-    protected $fillable = ['team_id', 'posting_days'];
-
-    protected function casts(): array
-    {
-        return [
-            'posting_days' => 'array',
-        ];
-    }
+    protected $fillable = ['team_id'];
 
     public function team(): BelongsTo
     {
