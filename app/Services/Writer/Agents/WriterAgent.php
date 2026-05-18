@@ -42,7 +42,7 @@ class WriterAgent extends BaseAgent
 
     protected function systemPrompt(Brief $brief, Team $team): string
     {
-        $topic = $brief->topic();
+        $topic = $brief->topic() ?? ['title' => '', 'angle' => ''];
         $research = $brief->research();
         $outline = $brief->outline();
 
@@ -203,7 +203,7 @@ PROMPT;
 
     protected function applyToBrief(Brief $brief, array $payload, Team $team): Brief
     {
-        $topic = $brief->topic();
+        $topic = $brief->topic() ?? [];
 
         $piece = ContentPiece::firstOrCreate(
             ['conversation_id' => $brief->conversationId()],
