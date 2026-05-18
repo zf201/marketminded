@@ -3,13 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['team_id', 'conversation_id', 'title', 'angle', 'sources', 'status', 'score'])]
+#[Fillable(['team_id', 'conversation_id', 'title', 'angle', 'sources', 'status', 'score', 'used'])]
 class Topic extends Model
 {
+    use HasFactory;
+
     public $timestamps = false;
 
     protected function casts(): array
