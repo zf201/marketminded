@@ -6,12 +6,16 @@ use App\Events\ConversationEvent;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Team;
+use App\Models\ContentCalendar;
 use App\Services\BrandIntelligenceToolHandler;
 use App\Services\BraveSearchClient;
+use App\Services\CalendarEntryToolHandler;
 use App\Services\ChatPromptBuilder;
 use App\Services\ConversationBus;
 use App\Services\CreateOutlineToolHandler;
 use App\Services\FetchStyleReferenceToolHandler;
+use App\Services\ListAvailablePoolToolHandler;
+use App\Services\MarkUsedToolHandler;
 use App\Services\OpenRouterClient;
 use App\Services\PickAudienceToolHandler;
 use App\Services\ProofreadBlogPostToolHandler;
@@ -263,6 +267,50 @@ class RunConversationTurn implements ShouldQueue
                 $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => $status]);
 
                 return $result;
+            }
+
+            if ($name === 'propose_entries') {
+                $calendar = ContentCalendar::firstOrCreate(['team_id' => $team->id]);
+                $bus->publish('subagent_started', ['agent' => 'planner', 'title' => __('Adding calendar entries'), 'color' => 'amber']);
+                $result = CalendarEntryToolHandler::propose($team, $calendar, $args);
+                if (($result['status'] ?? '') === 'ok') {
+                    $bus->publish('subagent_completed', ['agent' => 'planner', 'card' => [
+                        'kind' => 'calendar_entries',
+                        'summary' => count($result['created_ids'] ?? []).' '.__('calendar entries created'),
+                        'calendar_url' => route('calendar.index', ['current_team' => $team]),
+                    ]]);
+                } else {
+                    $bus->publish('subagent_error', ['agent' => 'planner', 'message' => $result['message'] ?? __('Failed to add entries.')]);
+                }
+                return json_encode($result);
+            }
+
+            if ($name === 'update_entry') {
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'update entry', 'id' => $pillId, 'status' => 'running']);
+                $result = CalendarEntryToolHandler::update($team, $args);
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => ($result['status'] ?? '') === 'ok' ? 'ok' : 'error']);
+                return json_encode($result);
+            }
+
+            if ($name === 'delete_entry') {
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'delete entry', 'id' => $pillId, 'status' => 'running']);
+                $result = CalendarEntryToolHandler::delete($team, $args);
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => ($result['status'] ?? '') === 'ok' ? 'ok' : 'error']);
+                return json_encode($result);
+            }
+
+            if ($name === 'mark_used') {
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'mark used', 'id' => $pillId, 'status' => 'running']);
+                $result = MarkUsedToolHandler::run($team, $args);
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => ($result['status'] ?? '') === 'ok' ? 'ok' : 'error']);
+                return json_encode($result);
+            }
+
+            if ($name === 'list_available_pool') {
+                return json_encode(ListAvailablePoolToolHandler::run($team));
             }
 
             return "Unknown tool: {$name}";
