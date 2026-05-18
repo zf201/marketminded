@@ -18,6 +18,13 @@ class CalendarEntryToolHandler
         'status',
     ];
 
+    /** Fields the planner agent is allowed to mutate via update_entry. title is intentionally absent. */
+    private const UPDATE_ALLOWED_FIELDS = [
+        'platform', 'image_headline', 'image_prompt', 'content', 'notes',
+        'source_topic_id', 'source_social_post_id', 'source_content_piece_id',
+        'status',
+    ];
+
     public static function proposeSchema(): array
     {
         return [
@@ -42,17 +49,22 @@ class CalendarEntryToolHandler
 
     public static function updateSchema(): array
     {
+        $entryProps = self::entrySchema()['properties'];
+        // title and scheduled_for are not editable via update_entry. Use move_entry for dates;
+        // titles are user-set when the entry is proposed and only the user can rename.
+        unset($entryProps['title'], $entryProps['scheduled_for']);
+
         return [
             'type' => 'function',
             'function' => [
                 'name' => 'update_entry',
-                'description' => 'Patch one calendar entry by id. Only include fields to change.',
+                'description' => 'Patch one calendar entry by id. Edits platform, image, content, notes, sources, status. Cannot change the title (user-only) or the date (use move_entry).',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['id'],
                     'properties' => array_merge(
                         ['id' => ['type' => 'integer']],
-                        self::entrySchema()['properties'],
+                        $entryProps,
                     ),
                 ],
             ],
@@ -159,7 +171,7 @@ class CalendarEntryToolHandler
             return ['status' => 'error', 'message' => 'Source id does not belong to this team.'];
         }
 
-        $entry->fill(collect($args)->only(self::ENTRY_FIELDS)->all())->save();
+        $entry->fill(collect($args)->only(self::UPDATE_ALLOWED_FIELDS)->all())->save();
         return ['status' => 'ok', 'id' => $entry->id];
     }
 

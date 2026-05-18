@@ -32,6 +32,14 @@ new class extends Component
         return ContentCalendar::firstOrCreate(['team_id' => $this->teamModel->id]);
     }
 
+    public function deleteEntry(int $entryId): void
+    {
+        CalendarEntry::where('id', $entryId)
+            ->where('team_id', $this->teamModel->id)
+            ->delete();
+        \Flux\Flux::modal('entry-'.$entryId)->close();
+    }
+
     public function getDaysProperty()
     {
         $start = Carbon::parse($this->month.'-01');
@@ -134,9 +142,19 @@ new class extends Component
                                     @else
                                         <span></span>
                                     @endif
-                                    <flux:modal.trigger :name="'entry-'.$e->id">
-                                        <flux:button size="xs" variant="ghost" icon="eye">{{ __('View') }}</flux:button>
-                                    </flux:modal.trigger>
+                                    <div class="flex items-center gap-1">
+                                        <flux:modal.trigger :name="'entry-'.$e->id">
+                                            <flux:button size="xs" variant="ghost" icon="eye">{{ __('View') }}</flux:button>
+                                        </flux:modal.trigger>
+                                        <flux:button
+                                            size="xs"
+                                            variant="ghost"
+                                            icon="trash"
+                                            wire:click="deleteEntry({{ $e->id }})"
+                                            wire:confirm="{{ __('Delete this calendar entry?') }}"
+                                            class="text-zinc-500 hover:text-red-500"
+                                        />
+                                    </div>
                                 </div>
                             </flux:card>
                         @endforeach

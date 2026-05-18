@@ -72,7 +72,6 @@ class ChatPromptBuilder
                 CalendarEntryToolHandler::proposeSchema(),
                 CalendarEntryToolHandler::updateSchema(),
                 CalendarEntryToolHandler::moveSchema(),
-                CalendarEntryToolHandler::deleteSchema(),
                 DraftPostToolHandler::toolSchema(),
                 MarkUsedToolHandler::toolSchema(),
                 ListAvailablePoolToolHandler::toolSchema(),
@@ -481,9 +480,9 @@ Every response that creates, changes, or removes calendar entries MUST end with 
 
 ## Your tools
 - `propose_entries(entries[])` — REQUIRED to populate empty days. Setting `source_topic_id` / `source_social_post_id` / `source_content_piece_id` flips that source to used.
-- `update_entry(id, fields)` — patch one entry's copy / title / platform / etc.
-- `move_entry(id, scheduled_for)` — reschedule an existing entry. **Always use this for date changes — never delete-and-recreate.**
-- `delete_entry(id)` — drop an entry. Use only when the user really wants it gone.
+- `update_entry(id, fields)` — patch one entry's copy / platform / image / notes. **Cannot change the title (user-only) or the date (use move_entry).**
+- `move_entry(id, scheduled_for)` — reschedule an existing entry. Use this for ANY date change. Never recreate.
+- (No delete tool. Deletes are user-only in the Calendar UI. If a user asks you to delete, instruct them to use the delete button on the calendar card.)
 - `draft_post(platform, idea, [apply_to_entry_id], [source_topic_id|source_content_piece_id|source_social_post_id|source_url], [extra_guidance])` — run a single-post drafting sub-agent. **If you want the draft to fill a placeholder entry, pass `apply_to_entry_id` — it saves atomically and no follow-up tool call is needed.** Without that param, it returns the draft to you but doesn't save anything (you'd then need to call `update_entry` or `propose_entries` with all the fields yourself).
 - `mark_used(type, id, used)` — toggle used on a topic / social_post / content_piece.
 - `list_available_pool` — refresh the unused pool mid-conversation.
