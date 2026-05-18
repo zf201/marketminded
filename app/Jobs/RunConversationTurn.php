@@ -302,6 +302,14 @@ class RunConversationTurn implements ShouldQueue
                 return json_encode($result);
             }
 
+            if ($name === 'move_entry') {
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'move entry', 'id' => $pillId, 'status' => 'running']);
+                $result = CalendarEntryToolHandler::move($team, $args);
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => ($result['status'] ?? '') === 'ok' ? 'ok' : 'error']);
+                return json_encode($result);
+            }
+
             if ($name === 'mark_used') {
                 $pillId = bin2hex(random_bytes(8));
                 $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'mark used', 'id' => $pillId, 'status' => 'running']);

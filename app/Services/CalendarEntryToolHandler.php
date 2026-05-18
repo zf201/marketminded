@@ -65,11 +65,30 @@ class CalendarEntryToolHandler
             'type' => 'function',
             'function' => [
                 'name' => 'delete_entry',
-                'description' => 'Delete one calendar entry by id. Does not unmark its source.',
+                'description' => 'Delete one calendar entry by id. Use this only when the user explicitly wants the entry gone. To reschedule an existing entry, use move_entry instead — never delete-and-recreate.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['id'],
                     'properties' => ['id' => ['type' => 'integer']],
+                ],
+            ],
+        ];
+    }
+
+    public static function moveSchema(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'move_entry',
+                'description' => 'Reschedule an existing calendar entry to a new date. Preserves all other fields (title, platform, content, image headline, sources). PREFER this over delete_entry whenever the user is changing a date.',
+                'parameters' => [
+                    'type' => 'object',
+                    'required' => ['id', 'scheduled_for'],
+                    'properties' => [
+                        'id' => ['type' => 'integer'],
+                        'scheduled_for' => ['type' => 'string', 'description' => 'New date in YYYY-MM-DD.'],
+                    ],
                 ],
             ],
         ];
@@ -142,6 +161,22 @@ class CalendarEntryToolHandler
 
         $entry->fill(collect($args)->only(self::ENTRY_FIELDS)->all())->save();
         return ['status' => 'ok', 'id' => $entry->id];
+    }
+
+    public static function move(Team $team, array $args): array
+    {
+        $id = $args['id'] ?? null;
+        $date = $args['scheduled_for'] ?? null;
+        if (! $id || ! $date) {
+            return ['status' => 'error', 'message' => 'Missing id or scheduled_for.'];
+        }
+        $entry = CalendarEntry::where('id', $id)->where('team_id', $team->id)->first();
+        if (! $entry) {
+            return ['status' => 'error', 'message' => 'Entry not found for this team.'];
+        }
+        $entry->scheduled_for = $date;
+        $entry->save();
+        return ['status' => 'ok', 'id' => $entry->id, 'scheduled_for' => $entry->scheduled_for->format('Y-m-d')];
     }
 
     public static function delete(Team $team, array $args): array
