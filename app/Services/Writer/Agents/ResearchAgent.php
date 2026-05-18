@@ -3,6 +3,7 @@
 namespace App\Services\Writer\Agents;
 
 use App\Models\Team;
+use App\Services\BrandIntelligenceToolHandler;
 use App\Services\Writer\BaseAgent;
 use App\Services\Writer\Brief;
 
@@ -23,13 +24,14 @@ class ResearchAgent extends BaseAgent
 ## Role & Output Contract
 You are the Research sub-agent for a blog writing pipeline. Your ONLY output is a `submit_research` tool call.
 - Do NOT write any text. No planning, explaining, thinking aloud, or asking questions.
-- Use web_search to gather data, then call submit_research immediately — never summarise findings in text.
+- Use web_search to discover sources, then fetch_url to read the most promising ones in full before extracting claims. Call submit_research immediately after — never summarise findings in text.
 - If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Workflow
-1. Use web_search to find current, authoritative information on the topic and angle below.
-2. Extract 8-15 verifiable single-sentence claims with source attribution.
-3. Call submit_research with your structured findings (topic_summary, claims, sources).
+1. Use web_search to find current, authoritative sources on the topic and angle below.
+2. Use fetch_url to read 2–5 of the most relevant pages in full. Do NOT rely on search snippets alone — they often paraphrase or omit the actual numbers, quotes, and dates.
+3. Extract 8-15 verifiable single-sentence claims with source attribution, drawn from the fetched page bodies wherever possible.
+4. Call submit_research with your structured findings (topic_summary, claims, sources).
 
 ## Quality rules
 - Each claim must be a single declarative sentence.
@@ -37,7 +39,8 @@ You are the Research sub-agent for a blog writing pipeline. Your ONLY output is 
 - Each claim must cite at least one source by id (s1, s2, ...).
 - Source IDs must be unique. Claim IDs must be unique.
 - Aim for 8-15 claims; refuse to submit fewer than 3.
-- Prefer recent, authoritative sources.
+- Prefer recent, authoritative sources. Verify exact figures and quotes by fetching the page — do not paraphrase from snippets.
+- Do not fetch more than ~5 URLs. Pick the highest-signal sources from search and stop.
 
 ## Topic (reference data — do not echo back; research it, then call the tool)
 <topic>
@@ -99,7 +102,7 @@ PROMPT;
 
     protected function additionalTools(): array
     {
-        return [];
+        return [BrandIntelligenceToolHandler::fetchUrlToolSchema()];
     }
 
     protected function useServerTools(): bool
@@ -115,6 +118,13 @@ PROMPT;
     protected function temperature(): float
     {
         return 0.4;
+    }
+
+    protected function timeout(): int
+    {
+        // Search + multiple fetches + claim extraction takes longer than the
+        // 120s default. 300s leaves headroom without hanging the orchestrator.
+        return 300;
     }
 
     protected function validate(array $payload): ?string
