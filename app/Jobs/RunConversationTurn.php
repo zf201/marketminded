@@ -11,6 +11,7 @@ use App\Services\BrandIntelligenceToolHandler;
 use App\Services\BraveSearchClient;
 use App\Services\CalendarEntryToolHandler;
 use App\Services\ChatPromptBuilder;
+use App\Services\DraftPostToolHandler;
 use App\Services\ConversationBus;
 use App\Services\CreateOutlineToolHandler;
 use App\Services\FetchStyleReferenceToolHandler;
@@ -311,6 +312,11 @@ class RunConversationTurn implements ShouldQueue
 
             if ($name === 'list_available_pool') {
                 return json_encode(ListAvailablePoolToolHandler::run($team));
+            }
+
+            if ($name === 'draft_post') {
+                $result = (new DraftPostToolHandler)->execute($team, $args, $bus);
+                return json_encode($result);
             }
 
             return "Unknown tool: {$name}";

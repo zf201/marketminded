@@ -11,6 +11,7 @@ use App\Services\Writer\Brief;
 use App\Services\FetchStyleReferenceToolHandler;
 use App\Services\PickAudienceToolHandler;
 use App\Services\CalendarEntryToolHandler;
+use App\Services\DraftPostToolHandler;
 use App\Services\MarkUsedToolHandler;
 use App\Services\ListAvailablePoolToolHandler;
 use App\Models\CalendarEntry;
@@ -71,6 +72,7 @@ class ChatPromptBuilder
                 CalendarEntryToolHandler::proposeSchema(),
                 CalendarEntryToolHandler::updateSchema(),
                 CalendarEntryToolHandler::deleteSchema(),
+                DraftPostToolHandler::toolSchema(),
                 MarkUsedToolHandler::toolSchema(),
                 ListAvailablePoolToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
@@ -480,6 +482,7 @@ Every response that creates, changes, or removes calendar entries MUST end with 
 - `propose_entries(entries[])` — REQUIRED to populate empty days. Setting `source_topic_id` / `source_social_post_id` / `source_content_piece_id` flips that source to used.
 - `update_entry(id, fields)` — patch one entry.
 - `delete_entry(id)` — drop one entry. Does not unmark its source.
+- `draft_post(platform, idea, [source_topic_id|source_content_piece_id|source_social_post_id|source_url], [extra_guidance])` — run a single-post drafting sub-agent. Returns `{title, image_headline, image_prompt, content}` tailored to the platform. **You decide what to do with the result** — typically pass the fields straight into `propose_entries` or `update_entry`. Use this when you don't already have copy you trust.
 - `mark_used(type, id, used)` — toggle used on a topic / social_post / content_piece.
 - `list_available_pool` — refresh the unused pool mid-conversation.
 - `fetch_url(url)` — read a web page.
