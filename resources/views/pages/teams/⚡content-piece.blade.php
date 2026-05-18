@@ -91,6 +91,22 @@ new class extends Component
                     {{ __('Open conversation') }}
                 </flux:button>
             @endif
+            <flux:button
+                variant="subtle"
+                size="sm"
+                icon="clipboard-document"
+                x-data="{ copied: false }"
+                x-on:click="
+                    navigator.clipboard.writeText($el.dataset.markdown).then(() => {
+                        copied = true;
+                        setTimeout(() => copied = false, 1500);
+                    });
+                "
+                data-markdown="{{ '# '.$this->displayed['title']."\n\n".$this->displayed['body'] }}"
+            >
+                <span x-show="!copied">{{ __('Copy Markdown') }}</span>
+                <span x-show="copied" x-cloak>{{ __('Copied!') }}</span>
+            </flux:button>
             <flux:dropdown>
                 <flux:button variant="subtle" size="sm" icon="ellipsis-horizontal" />
                 <flux:menu>
