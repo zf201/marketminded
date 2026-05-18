@@ -44,6 +44,13 @@ new class extends Component
         \Flux\Flux::modal('restore-version-'.$version)->close();
     }
 
+    public function getDisplayedMarkdownProperty(): string
+    {
+        $d = $this->displayed;
+
+        return '# ' . $d['title'] . "\n\n" . $d['body'];
+    }
+
     public function getDisplayedProperty(): array
     {
         if ($this->selectedVersion === null) {
@@ -102,7 +109,7 @@ new class extends Component
                         setTimeout(() => copied = false, 1500);
                     });
                 "
-                data-markdown="{{ '# '.$this->displayed['title']."\n\n".$this->displayed['body'] }}"
+                data-markdown="{{ $this->displayedMarkdown }}"
             >
                 <span x-show="!copied">{{ __('Copy Markdown') }}</span>
                 <span x-show="copied" x-cloak>{{ __('Copied!') }}</span>
