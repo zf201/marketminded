@@ -303,7 +303,10 @@ class RunConversationTurn implements ShouldQueue
             }
 
             if ($name === 'read_month') {
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'read month', 'id' => $pillId, 'status' => 'running', 'detail' => $args['month'] ?? '']);
                 $result = CalendarEntryToolHandler::readMonth($team, $args);
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => ($result['status'] ?? '') === 'ok' ? 'ok' : 'error']);
                 return json_encode($result);
             }
 
@@ -324,7 +327,11 @@ class RunConversationTurn implements ShouldQueue
             }
 
             if ($name === 'list_available_pool') {
-                return json_encode(ListAvailablePoolToolHandler::run($team));
+                $pillId = bin2hex(random_bytes(8));
+                $bus->publish('subagent_tool_call', ['agent' => 'main', 'name' => 'list pool', 'id' => $pillId, 'status' => 'running']);
+                $result = ListAvailablePoolToolHandler::run($team);
+                $bus->publish('subagent_tool_call_status', ['agent' => 'main', 'id' => $pillId, 'status' => 'ok']);
+                return json_encode($result);
             }
 
             if ($name === 'draft_post') {
