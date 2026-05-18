@@ -32,6 +32,12 @@
                     <flux:sidebar.item icon="megaphone" :href="route('social.index')" :current="request()->routeIs('social.*')" wire:navigate>
                         {{ __('Social') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="calendar-days" :href="route('planner')" :current="request()->routeIs('planner')" wire:navigate>
+                        {{ __('Planner') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="calendar" :href="route('calendar.index')" :current="request()->routeIs('calendar.*')" wire:navigate>
+                        {{ __('Calendar') }}
+                    </flux:sidebar.item>
                     <flux:sidebar.item icon="chat-bubble-left-right" :href="route('create')" :current="request()->routeIs('create')" wire:navigate>
                         {{ __('History') }}
                     </flux:sidebar.item>

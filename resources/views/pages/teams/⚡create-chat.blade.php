@@ -413,6 +413,7 @@ new class extends Component
                     'topics' => __('Brainstorm'),
                     'writer' => __('Writer'),
                     'funnel' => __('Funnel'),
+                    'planner' => __('Planner'),
                     default => $type,
                 } }}</flux:badge>
             @endif
@@ -754,6 +755,12 @@ new class extends Component
                             <flux:icon name="megaphone" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
                             <flux:heading size="sm">{{ __('Build a Funnel') }}</flux:heading>
                             <flux:text class="mt-1 text-xs">{{ __('Turn a content piece into 3–6 social posts that drive traffic back to it') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectType('planner')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="calendar-days" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Plan a month') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Prepare a monthly social calendar from your unused topics, posts, and content') }}</flux:text>
                         </button>
                     </div>
                 </div>
