@@ -44,7 +44,6 @@ class CalendarExportController extends Controller
             for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
                 $dayEntries = $entriesByDay->get($d->format('Y-m-d'), collect());
                 if ($dayEntries->isEmpty()) {
-                    fputcsv($out, [$d->day, $weekdayLabels[$d->isoWeekday()], '', '', '', '', '']);
                     continue;
                 }
                 foreach ($dayEntries as $e) {
