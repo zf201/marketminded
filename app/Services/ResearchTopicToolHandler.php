@@ -24,6 +24,30 @@ class ResearchTopicToolHandler
         $conversation = Conversation::findOrFail($conversationId);
         $brief = Brief::fromJson($conversation->brief ?? []);
 
+        // When the chat started ad-hoc (no backlog topic linked), brief.topic
+        // is empty and the sub-agent has nothing to research. The orchestrator
+        // knows the title/angle from the conversation, so accept them here and
+        // populate the brief before dispatching. Caller-provided values always
+        // override existing brief.topic so the orchestrator can correct course
+        // on retries.
+        $title = trim((string) ($args['title'] ?? ''));
+        $angle = trim((string) ($args['angle'] ?? ''));
+        if ($title !== '' || $angle !== '') {
+            $existing = $brief->topic() ?? [];
+            $brief = $brief->withTopic(array_merge($existing, array_filter([
+                'title' => $title !== '' ? $title : ($existing['title'] ?? ''),
+                'angle' => $angle !== '' ? $angle : ($existing['angle'] ?? ''),
+            ], fn ($v) => $v !== '')));
+            $conversation->update(['brief' => $brief->toJson()]);
+        }
+
+        if (($brief->topic()['title'] ?? '') === '') {
+            return json_encode([
+                'status' => 'error',
+                'message' => 'No topic title set on the brief. Retry research_topic with `title` (and optionally `angle`) describing what to research.',
+            ]);
+        }
+
         $extraContext = $args['extra_context'] ?? null;
         $agent = $extraContext !== null ? new ResearchAgent($extraContext) : ($this->agent ?? new ResearchAgent);
         $agent->conversationId = $conversationId;
@@ -56,10 +80,18 @@ class ResearchTopicToolHandler
             'type' => 'function',
             'function' => [
                 'name' => 'research_topic',
-                'description' => 'Run the Research sub-agent. Reads brief.topic; writes brief.research with structured claims sourced via web search.',
+                'description' => 'Run the Research sub-agent. Writes brief.research with structured claims sourced via web search. If brief.topic is already populated (chat started from a backlog topic) you can omit title/angle. If the chat started ad-hoc you MUST pass title (and optionally angle) so the researcher knows what to look up — without them the search wanders into generic territory.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
+                        'title' => [
+                            'type' => 'string',
+                            'description' => 'The blog post topic / working title in the user\'s language. Pass this whenever the topic was not picked from the backlog. Overrides any existing brief.topic.title.',
+                        ],
+                        'angle' => [
+                            'type' => 'string',
+                            'description' => 'Optional one-sentence angle / framing for the post. Helps the researcher focus on the right facets.',
+                        ],
                         'extra_context' => [
                             'type' => 'string',
                             'description' => 'Optional guidance for the sub-agent on retry.',
