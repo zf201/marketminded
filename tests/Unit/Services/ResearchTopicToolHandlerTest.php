@@ -11,6 +11,10 @@ use App\Services\Writer\Brief;
 class FakeResearchAgent extends ResearchAgent
 {
     public ?AgentResult $stubResult = null;
+    /** @var callable|null */
+    public $stubResultFactory = null;
+    public bool $captureInputBrief = false;
+    public ?Brief $seenBrief = null;
     public ?string $seenExtraContext = null;
 
     public function __construct(?string $extraContext = null)
@@ -21,6 +25,12 @@ class FakeResearchAgent extends ResearchAgent
 
     public function execute(Brief $brief, $team): AgentResult
     {
+        if ($this->captureInputBrief) {
+            $this->seenBrief = $brief;
+        }
+        if ($this->stubResultFactory !== null) {
+            return ($this->stubResultFactory)($brief);
+        }
         return $this->stubResult ?? AgentResult::error('no stub set');
     }
 }
@@ -120,4 +130,88 @@ test('toolSchema returns valid schema', function () {
     $schema = ResearchTopicToolHandler::toolSchema();
     expect($schema['function']['name'])->toBe('research_topic');
     expect($schema['function']['parameters']['properties'])->toHaveKey('extra_context');
+    expect($schema['function']['parameters']['properties'])->toHaveKey('title');
+    expect($schema['function']['parameters']['properties'])->toHaveKey('angle');
+});
+
+test('handler errors out when brief has no topic and no title arg was passed', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $conversation = Conversation::create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'title' => 't',
+        'type' => 'writer',
+        'brief' => [],
+    ]);
+
+    $agent = new FakeResearchAgent;
+    $agent->stubResult = AgentResult::error('should not be called');
+
+    $handler = new ResearchTopicToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [], []);
+    $decoded = json_decode($result, true);
+
+    expect($decoded['status'])->toBe('error');
+    expect($decoded['message'])->toContain('title');
+});
+
+test('handler populates brief.topic from title/angle args when brief is empty', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $conversation = Conversation::create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'title' => 't',
+        'type' => 'writer',
+        'brief' => [],
+    ]);
+
+    $newBrief = Brief::fromJson([])->withTopic(['title' => 'Operativni najem', 'angle' => 'pros and cons']);
+    $newBrief = $newBrief->withResearch([
+        'topic_summary' => 's',
+        'claims' => [['id' => 'c1', 'text' => 't', 'type' => 'fact', 'source_ids' => ['s1']]],
+        'sources' => [['id' => 's1', 'url' => 'u', 'title' => 't']],
+    ]);
+
+    $agent = new FakeResearchAgent;
+    $agent->stubResult = AgentResult::ok($newBrief, ['kind' => 'research', 'summary' => 'ok'], 'ok');
+
+    $handler = new ResearchTopicToolHandler($agent);
+    $result = $handler->execute($team, $conversation->id, [
+        'title' => 'Operativni najem',
+        'angle' => 'pros and cons',
+    ], []);
+
+    $decoded = json_decode($result, true);
+    expect($decoded['status'])->toBe('ok');
+
+    $conversation->refresh();
+    $brief = Brief::fromJson($conversation->brief);
+    expect($brief->topic()['title'])->toBe('Operativni najem');
+    expect($brief->topic()['angle'])->toBe('pros and cons');
+});
+
+test('handler title arg overrides existing brief.topic.title', function () {
+    [$team, $conversation] = writerConvWithTopic();
+
+    // Stub returns a brief that mimics ResearchAgent::applyToBrief — it preserves
+    // whatever topic was on the input brief and only adds research on top.
+    $agent = new FakeResearchAgent;
+    $agent->captureInputBrief = true;
+    $agent->stubResultFactory = fn (Brief $input) => AgentResult::ok(
+        $input->withResearch([
+            'topic_summary' => 's',
+            'claims' => [['id' => 'c1', 'text' => 't', 'type' => 'fact', 'source_ids' => ['s1']]],
+            'sources' => [['id' => 's1', 'url' => 'u', 'title' => 't']],
+        ]),
+        ['kind' => 'research'],
+        'ok',
+    );
+
+    $handler = new ResearchTopicToolHandler($agent);
+    $handler->execute($team, $conversation->id, ['title' => 'Corrected Title'], []);
+
+    $conversation->refresh();
+    expect(Brief::fromJson($conversation->brief)->topic()['title'])->toBe('Corrected Title');
 });
