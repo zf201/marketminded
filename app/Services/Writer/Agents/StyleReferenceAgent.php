@@ -49,7 +49,7 @@ Find 2–3 blog posts from this brand that best represent their voice and writin
 - Pick posts with clear brand voice. Avoid product announcements or press releases.
 - `why_chosen` must explain the voice/style qualities observed — not just the topic.
 - Do NOT include the post body in your submission. Only url, title, why_chosen.
-- Submit exactly 2–3 examples.
+- Submit exactly 2–3 examples. An empty `examples` array fails validation — if you only confidently found one, repeat it or pick a second-best candidate rather than submitting zero.
 
 ## Topic being written (reference data — do not echo back)
 <topic>
@@ -60,7 +60,11 @@ Angle: {$topic['angle']}
 {$extra}
 
 ## IMPORTANT
-Call `submit_style_reference` now. Do not write anything — the tool call is your complete output.
+Call `submit_style_reference` now with the FULL payload populated. The tool call must include:
+- `examples`: an array of 2–3 objects, each with `url`, `title`, `why_chosen`
+- `reasoning`: a short paragraph on the voice patterns you observed across the picks
+
+Do not call the tool with an empty object. Do not write the picks in plain text — they must be inside the tool arguments. The tool call is your complete output.
 PROMPT;
     }
 

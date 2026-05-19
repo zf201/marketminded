@@ -221,5 +221,5 @@ PROMPT;
     }
 
     protected function agentTitle(): string { return 'Brand Enricher sub-agent'; }
-    protected function agentColor(): string { return 'amber'; }
+    protected function agentColor(): string { return 'pink'; }
 }
