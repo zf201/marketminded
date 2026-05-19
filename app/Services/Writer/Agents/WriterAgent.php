@@ -42,7 +42,7 @@ class WriterAgent extends BaseAgent
 
     protected function systemPrompt(Brief $brief, Team $team): string
     {
-        $topic = $brief->topic() ?? ['title' => '', 'angle' => ''];
+        $topic = ($brief->topic() ?? []) + ['title' => '', 'angle' => ''];
         $research = $brief->research();
         $outline = $brief->outline();
 
