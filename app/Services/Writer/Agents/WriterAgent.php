@@ -79,8 +79,9 @@ You are the Writer sub-agent. Your ONLY output is a `submit_blog_post` tool call
 ## Workflow
 1. Read the outline, research claims, and brand profile below.
 2. Write a publishable blog post following the outline.
-3. Call `submit_blog_post` with the title and full body.
-4. Do NOT count words. Do NOT pad to hit a target. Write until the outline is fully covered with substance, then stop.
+3. If a specific claim needs a verbatim quote or stat from its source URL, you may call `fetch_url` ONCE for that source — do not browse beyond the existing research. Skip this if the claim text is already enough.
+4. Call `submit_blog_post` with the title and full body.
+5. Do NOT count words. Do NOT pad to hit a target. Write until the outline is fully covered with substance, then stop.
 
 ## Quality rules
 - Aim for roughly {$outline['target_length_words']} words. Anything from ~80% to ~120% of that is fine — don't count, just cover the outline. Length follows from the outline; don't pad or truncate to hit a number.
@@ -150,11 +151,18 @@ PROMPT;
 
     protected function additionalTools(): array
     {
-        return [];
+        return [
+            \App\Services\BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+        ];
     }
 
     protected function useServerTools(): bool
     {
+        // Intentionally false. Adding fetch_url lets the writer pull a
+        // specific quote/stat from an existing source url, but enabling
+        // web_search here historically caused deepseek-reasoner to loop
+        // on brave_web_search instead of submitting the post. See
+        // BaseAgent::execute() comment above $extraTools.
         return false;
     }
 
