@@ -48,7 +48,8 @@ You are the Proofread sub-agent. Your ONLY output is a `submit_revision` tool ca
 2. Apply the requested changes surgically. Do NOT rewrite the whole post.
 3. Match the brand voice, audience, and style references below — these are authoritative even when editing.
 4. Preserve sourced facts (statistics, percentages, dates, named entities, quotes). Do not invent new facts.
-5. Call `submit_revision` with the revised title, body, and a change_description.
+5. If the feedback asks for a verifiable change (a specific stat, quote, recent example, or fact-check), you may use `web_search` and `fetch_url` to ground the edit. Otherwise skip them — most revisions are stylistic.
+6. Call `submit_revision` with the revised title, body, and a change_description.
 
 ## Quality rules (apply even on small edits — content drifts otherwise)
 - Use the brand voice from the brand profile. Match the rhythm and register of the style reference examples.
@@ -167,12 +168,14 @@ PROMPT;
 
     protected function additionalTools(): array
     {
-        return [];
+        return [
+            \App\Services\BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+        ];
     }
 
     protected function useServerTools(): bool
     {
-        return false;
+        return true;
     }
 
     protected function model(Team $team): string

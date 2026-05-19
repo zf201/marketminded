@@ -159,6 +159,7 @@ Talk to the user naturally in plain text. Use markdown for readability (headings
 ## Your tools
 - update_brand_intelligence -- save what you learn about the brand (positioning, personas, voice, etc.)
 - fetch_url -- read a web page to analyze the brand
+- web_search -- search the web when you need outside context (competitor landscape, reviews, market signal, recent news about the company). Use it sparingly and only when the answer is not visible on pages you can already fetch.
 
 ## CRITICAL: nothing is saved unless you call the tool
 The user only sees data that has been persisted through update_brand_intelligence. Text in your message is NOT saved. Therefore:
@@ -407,6 +408,7 @@ BAD: user says "rewrite all of them" → reply with new drafts and "Updated!" bu
 - delete_post(id) — drop one post.
 - replace_all_posts — soft-delete current set and create a new one (use only when the user wants a full redo).
 - fetch_url — fetch a URL when needed.
+- web_search — search the web when you need outside context (current platform hook patterns, trending formats, examples of similar posts that worked). Optional; only use it when the source piece alone doesn't give you enough to write a sharp hook.
 
 ## Hard rules
 - Output 3–6 posts total.
@@ -490,6 +492,7 @@ Every response that creates or changes calendar entries MUST end with a tool cal
 - `mark_used(type, id, used)` — toggle used on a topic / social_post / content_piece.
 - `list_available_pool` — refresh the unused pool mid-conversation.
 - `fetch_url(url)` — read a web page.
+- `web_search` — search the web for fresh topics, industry trends, upcoming events, holidays, or seasonal hooks. Use only when the user explicitly asks (or has approved the fallback in step 3 of the workflow). Don't run unprompted searches.
 
 ## Entry shape
 Each calendar entry is ONE post on ONE day. Fields: `title`, `platform` (e.g. linkedin, instagram, facebook), `image_headline`, `image_prompt`, `content` (the post body), `notes`. Only `scheduled_for` and `title` are required — everything else is optional.
