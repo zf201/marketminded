@@ -53,7 +53,7 @@ it('propose enforces team scoping on source ids', function () {
     expect(CalendarEntry::count())->toBe(0);
 });
 
-it('updates a single entry by id', function () {
+it('updates a single entry by id but leaves the title locked', function () {
     $entry = $this->calendar->entries()->create([
         'team_id' => $this->team->id,
         'scheduled_for' => '2026-05-06',
@@ -67,7 +67,7 @@ it('updates a single entry by id', function () {
     ]);
 
     expect($result['status'])->toBe('ok');
-    expect($entry->fresh()->title)->toBe('New title');
+    expect($entry->fresh()->title)->toBe('Old');
     expect($entry->fresh()->content)->toBe('LI body');
 });
 
