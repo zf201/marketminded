@@ -2,6 +2,7 @@
 
 use App\Models\ContentPiece;
 use App\Models\Team;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 new class extends Component
@@ -49,6 +50,14 @@ new class extends Component
         $d = $this->displayed;
 
         return '# ' . $d['title'] . "\n\n" . $d['body'];
+    }
+
+    public function getDisplayedHtmlProperty(): string
+    {
+        return Str::markdown($this->displayed['body'], [
+            'html_input' => 'escape',
+            'allow_unsafe_links' => false,
+        ]);
     }
 
     public function getDisplayedProperty(): array
@@ -137,7 +146,7 @@ new class extends Component
 
             <article class="prose prose-invert max-w-none">
                 <h1>{{ $this->displayed['title'] }}</h1>
-                <div class="whitespace-pre-wrap">{{ $this->displayed['body'] }}</div>
+                {!! $this->displayedHtml !!}
             </article>
         </div>
 
