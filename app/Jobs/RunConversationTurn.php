@@ -14,6 +14,7 @@ use App\Services\ChatPromptBuilder;
 use App\Services\DraftPostToolHandler;
 use App\Services\ConversationBus;
 use App\Services\CreateOutlineToolHandler;
+use App\Services\EnrichBrandToolHandler;
 use App\Services\FetchStyleReferenceToolHandler;
 use App\Services\ListAvailablePoolToolHandler;
 use App\Services\MarkUsedToolHandler;
@@ -107,6 +108,7 @@ class RunConversationTurn implements ShouldQueue
         $brandHandler = new BrandIntelligenceToolHandler;
         $topicHandler = new TopicToolHandler;
         $researchHandler = new ResearchTopicToolHandler;
+        $enrichBrandHandler = new EnrichBrandToolHandler;
         $audienceHandler = new PickAudienceToolHandler;
         $outlineHandler = new CreateOutlineToolHandler;
         $styleRefHandler = new FetchStyleReferenceToolHandler;
@@ -120,6 +122,7 @@ class RunConversationTurn implements ShouldQueue
             $brandHandler,
             $topicHandler,
             $researchHandler,
+            $enrichBrandHandler,
             $audienceHandler,
             $outlineHandler,
             $styleRefHandler,
@@ -176,6 +179,13 @@ class RunConversationTurn implements ShouldQueue
 
             if ($name === 'research_topic') {
                 $result = $researchHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
+                $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
+
+                return $result;
+            }
+
+            if ($name === 'enrich_brand_context') {
+                $result = $enrichBrandHandler->execute($team, $conversation->id, $args, $priorTurnTools, $bus);
                 $priorTurnTools[] = ['name' => $name, 'args' => $args, 'status' => json_decode($result, true)['status'] ?? 'error'];
 
                 return $result;

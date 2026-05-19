@@ -46,13 +46,23 @@ class WriterAgent extends BaseAgent
         $research = $brief->research();
         $outline = $brief->outline();
 
-        $claimsBlock = collect($research['claims'])
+        $brandClaims = $brief->brandClaims()['claims'] ?? [];
+        $brandSources = $brief->brandClaims()['sources'] ?? [];
+
+        $allClaims = array_merge($research['claims'], $brandClaims);
+        $allSources = array_merge($research['sources'], $brandSources);
+
+        $claimsBlock = collect($allClaims)
             ->map(fn ($c) => "- {$c['id']} ({$c['type']}): {$c['text']}")
             ->implode("\n");
 
-        $sourcesBlock = collect($research['sources'])
+        $sourcesBlock = collect($allSources)
             ->map(fn ($s) => "- {$s['id']}: {$s['title']} ({$s['url']})")
             ->implode("\n");
+
+        $brandAnchorRule = empty($brandClaims)
+            ? ''
+            : "\n- When a section in the outline references a brand claim id (b-prefix, e.g. bc1, bc2), the post MUST present that brand's own offer concretely — name the product/plan, state its specifics, and frame it as the recommendation. Do NOT replace it with a competitor or generic alternative.";
 
         $outlineBlock = "Angle: {$outline['angle']}\nTarget length: {$outline['target_length_words']} words\n\nSections:\n"
             . collect($outline['sections'])
@@ -88,7 +98,7 @@ You are the Writer sub-agent. Your ONLY output is a `submit_blog_post` tool call
 - Follow the outline section order. Each section uses the claims listed
   in [brackets] for its claim_ids.
 - EVERY statistic, percentage, date, named entity, or quote must come
-  from a claim by id. Never fabricate facts.
+  from a claim by id. Never fabricate facts.{$brandAnchorRule}
 - Use the brand voice from the brand profile.
 - Banned words/phrases: "leverage", "innovative", "streamline", "unlock",
   "empower", "revolutionize", "in today's fast-paced world".

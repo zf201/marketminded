@@ -54,6 +54,7 @@ class ChatPromptBuilder
             ],
             'writer' => [
                 ResearchTopicToolHandler::toolSchema(),
+                EnrichBrandToolHandler::toolSchema(),
                 PickAudienceToolHandler::toolSchema(),
                 CreateOutlineToolHandler::toolSchema(),
                 FetchStyleReferenceToolHandler::toolSchema(),
@@ -304,6 +305,7 @@ You orchestrate a blog writing pipeline. You DO NOT do research, write outlines,
 
 ## Your tools (call these in order — each fills a brief slot)
 - research_topic(title, angle?) — runs the Research sub-agent. Fills brief.research. **You MUST pass `title` describing the post topic in the user's language (and `angle` if the user gave one) UNLESS the brief-status block below shows topic: ✓ already filled.** If the chat shows "topic: ✗" or the topic line is missing, the researcher has nothing to look up and will return generic results. Pass the exact working title the user is writing about.
+- enrich_brand_context — runs the Brand Enricher sub-agent. Fetches the brand's own homepage / product pages and extracts claims about the brand's own offers (b-prefixed ids). Fills brief.brand_claims. Requires brief.research. Returns status=skipped if no brand URLs are configured — treat skipped as success and continue.
 - pick_audience — runs the AudiencePicker sub-agent. Fills brief.audience. Requires brief.research. Returns status=skipped if no personas are configured — treat skipped as success and continue.
 - create_outline — runs the Editor sub-agent. Fills brief.outline. Requires brief.research.
 - fetch_style_reference — runs the StyleReference sub-agent. Fills brief.style_reference. Requires brief.outline. Returns status=skipped if no blog URL is configured — treat skipped as success and continue.
@@ -313,11 +315,12 @@ You orchestrate a blog writing pipeline. You DO NOT do research, write outlines,
 ## Pipeline order
 Run tools back-to-back without pausing for approval:
 1. research_topic
-2. pick_audience
-3. create_outline
-4. fetch_style_reference
-5. write_blog_post
-6. After write_blog_post completes, send a short plain-text summary and invite the user to review.
+2. enrich_brand_context
+3. pick_audience
+4. create_outline
+5. fetch_style_reference
+6. write_blog_post
+7. After write_blog_post completes, send a short plain-text summary and invite the user to review.
 
 Brief plain-text status lines between calls are fine ("Researching…", "Outlining…"). Do NOT narrate the content of tool results.
 
