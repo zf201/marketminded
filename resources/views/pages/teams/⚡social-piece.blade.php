@@ -48,6 +48,13 @@ new class extends Component
         $post->update(['posted_at' => $post->posted_at ? null : now()]);
     }
 
+    public function toggleUsed(int $postId): void
+    {
+        $post = SocialPost::where('team_id', $this->teamModel->id)->findOrFail($postId);
+        $post->used = ! $post->used;
+        $post->save();
+    }
+
     public function deletePost(int $postId): void
     {
         SocialPost::where('team_id', $this->teamModel->id)
@@ -198,6 +205,15 @@ new class extends Component
                                     class="ml-2 inline-flex items-center text-xs {{ $post->posted_at ? 'text-emerald-500 hover:text-emerald-400' : 'text-zinc-500 hover:text-zinc-300' }}"
                                 >
                                     <flux:icon name="check-circle" variant="mini" class="size-4" />
+                                </button>
+
+                                <button
+                                    type="button"
+                                    wire:click="toggleUsed({{ $post->id }})"
+                                    aria-label="{{ $post->used ? __('Unmark used') : __('Mark used') }}"
+                                    class="ml-1 inline-flex items-center text-xs {{ $post->used ? 'text-amber-500 hover:text-amber-400' : 'text-zinc-500 hover:text-zinc-300' }}"
+                                >
+                                    <flux:icon name="archive-box" variant="mini" class="size-4" />
                                 </button>
 
                                 <div

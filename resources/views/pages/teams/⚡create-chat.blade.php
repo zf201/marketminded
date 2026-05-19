@@ -5,6 +5,7 @@ use App\Models\Message;
 use App\Models\Team;
 use App\Jobs\RunConversationTurn;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 new class extends Component
@@ -348,6 +349,19 @@ new class extends Component
             if (($it['type'] ?? '') === 'subagent' && ($it['status'] ?? '') === 'working') {
                 $it['status'] = 'done';
             }
+            // Pre-render markdown for completed assistant text items. buildItems
+            // only runs for non-live messages, so by definition these are final.
+            // Errors stay plain text so the red styling stays readable.
+            if (
+                ($it['type'] ?? '') === 'text'
+                && ! empty($it['content'])
+                && ! str_starts_with($it['content'], 'Error:')
+            ) {
+                $it['html'] = Str::markdown($it['content'], [
+                    'html_input' => 'escape',
+                    'allow_unsafe_links' => false,
+                ]);
+            }
         }
         unset($it);
 
@@ -413,6 +427,7 @@ new class extends Component
                     'topics' => __('Brainstorm'),
                     'writer' => __('Writer'),
                     'funnel' => __('Funnel'),
+                    'planner' => __('Planner'),
                     default => $type,
                 } }}</flux:badge>
             @endif
@@ -496,8 +511,11 @@ new class extends Component
                                         </div>
                                     </template>
 
-                                    {{-- Text --}}
-                                    <template x-if="item.type === 'text'">
+                                    {{-- Text: rendered markdown for completed messages, plain text while streaming --}}
+                                    <template x-if="item.type === 'text' && item.html">
+                                        <div class="prose prose-sm prose-invert max-w-none text-sm mb-1" x-html="item.html"></div>
+                                    </template>
+                                    <template x-if="item.type === 'text' && !item.html">
                                         <p class="whitespace-pre-wrap text-sm mb-1"
                                            :class="item.content && item.content.startsWith('Error:') ? 'text-red-400' : ''"
                                            x-text="item.content"></p>
@@ -754,6 +772,12 @@ new class extends Component
                             <flux:icon name="megaphone" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
                             <flux:heading size="sm">{{ __('Build a Funnel') }}</flux:heading>
                             <flux:text class="mt-1 text-xs">{{ __('Turn a content piece into 3–6 social posts that drive traffic back to it') }}</flux:text>
+                        </button>
+
+                        <button wire:click="selectType('planner')" class="group cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-500/5 dark:border-zinc-700 dark:hover:border-indigo-500">
+                            <flux:icon name="calendar-days" class="mb-2 size-6 text-zinc-400 group-hover:text-indigo-400" />
+                            <flux:heading size="sm">{{ __('Plan a month') }}</flux:heading>
+                            <flux:text class="mt-1 text-xs">{{ __('Prepare a monthly social calendar from your unused topics, posts, and content') }}</flux:text>
                         </button>
                     </div>
                 </div>

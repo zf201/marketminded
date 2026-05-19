@@ -29,6 +29,13 @@ new class extends Component
         \Flux\Flux::modal('delete-topic-'.$topicId)->close();
     }
 
+    public function toggleUsed(int $topicId): void
+    {
+        $topic = Topic::where('team_id', $this->teamModel->id)->findOrFail($topicId);
+        $topic->used = ! $topic->used;
+        $topic->save();
+    }
+
     public function getTopicsProperty()
     {
         return Topic::where('team_id', $this->teamModel->id)
@@ -131,11 +138,14 @@ new class extends Component
                             </div>
                         @endif
 
-                        @if ($topic->status === 'used')
-                            <div class="mt-3 flex justify-end">
-                                <flux:badge variant="pill" size="sm" color="green">{{ __('Used') }}</flux:badge>
-                            </div>
-                        @endif
+                        <div class="mt-3 flex items-center justify-end gap-2">
+                            @if ($topic->used)
+                                <flux:badge variant="pill" size="sm" color="amber">{{ __('used') }}</flux:badge>
+                            @endif
+                            <flux:button size="xs" variant="ghost" wire:click="toggleUsed({{ $topic->id }})">
+                                {{ $topic->used ? __('Unmark used') : __('Mark used') }}
+                            </flux:button>
+                        </div>
 
                         <div class="mt-auto flex items-center gap-2 pt-3">
                             <flux:text class="shrink-0 text-xs text-zinc-500">{{ __('Score') }}</flux:text>

@@ -26,6 +26,8 @@ Route::prefix('{current_team}')
         Route::livewire('content/{contentPiece}', 'pages::teams.content-piece')->name('content.show');
         Route::livewire('social', 'pages::teams.social')->name('social.index');
         Route::livewire('social/{contentPiece}', 'pages::teams.social-piece')->name('social.show');
+        Route::livewire('calendar', 'pages::teams.calendar')->name('calendar.index');
+        Route::get('calendar/export', \App\Http\Controllers\CalendarExportController::class)->name('calendar.export');
     });
 
 Route::middleware(['auth'])->group(function () {

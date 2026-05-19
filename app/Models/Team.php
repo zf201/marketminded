@@ -177,6 +177,11 @@ class Team extends Model
         ];
     }
 
+    public function calendar(): HasOne
+    {
+        return $this->hasOne(ContentCalendar::class);
+    }
+
     /**
      * Get the route key for the model.
      */

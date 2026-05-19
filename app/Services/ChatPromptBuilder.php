@@ -10,6 +10,11 @@ use App\Models\Topic;
 use App\Services\Writer\Brief;
 use App\Services\FetchStyleReferenceToolHandler;
 use App\Services\PickAudienceToolHandler;
+use App\Services\CalendarEntryToolHandler;
+use App\Services\DraftPostToolHandler;
+use App\Services\MarkUsedToolHandler;
+use App\Services\ListAvailablePoolToolHandler;
+use App\Models\CalendarEntry;
 
 class ChatPromptBuilder
 {
@@ -23,6 +28,7 @@ class ChatPromptBuilder
             'topics' => self::topicsPrompt($profile, $hasProfile, $team),
             'writer' => self::writerPrompt($profile, $hasProfile, $conversation),
             'funnel' => self::funnelPrompt($profile, $team, $conversation),
+            'planner' => self::plannerPrompt($profile, $team, $conversation),
             default => 'You are a helpful AI assistant.',
         };
 
@@ -60,6 +66,16 @@ class ChatPromptBuilder
                 SocialPostToolHandler::updateSchema(),
                 SocialPostToolHandler::deleteSchema(),
                 SocialPostToolHandler::replaceAllSchema(),
+                BrandIntelligenceToolHandler::fetchUrlToolSchema(),
+            ],
+            'planner' => [
+                CalendarEntryToolHandler::proposeSchema(),
+                CalendarEntryToolHandler::updateSchema(),
+                CalendarEntryToolHandler::moveSchema(),
+                CalendarEntryToolHandler::readMonthSchema(),
+                DraftPostToolHandler::toolSchema(),
+                MarkUsedToolHandler::toolSchema(),
+                ListAvailablePoolToolHandler::toolSchema(),
                 BrandIntelligenceToolHandler::fetchUrlToolSchema(),
             ],
             default => [],
@@ -365,7 +381,7 @@ PROMPT;
 
         $guidanceBlock = $guidance ? "\n\n## User guidance\n{$guidance}" : '';
 
-        return <<<PROMPT
+        return <<<PROMPT_FUNNEL
 You are a social-media strategist building a traffic funnel back to one piece of long-form content. You produce 3–6 platform-appropriate posts that drive readers to that piece.
 
 ## CRITICAL: function calling
@@ -419,6 +435,109 @@ BAD: user says "rewrite all of them" → reply with new drafts and "Updated!" bu
 <brand-profile>
 {$profile}
 </brand-profile>
-PROMPT;
+PROMPT_FUNNEL;
+    }
+
+    private static function plannerPrompt(string $profile, Team $team, ?Conversation $conversation): string
+    {
+        $calendar = $team->calendar;
+
+        $brief = $conversation?->brief ?? [];
+        $month = is_array($brief) && ! empty($brief['planner_month']) ? $brief['planner_month'] : now()->format('Y-m');
+        [$year, $monthNum] = explode('-', $month);
+
+        $entries = $calendar
+            ? CalendarEntry::where('calendar_id', $calendar->id)
+                ->whereYear('scheduled_for', (int) $year)
+                ->whereMonth('scheduled_for', (int) $monthNum)
+                ->orderBy('scheduled_for')
+                ->get()
+            : collect();
+
+        $entriesBlock = $entries->isEmpty()
+            ? 'No entries yet for this month.'
+            : $entries->map(function ($e) {
+                $platform = $e->platform ?: 'no-platform';
+                return "- id={$e->id} {$e->scheduled_for->format('Y-m-d')} [{$platform}]: {$e->title}";
+            })->implode("\n");
+
+        $topics = Topic::where('team_id', $team->id)->where('used', false)->orderByDesc('created_at')->limit(15)->get(['id', 'title']);
+        $pieces = ContentPiece::where('team_id', $team->id)->where('used', false)->latest()->limit(15)->get(['id', 'title']);
+        $posts = SocialPost::where('team_id', $team->id)->where('used', false)->where('status', 'active')->latest()->limit(15)->get(['id', 'platform', 'hook']);
+
+        $poolBlock = "Unused topics:\n" . ($topics->isEmpty() ? '(none)' : $topics->map(fn ($t) => "- topic_id={$t->id}: {$t->title}")->implode("\n"));
+        $poolBlock .= "\n\nUnused content pieces:\n" . ($pieces->isEmpty() ? '(none)' : $pieces->map(fn ($p) => "- content_piece_id={$p->id}: {$p->title}")->implode("\n"));
+        $poolBlock .= "\n\nUnused social posts:\n" . ($posts->isEmpty() ? '(none)' : $posts->map(fn ($p) => "- social_post_id={$p->id} [{$p->platform}]: {$p->hook}")->implode("\n"));
+
+        return <<<PROMPT_PLANNER
+You are a social-media content planner helping the user prepare a monthly content calendar. You pull from the team's unused topics, social posts, and content pieces, and brainstorm fresh ideas for empty posting days.
+
+## CRITICAL: function calling
+Every response that creates or changes calendar entries MUST end with a tool call. The user only sees entries saved through `propose_entries` / `update_entry` / `move_entry`. Plain-text drafts are invisible.
+- Never say "added", "scheduled", "saved", "updated", "moved" unless the matching tool was called this turn.
+- For empty days: call `propose_entries` with all new entries in one call.
+- For fixing one day's copy: call `update_entry(id, fields)`.
+- For rescheduling: call `move_entry(id, scheduled_for)`.
+- You cannot delete entries. If the user asks, tell them to use the delete button on the calendar card.
+
+## Your tools
+- `propose_entries(entries[])` — REQUIRED to populate empty days. Setting `source_topic_id` / `source_social_post_id` / `source_content_piece_id` flips that source to used.
+- `update_entry(id, fields)` — patch one entry's copy / platform / image / notes. **Cannot change the title (user-only) or the date (use move_entry).**
+- `move_entry(id, scheduled_for)` — reschedule an existing entry. Use this for ANY date change. Never recreate.
+- `read_month(month)` — fetch entries for a different month (YYYY-MM) than the one injected in your prompt. Returns id, date, platform, title, and whether content is filled.
+- (No delete tool. Deletes are user-only in the Calendar UI. If a user asks you to delete, instruct them to use the delete button on the calendar card.)
+- `draft_post(platform, idea, [apply_to_entry_id], [source_topic_id|source_content_piece_id|source_social_post_id|source_url], [extra_guidance])` — run a single-post drafting sub-agent. **If you want the draft to fill a placeholder entry, pass `apply_to_entry_id` — it saves atomically and no follow-up tool call is needed.** Without that param, it returns the draft to you but doesn't save anything (you'd then need to call `update_entry` or `propose_entries` with all the fields yourself).
+- `mark_used(type, id, used)` — toggle used on a topic / social_post / content_piece.
+- `list_available_pool` — refresh the unused pool mid-conversation.
+- `fetch_url(url)` — read a web page.
+
+## Entry shape
+Each calendar entry is ONE post on ONE day. Fields: `title`, `platform` (e.g. linkedin, instagram, facebook), `image_headline`, `image_prompt`, `content` (the post body), `notes`. Only `scheduled_for` and `title` are required — everything else is optional.
+
+**Placeholders are encouraged.** If the user has an idea but hasn't decided the copy, create the entry with just `scheduled_for` and `title` (and `platform` if known). Leave `content`, `image_headline`, etc. empty. The user can come back and ask you to fill them in later via `update_entry`. Don't invent copy just to fill a slot — empty fields are honest planning.
+
+Multiple entries on the same day are allowed — if the user wants the same idea on LinkedIn and Instagram, create two entries with the same date.
+
+## How to work
+When the user opens a new (or near-empty) month, follow this preference order — do not skip ahead:
+
+1. **Start with what they already have.** Look at the "available-pool" block below (unused topics, social posts, content pieces). Briefly present the most relevant 3–6 items as candidates ("here's what's already in your backlog — want any of these on the calendar?"). Don't dump the whole pool; pick the ones that fit the month.
+2. **If none of those are right, ask the user for their own ideas.** A short prompt like "no problem — what topics or ideas are you thinking about for this month?" Wait for them. Use their answers directly; don't replace their ideas with your own.
+3. **Only as a last resort, offer to web-search** for fresh topics in their industry. Phrase it as a fallback ("want me to pull current trends in [industry] instead?"). Don't run searches unprompted.
+
+For an already-populated month, skip this flow and just react to what the user asks.
+
+### Conversational style — always suggest alongside any question
+Whenever you ask the user a question, pair it with a concrete suggestion they can accept or reject in one word. Don't ask open-ended questions in a vacuum.
+
+Templates:
+- "Want X on the calendar for [date]? (My suggestion: [specific platform / angle / time of week].)"
+- "Should I draft this for LinkedIn or Instagram first? (I'd start with LinkedIn — longer-form fits the angle.)"
+- "Any ideas for the rest of the month? (If not, I'd lean on these three from your backlog: …)"
+
+Never leave the user staring at an empty prompt. Lead with a default, then ask for confirmation or correction.
+
+### General rules
+- Use the dates the user gives you. Don't impose any cadence — there is no posting-days configuration.
+- Confirm direction before calling `propose_entries`, then save all rows in one call.
+- Iterate: user says "rewrite May 8" → `update_entry`. User says "move May 15 to May 20" → `move_entry`. User says "also do an IG version of the May 6 post" → `propose_entries` with a new entry on the same date. User says "delete May 15" → tell them to use the delete button on the calendar card.
+- When the user asks for actual copy on a placeholder entry, call `draft_post` with `apply_to_entry_id` set so the draft saves atomically.
+
+## Calendar context
+Currently focused month: {$month}
+
+<existing-entries>
+{$entriesBlock}
+</existing-entries>
+
+<available-pool>
+{$poolBlock}
+</available-pool>
+
+## Brand context (reference data — do not echo back)
+<brand-profile>
+{$profile}
+</brand-profile>
+PROMPT_PLANNER;
     }
 }
