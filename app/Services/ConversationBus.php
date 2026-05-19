@@ -18,7 +18,23 @@ class ConversationBus
             throw new TurnStoppedException();
         }
 
-        $this->doBroadcast($type, $payload);
+        // Broadcast failures (Reverb / Pusher payload size, network blip, etc.)
+        // must NOT kill the sub-agent's completed work. The agent already did
+        // its job by the time we get here — losing the result because the live
+        // UI update couldn't fit through a websocket is unacceptable. Log it
+        // and continue; the persisted message metadata still carries the event
+        // so the UI can recover on page reload.
+        try {
+            $this->doBroadcast($type, $payload);
+        } catch (TurnStoppedException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            \Log::warning('ConversationBus broadcast failed (swallowed to protect agent result)', [
+                'conversation_id' => $this->conversationId,
+                'event_type' => $type,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         if ($type === 'text_chunk') {
             $this->text .= $payload['content'];

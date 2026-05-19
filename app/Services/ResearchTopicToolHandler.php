@@ -34,10 +34,14 @@ class ResearchTopicToolHandler
         $angle = trim((string) ($args['angle'] ?? ''));
         if ($title !== '' || $angle !== '') {
             $existing = $brief->topic() ?? [];
-            $brief = $brief->withTopic(array_merge($existing, array_filter([
+            // Always set both keys (even when empty) so downstream agents can
+            // safely read $topic['angle'] without an "Undefined array key"
+            // notice, which Laravel surfaces as an ErrorException and the
+            // tool handler returns to the orchestrator as a confusing failure.
+            $brief = $brief->withTopic(array_merge($existing, [
                 'title' => $title !== '' ? $title : ($existing['title'] ?? ''),
                 'angle' => $angle !== '' ? $angle : ($existing['angle'] ?? ''),
-            ], fn ($v) => $v !== '')));
+            ]));
             $conversation->update(['brief' => $brief->toJson()]);
         }
 

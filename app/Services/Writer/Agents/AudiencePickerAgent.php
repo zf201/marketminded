@@ -25,7 +25,7 @@ class AudiencePickerAgent extends BaseAgent
 
     protected function systemPrompt(Brief $brief, Team $team): string
     {
-        $topic = $brief->topic() ?? ['title' => '', 'angle' => ''];
+        $topic = ($brief->topic() ?? []) + ['title' => '', 'angle' => ''];
         $topicSummary = $brief->research()['topic_summary'] ?? '';
         $personasBlock = $this->formatPersonasBlock($team->audiencePersonas()->get());
         $extra = $this->extraContextBlock();

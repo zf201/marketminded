@@ -21,7 +21,7 @@ class StyleReferenceAgent extends BaseAgent
 
     protected function systemPrompt(Brief $brief, Team $team): string
     {
-        $topic = $brief->topic() ?? ['title' => '', 'angle' => ''];
+        $topic = ($brief->topic() ?? []) + ['title' => '', 'angle' => ''];
 
         $curatedBlock = '';
         if (! empty($team->style_reference_urls)) {
