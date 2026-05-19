@@ -116,6 +116,7 @@ class RunConversationTurn implements ShouldQueue
         $proofreadHandler = new ProofreadBlogPostToolHandler;
         $socialHandler = new SocialPostToolHandler;
         $priorTurnTools = [];
+        $toolCallLog = [];
         $bus = new ConversationBus($conversation->id);
 
         $toolExecutor = function (string $name, array $args) use (
@@ -352,6 +353,32 @@ class RunConversationTurn implements ShouldQueue
             return "Unknown tool: {$name}";
         };
 
+        // Wrap the executor to record every tool call's name, args, and full
+        // result. This lands in chat-debug.log so we can see exactly what the
+        // orchestrator received from each tool — invaluable for diagnosing
+        // pipeline hangs where the model goes off the rails after a tool call.
+        $loggingExecutor = function (string $name, array $args) use ($toolExecutor, &$toolCallLog): string {
+            $startedAt = microtime(true);
+            try {
+                $result = $toolExecutor($name, $args);
+            } catch (\Throwable $e) {
+                $toolCallLog[] = [
+                    'name' => $name,
+                    'args' => $args,
+                    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                    'threw' => $e->getMessage(),
+                ];
+                throw $e;
+            }
+            $toolCallLog[] = [
+                'name' => $name,
+                'args' => $args,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                'result' => $result,
+            ];
+            return $result;
+        };
+
         $useServerTools = $team->ai_provider !== 'custom' && $webSearchProvider === 'openrouter_builtin';
         $chatTools = $tools;
         if ($braveClient !== null) {
@@ -363,17 +390,17 @@ class RunConversationTurn implements ShouldQueue
                 systemPrompt: $systemPrompt,
                 messages: $apiMessages,
                 tools: $chatTools,
-                toolExecutor: $toolExecutor,
+                toolExecutor: $loggingExecutor,
                 temperature: 0.7,
                 useServerTools: $useServerTools,
                 bus: $bus,
             );
 
-            $this->writeChatDebugLog($team, $conversation, $systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), $streamResult, false);
+            $this->writeChatDebugLog($team, $conversation, $systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), $streamResult, false, $toolCallLog);
             $this->persistTurn($team, $conversation, $bus, $streamResult, interrupted: false);
             $bus->publish('turn_complete');
         } catch (TurnStoppedException) {
-            $this->writeChatDebugLog($team, $conversation, $systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true);
+            $this->writeChatDebugLog($team, $conversation, $systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true, $toolCallLog);
             $this->persistTurn($team, $conversation, $bus, streamResult: null, interrupted: true);
             try {
                 $bus->publish('turn_interrupted');
@@ -381,7 +408,7 @@ class RunConversationTurn implements ShouldQueue
                 broadcast(new ConversationEvent($conversation->id, 'turn_interrupted', []));
             }
         } catch (\Throwable $e) {
-            $this->writeChatDebugLog($team, $conversation, $systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true);
+            $this->writeChatDebugLog($team, $conversation, $systemPrompt, $chatTools, $apiMessages, $bus->text(), $bus->events(), null, true, $toolCallLog);
             $this->persistTurn($team, $conversation, $bus, streamResult: null, interrupted: true);
             \Log::error('RunConversationTurn failed', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
             try {
@@ -451,6 +478,7 @@ class RunConversationTurn implements ShouldQueue
         array $busEvents,
         ?StreamResult $streamResult,
         bool $interrupted,
+        array $toolCallLog = [],
     ): void {
         if (! env('CHAT_DEBUG_LOG', false)) {
             return;
@@ -468,6 +496,7 @@ class RunConversationTurn implements ShouldQueue
             'history_sent' => $apiMessages,
             'response_content' => $responseContent,
             'bus_events' => array_map(fn ($e) => ['type' => $e['type'], 'agent' => $e['payload']['agent'] ?? null], $busEvents),
+            'tool_calls' => $toolCallLog,
             'input_tokens' => $streamResult?->inputTokens ?? 0,
             'output_tokens' => $streamResult?->outputTokens ?? 0,
             'cost' => (float) ($streamResult?->cost ?? 0),
