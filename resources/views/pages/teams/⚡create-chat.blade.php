@@ -5,6 +5,7 @@ use App\Models\Message;
 use App\Models\Team;
 use App\Jobs\RunConversationTurn;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 new class extends Component
@@ -348,6 +349,19 @@ new class extends Component
             if (($it['type'] ?? '') === 'subagent' && ($it['status'] ?? '') === 'working') {
                 $it['status'] = 'done';
             }
+            // Pre-render markdown for completed assistant text items. buildItems
+            // only runs for non-live messages, so by definition these are final.
+            // Errors stay plain text so the red styling stays readable.
+            if (
+                ($it['type'] ?? '') === 'text'
+                && ! empty($it['content'])
+                && ! str_starts_with($it['content'], 'Error:')
+            ) {
+                $it['html'] = Str::markdown($it['content'], [
+                    'html_input' => 'escape',
+                    'allow_unsafe_links' => false,
+                ]);
+            }
         }
         unset($it);
 
@@ -497,8 +511,11 @@ new class extends Component
                                         </div>
                                     </template>
 
-                                    {{-- Text --}}
-                                    <template x-if="item.type === 'text'">
+                                    {{-- Text: rendered markdown for completed messages, plain text while streaming --}}
+                                    <template x-if="item.type === 'text' && item.html">
+                                        <div class="prose prose-sm prose-invert max-w-none text-sm mb-1" x-html="item.html"></div>
+                                    </template>
+                                    <template x-if="item.type === 'text' && !item.html">
                                         <p class="whitespace-pre-wrap text-sm mb-1"
                                            :class="item.content && item.content.startsWith('Error:') ? 'text-red-400' : ''"
                                            x-text="item.content"></p>
