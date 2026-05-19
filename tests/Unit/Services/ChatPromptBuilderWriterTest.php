@@ -78,11 +78,12 @@ test('writer prompt brief-status reflects research and outline when present', fu
     expect($prompt)->toContain('outline: ✓');
 });
 
-test('tools(writer) returns all 7 sub-agent tools', function () {
+test('tools(writer) returns all sub-agent tools including brand enricher', function () {
     $tools = ChatPromptBuilder::tools('writer');
     $names = collect($tools)->pluck('function.name')->all();
 
     expect($names)->toContain('research_topic');
+    expect($names)->toContain('enrich_brand_context');
     expect($names)->toContain('pick_audience');
     expect($names)->toContain('create_outline');
     expect($names)->toContain('fetch_style_reference');

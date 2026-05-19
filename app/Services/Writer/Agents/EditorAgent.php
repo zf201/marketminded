@@ -18,7 +18,9 @@ class EditorAgent extends BaseAgent
             return AgentResult::error('Cannot create outline without research. Run research_topic first.');
         }
 
-        $this->knownClaimIds = array_map(fn ($c) => $c['id'], $brief->research()['claims']);
+        $researchIds = array_map(fn ($c) => $c['id'], $brief->research()['claims']);
+        $brandIds = array_map(fn ($c) => $c['id'], $brief->brandClaims()['claims'] ?? []);
+        $this->knownClaimIds = array_merge($researchIds, $brandIds);
 
         return parent::execute($brief, $team);
     }
@@ -32,6 +34,22 @@ class EditorAgent extends BaseAgent
             ->map(fn ($c) => "- {$c['id']} ({$c['type']}): {$c['text']}")
             ->implode("\n");
 
+        $brandClaims = $brief->brandClaims()['claims'] ?? [];
+        $brandClaimsBlock = '';
+        if (! empty($brandClaims)) {
+            $brandList = collect($brandClaims)
+                ->map(fn ($c) => "- {$c['id']} ({$c['type']}): {$c['text']}")
+                ->implode("\n");
+            $brandClaimsBlock = <<<BLOCK
+
+
+## Brand claims (THIS team's own offers — anchor sections on these when the topic touches them; do not echo back)
+<brand-claims>
+{$brandList}
+</brand-claims>
+BLOCK;
+        }
+
         $audienceBlock = $this->audienceBlock($brief);
         $extra = $this->extraContextBlock();
 
@@ -42,14 +60,15 @@ You are the Editor sub-agent. Your ONLY output is a `submit_outline` tool call.
 - If uncertain about any field, call the tool with best-effort values — never refuse or ask for clarification.
 
 ## Workflow
-1. Read the topic, angle, and research claims below.
+1. Read the topic, angle, research claims, and brand claims below.
 2. Find the strongest narrative angle. Decide which claims to use and which to cut.
 3. Build 4-7 sections with headings, purposes, and claim_id references.
-4. Call `submit_outline`.
+4. When the topic relates to this brand's own offers, dedicate at least one section to those offers using the brand-prefixed claim ids (bc1, bc2, …). Do not pivot to competitors when our own offers fit.
+5. Call `submit_outline`.
 
 ## Quality rules
-- Every section must reference at least one claim_id from the research block.
-- Every claim_id you reference must exist in the research.
+- Every section must reference at least one claim_id (from research OR brand claims).
+- Every claim_id you reference must exist in research-claims or brand-claims.
 - target_length_words should be 1200-2000 for pillar blogs.
 - Do NOT write the article. Outline only.
 
@@ -62,7 +81,7 @@ Angle: {$topic['angle']}
 ## Research claims (reference data — do not echo back)
 <research-claims>
 {$claimsBlock}
-</research-claims>
+</research-claims>{$brandClaimsBlock}
 {$audienceBlock}
 {$extra}
 

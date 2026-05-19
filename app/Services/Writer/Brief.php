@@ -49,6 +49,12 @@ final class Brief
         return $this->data['style_reference'] ?? null;
     }
 
+    /** @return array<string, mixed>|null */
+    public function brandClaims(): ?array
+    {
+        return $this->data['brand_claims'] ?? null;
+    }
+
     public function contentPieceId(): ?int
     {
         $id = $this->data['content_piece_id'] ?? null;
@@ -86,6 +92,11 @@ final class Brief
         return $this->styleReference() !== null;
     }
 
+    public function hasBrandClaims(): bool
+    {
+        return $this->brandClaims() !== null;
+    }
+
     public function hasContentPiece(): bool
     {
         return $this->contentPieceId() !== null;
@@ -119,6 +130,12 @@ final class Brief
     public function withStyleReference(array $ref): self
     {
         return $this->with('style_reference', $ref);
+    }
+
+    /** @param array<string, mixed> $brandClaims */
+    public function withBrandClaims(array $brandClaims): self
+    {
+        return $this->with('brand_claims', $brandClaims);
     }
 
     public function withContentPieceId(int $id): self
@@ -175,6 +192,14 @@ final class Brief
             $lines[] = "style_reference: ✓ ({$n} examples)";
         } else {
             $lines[] = 'style_reference: ✗';
+        }
+
+        if ($this->hasBrandClaims()) {
+            $n = count($this->brandClaims()['claims'] ?? []);
+            $s = count($this->brandClaims()['sources'] ?? []);
+            $lines[] = "brand_claims: ✓ ({$n} claims, {$s} brand sources)";
+        } else {
+            $lines[] = 'brand_claims: ✗';
         }
 
         return implode("\n", $lines);
