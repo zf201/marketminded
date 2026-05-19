@@ -219,14 +219,26 @@ abstract class BaseAgent implements Agent
                 }
                 throw new TurnStoppedException('Stopped by the user.');
             }
-            $hint = $this->lastTextResponse !== null
-                ? ' Model said: "' . mb_substr($this->lastTextResponse, 0, 300) . '"'
-                : '';
+
+            // Distinguish transport failure (network / HTTP / timeout) from
+            // "model emitted text instead of calling the submit tool". The
+            // orchestrator's retry logic should treat these very differently:
+            // transport failures might succeed on retry; text-only responses
+            // need different prompting.
+            if ($this->lastTransportError !== null && $this->lastTransportError !== '') {
+                $msg = "Sub-agent ({$submitToolName}) transport error: " . mb_substr($this->lastTransportError, 0, 500);
+            } else {
+                $hint = $this->lastTextResponse !== null
+                    ? ' Model said: "' . mb_substr($this->lastTextResponse, 0, 300) . '"'
+                    : '';
+                $msg = "Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}";
+            }
+
             $this->bus?->publish('subagent_error', [
                 'agent'   => $submitToolName,
-                'message' => "Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}",
+                'message' => $msg,
             ]);
-            return AgentResult::error("Sub-agent ({$submitToolName}) did not call the submit tool.{$hint}");
+            return AgentResult::error($msg);
         }
 
         if ($validationError !== null) {
