@@ -11,7 +11,7 @@ class StubbedBrandEnricherAgent extends BrandEnricherAgent
         parent::__construct($extraContext);
     }
 
-    protected function llmCall(string $systemPrompt, array $tools, string $model, float $temperature, bool $useServerTools, ?string $apiKey, int $timeout = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter', ?\App\Services\BraveSearchClient $braveSearchClient = null, ?callable $onToolCall = null): ?array
+    protected function llmCall(string $systemPrompt, array $tools, string $model, float $temperature, bool $useServerTools, ?string $apiKey, int $timeout = 120, string $baseUrl = 'https://openrouter.ai/api/v1', string $provider = 'openrouter', ?\App\Services\BraveSearchClient $braveSearchClient = null, ?callable $onToolCall = null, string $reasoningEffort = 'medium'): ?array
     {
         return $this->stubPayload;
     }

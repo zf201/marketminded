@@ -142,6 +142,7 @@ PROMPT;
             maxIterations: 3,
             baseUrl: $team->ai_api_url ?? 'https://openrouter.ai/api/v1',
             provider: $team->ai_provider ?? 'openrouter',
+            reasoningEffort: 'high',
         );
 
         try {
