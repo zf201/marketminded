@@ -10,7 +10,7 @@ class BrandIntelligenceToolHandler
     private const SETUP_FIELDS = [
         'homepage_url', 'blog_url', 'brand_description',
         'product_urls', 'competitor_urls', 'style_reference_urls',
-        'target_audience', 'tone_keywords', 'content_language', 'countries',
+        'target_audience', 'tone_keywords', 'calendar_steer', 'content_language', 'countries',
     ];
 
     public function execute(Team $team, array $data): string
@@ -92,6 +92,7 @@ class BrandIntelligenceToolHandler
                                 'style_reference_urls' => ['type' => 'array', 'items' => ['type' => 'string']],
                                 'target_audience' => ['type' => 'string'],
                                 'tone_keywords' => ['type' => 'string'],
+                                'calendar_steer' => ['type' => 'string', 'description' => 'Free-text guidance for the content calendar: what mix of post types the brand wants and how promotional to be. Captures things like "not every post should sell — aim for a blend of educational, story/behind-the-scenes, engagement, and occasional promotional posts." Flows to the calendar planner and the per-post drafter.'],
                                 'content_language' => ['type' => 'string'],
                                 'countries'        => ['type' => 'string', 'description' => 'Comma-separated ISO 3166-1 alpha-2 country codes for the brand\'s target markets (e.g. "GB, IE, US"). Used to localise web searches.'],
                             ],

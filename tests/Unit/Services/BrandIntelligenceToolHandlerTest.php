@@ -22,6 +22,21 @@ test('updates team setup fields', function () {
     expect($result)->toContain('setup');
 });
 
+test('saves calendar steer as a setup field', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $handler = new BrandIntelligenceToolHandler;
+    $handler->execute($team, [
+        'setup' => [
+            'calendar_steer' => 'Not every post should sell. Mostly educational and story posts.',
+        ],
+    ]);
+
+    $team->refresh();
+    expect($team->calendar_steer)->toBe('Not every post should sell. Mostly educational and story posts.');
+});
+
 test('creates positioning via updateOrCreate', function () {
     $user = User::factory()->create();
     $team = $user->currentTeam;
