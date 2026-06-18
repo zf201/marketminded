@@ -146,6 +146,14 @@ class ChatPromptBuilder
             $lines[] = 'Not yet defined.';
         }
 
+        $lines[] = '';
+        $lines[] = '## Content guidance';
+        if ($team->calendar_steer) {
+            $lines[] = $team->calendar_steer;
+        } else {
+            $lines[] = 'Aim for a varied content mix — not every post should be promotional. Blend educational, story / behind-the-scenes, and engagement posts, with only the occasional direct sales post.';
+        }
+
         return implode("\n", $lines);
     }
 
@@ -174,7 +182,8 @@ The user only sees data that has been persisted through update_brand_intelligenc
 2. Fetch their website and key pages to understand the business
 3. Ask focused follow-up questions -- one or two at a time, not a wall of questions
 4. Save findings as you go using update_brand_intelligence -- do not wait until the end
-5. After saving, briefly summarize what you captured and ask what to refine
+5. Capture how they want their content calendar to feel -- in particular the mix of post types and how promotional vs. educational / story-driven it should be -- and save it as the calendar steer
+6. After saving, briefly summarize what you captured and ask what to refine
 
 ## Good vs bad loop (condensed)
 GOOD: user shares URL → fetch_url → learn positioning + tone → call update_brand_intelligence → reply: "Captured your value prop and tone. What's the main customer you're trying to reach?"

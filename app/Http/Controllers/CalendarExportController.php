@@ -29,8 +29,8 @@ class CalendarExportController extends Controller
         $isSlovenian = $current_team->content_language === 'sl';
 
         $headers = $isSlovenian
-            ? ['Ideja', 'Platforma', 'Grafika Copy', 'Vsebina', 'Opombe / Avtor slike']
-            : ['Idea', 'Platform', 'Image Headline', 'Content', 'Notes'];
+            ? ['Ideja', 'Platforma', 'Grafika Copy', 'Ideja za grafiko', 'Vsebina', 'Opombe / Avtor slike']
+            : ['Idea', 'Platform', 'Image Headline', 'Graphic Idea', 'Content', 'Notes'];
 
         $weekdayLabels = $isSlovenian
             ? [1 => 'ponedeljek', 2 => 'torek', 3 => 'sreda', 4 => 'četrtek', 5 => 'petek', 6 => 'sobota', 7 => 'nedelja']
@@ -53,6 +53,7 @@ class CalendarExportController extends Controller
                         $e->title ?? '',
                         $e->platform ?? '',
                         $e->image_headline ?? '',
+                        $e->image_prompt ?? '',
                         $e->content ?? '',
                         $e->notes ?? '',
                     ]);

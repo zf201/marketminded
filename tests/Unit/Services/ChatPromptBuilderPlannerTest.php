@@ -18,6 +18,17 @@ it('builds a planner prompt with required sections', function () {
     expect($prompt)->toContain('<brand-profile>');
 });
 
+it('injects the calendar steer into the planner brand profile', function () {
+    $team = Team::factory()->create([
+        'calendar_steer' => 'Lead with value; sell rarely.',
+    ]);
+
+    $prompt = ChatPromptBuilder::build('planner', $team);
+
+    expect($prompt)->toContain('Content guidance');
+    expect($prompt)->toContain('Lead with value; sell rarely.');
+});
+
 it('lists planner tools', function () {
     $tools = ChatPromptBuilder::tools('planner');
     $names = collect($tools)->map(fn ($t) => $t['function']['name'])->all();

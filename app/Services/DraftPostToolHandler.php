@@ -87,10 +87,17 @@ Draft ONE social media post for the platform "{$platform}". Tailor length, hook,
 - `content` — the actual post body in the brand's language. Tailor format to the platform.
 
 ## Platform rules
-- linkedin: 700–1500 chars, professional hook on line 1, generous line breaks, 3–5 hashtags at the end.
-- instagram: punchy hook, 2–4 short paragraphs separated by blank lines, 8–15 hashtags at the very end.
-- facebook: conversational, 1–3 short paragraphs, 0–3 hashtags optional.
+- linkedin: 700–1500 chars, professional hook on line 1, generous line breaks.
+- instagram: punchy hook, 2–4 short paragraphs separated by blank lines.
+- facebook: conversational, 1–3 short paragraphs.
 - Any other platform: short and direct.
+
+## Writing discipline
+- Hashtags: 2–5 relevant hashtags maximum, on EVERY platform. Place them only at the very end of the post, never scattered through the body. Skip them entirely if none are genuinely relevant.
+- Do NOT wrap the `content` in quotation marks. The content field IS the post, not a quote — no surrounding "", «», or '' around the whole body.
+- Avoid em dashes (—) and en dashes (–). Use commas, full stops, or parentheses instead. Overusing dashes is a common AI tell and reads unnaturally.
+- Write in correct, natural grammar for the brand's language. Re-read the draft for agreement, declensions, and word order before submitting — this matters most in non-English languages.
+- Not every post is a sales pitch. Honour the brand's content guidance: many posts should educate, tell a story, or spark engagement with no call to action at all. Only push a CTA when the idea genuinely calls for it.
 
 ## Idea
 {$idea}
@@ -130,7 +137,7 @@ PROMPT;
 
         $client = new OpenRouterClient(
             apiKey: $team->ai_api_key,
-            model: $team->fast_model,
+            model: $team->powerful_model,
             urlFetcher: new UrlFetcher,
             maxIterations: 3,
             baseUrl: $team->ai_api_url ?? 'https://openrouter.ai/api/v1',
@@ -248,6 +255,7 @@ PROMPT;
         if ($team->brand_description) $lines[] = 'Description: ' . $team->brand_description;
         if ($team->target_audience) $lines[] = 'Target audience: ' . $team->target_audience;
         if ($team->tone_keywords) $lines[] = 'Tone: ' . $team->tone_keywords;
+        if ($team->calendar_steer) $lines[] = 'Content guidance: ' . $team->calendar_steer;
         if ($team->content_language) $lines[] = 'Language: ' . $team->content_language;
         return $lines === [] ? '(no brand profile)' : implode("\n", $lines);
     }
