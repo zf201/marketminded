@@ -54,6 +54,32 @@ test('shows company info with existing data', function () {
         ->assertSet('brandDescription', 'Test brand');
 });
 
+test('owner can save the calendar steer', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create(['homepage_url' => 'https://example.com']);
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
+        ->set('calendarSteer', 'Lead with value; sell rarely.')
+        ->call('saveSetup')
+        ->assertHasNoErrors();
+
+    expect($team->fresh()->calendar_steer)->toBe('Lead with value; sell rarely.');
+});
+
+test('calendar steer is prefilled from existing data', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create(['calendar_steer' => 'Mostly educational posts.']);
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::teams.brand-intelligence', ['current_team' => $team])
+        ->assertSet('calendarSteer', 'Mostly educational posts.');
+});
+
 // --- Positioning CRUD ---
 
 test('owner can save positioning', function () {
