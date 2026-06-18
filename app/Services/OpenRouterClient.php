@@ -23,6 +23,7 @@ class OpenRouterClient
         private string $baseUrl = 'https://openrouter.ai/api/v1',
         private string $provider = 'openrouter',
         private ?BraveSearchClient $braveSearchClient = null,
+        private string $reasoningEffort = 'medium',
     ) {}
 
     public function getModel(): string
@@ -55,9 +56,9 @@ class OpenRouterClient
                 'temperature' => $temperature,
                 'stream'      => false,
                 // reasoning_effort: controls thinking depth on reasoning models (o1, o3, DeepSeek-R1, etc.)
-                // Ignored by non-reasoning models. 'medium' is the safe balanced default.
-                // Future: make this configurable per team or per call.
-                'reasoning_effort' => 'medium',
+                // Ignored by non-reasoning models. Defaults to 'medium'; big-model paths
+                // (draft_post drafter, blog Writer on powerful_model) pass 'high'.
+                'reasoning_effort' => $this->reasoningEffort,
             ];
 
             if ($this->provider === 'openrouter') {
@@ -199,7 +200,7 @@ class OpenRouterClient
             'temperature' => $temperature,
             'stream'      => true,
             // reasoning_effort: see chat() method comment.
-            'reasoning_effort' => 'medium',
+            'reasoning_effort' => $this->reasoningEffort,
         ];
 
         if ($this->provider === 'openrouter') {
@@ -313,7 +314,7 @@ class OpenRouterClient
                 'temperature' => $temperature,
                 'stream'      => true,
                 // reasoning_effort: see chat() method comment.
-                'reasoning_effort' => 'medium',
+                'reasoning_effort' => $this->reasoningEffort,
             ];
 
             if ($this->provider === 'openrouter') {

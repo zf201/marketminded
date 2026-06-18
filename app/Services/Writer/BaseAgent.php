@@ -54,6 +54,12 @@ abstract class BaseAgent implements Agent
 
     abstract protected function model(Team $team): string;
 
+    /** Reasoning depth for this agent's LLM call. Big-model agents override to 'high'. */
+    protected function reasoningEffort(Team $team): string
+    {
+        return 'medium';
+    }
+
     abstract protected function temperature(): float;
 
     /** HTTP timeout for this agent's LLM call, in seconds. Override for long-running agents like Writer. */
@@ -170,6 +176,7 @@ abstract class BaseAgent implements Agent
             $team->ai_provider ?? 'openrouter',
             $braveClient,
             $onToolCall,
+            reasoningEffort: $this->reasoningEffort($team),
         );
 
         $duration = (int) round((microtime(true) - $startedAt) * 1000);
@@ -313,6 +320,7 @@ abstract class BaseAgent implements Agent
         string $provider = 'openrouter',
         ?BraveSearchClient $braveSearchClient = null,
         ?callable $onToolCall = null,
+        string $reasoningEffort = 'medium',
     ): ?array {
         $client = new OpenRouterClient(
             apiKey: $apiKey,
@@ -322,6 +330,7 @@ abstract class BaseAgent implements Agent
             baseUrl: $baseUrl,
             provider: $provider,
             braveSearchClient: $braveSearchClient,
+            reasoningEffort: $reasoningEffort,
         );
 
         // Sub-agents need a user turn to actually act — most providers will

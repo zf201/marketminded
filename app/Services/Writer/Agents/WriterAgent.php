@@ -181,6 +181,11 @@ PROMPT;
         return $team->powerful_model;
     }
 
+    protected function reasoningEffort(Team $team): string
+    {
+        return 'high';
+    }
+
     protected function temperature(): float
     {
         return 0.6;
