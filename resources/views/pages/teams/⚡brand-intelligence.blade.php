@@ -31,6 +31,8 @@ new class extends Component
 
     public string $toneKeywords = '';
 
+    public string $calendarSteer = '';
+
     public string $contentLanguage = 'English';
 
     public bool $editingSetup = false;
@@ -79,6 +81,7 @@ new class extends Component
         $this->brandDescription = $current_team->brand_description ?? '';
         $this->targetAudience = $current_team->target_audience ?? '';
         $this->toneKeywords = $current_team->tone_keywords ?? '';
+        $this->calendarSteer = $current_team->calendar_steer ?? '';
         $this->contentLanguage = $current_team->content_language ?? 'English';
         $this->loadData();
     }
@@ -234,6 +237,7 @@ new class extends Component
             'brandDescription' => ['nullable', 'string', 'max:5000'],
             'targetAudience' => ['nullable', 'string', 'max:5000'],
             'toneKeywords' => ['nullable', 'string', 'max:255'],
+            'calendarSteer' => ['nullable', 'string', 'max:5000'],
             'contentLanguage' => ['nullable', 'string', 'max:50'],
         ]);
 
@@ -243,6 +247,7 @@ new class extends Component
             'brand_description' => $validated['brandDescription'] ?: null,
             'target_audience' => $validated['targetAudience'] ?: null,
             'tone_keywords' => $validated['toneKeywords'] ?: null,
+            'calendar_steer' => $validated['calendarSteer'] ?: null,
             'content_language' => $validated['contentLanguage'] ?: 'English',
         ]);
 
@@ -391,6 +396,7 @@ new class extends Component
                 <flux:textarea wire:model="brandDescription" label="Brand Description" rows="3" placeholder="What your company does..." />
                 <flux:textarea wire:model="targetAudience" label="Target Audience" rows="2" placeholder="Who you serve..." />
                 <flux:input wire:model="toneKeywords" label="Tone Keywords" placeholder="Professional, approachable, concise" />
+                <flux:textarea wire:model="calendarSteer" label="Calendar Steer" rows="3" placeholder="How the content calendar should feel — e.g. not every post should sell; mix educational, story, and the occasional promo." />
                 <flux:input wire:model="contentLanguage" label="Content Language" placeholder="English" />
 
                 <div class="flex justify-end gap-2">
@@ -404,6 +410,7 @@ new class extends Component
                     'brand_description' => ['Brand Description', $teamModel->brand_description],
                     'target_audience' => ['Target Audience', $teamModel->target_audience],
                     'tone_keywords' => ['Tone Keywords', $teamModel->tone_keywords],
+                    'calendar_steer' => ['Calendar Steer', $teamModel->calendar_steer],
                     'content_language' => ['Content Language', $teamModel->content_language],
                 ] as $field => [$label, $value])
                     <div>
